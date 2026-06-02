@@ -26,9 +26,11 @@ Verified locally:
 
 ## GitHub remote status
 
-The repository currently contains a lightweight single-file `index.html`, `CNAME`, and `.nojekyll` so there is a deployable public artifact on `main` once GitHub Pages is enabled.
+The remote `main` currently contains a lightweight single-file `index.html`, `CNAME`, `.nojekyll`, and a GitHub Pages Actions workflow.
 
-The complete full local source commit is prepared locally and can be fast-forward pushed after GitHub authentication is available on this PC.
+The first Pages workflow run failed at `actions/configure-pages` because the repository Pages site is not enabled/configured to build from GitHub Actions. GitHub's `configure-pages` action can enable Pages only when it receives a token other than the default `GITHUB_TOKEN`, with the required Pages/admin permissions.
+
+The complete full local source commit is prepared locally on `main` and can be fast-forward pushed after GitHub authentication is available on this PC.
 
 Run after authenticating GitHub locally:
 
