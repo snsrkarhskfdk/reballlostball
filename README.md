@@ -1,10 +1,10 @@
 # Reball Lostball
 
-REBALL LOSTBALL static shopping mall implementation based on the Figma 04-08 flows.
+REBALL LOSTBALL shopping mall implementation based on the Figma 04-08 flows.
 
 ## Current local implementation
 
-The verified local implementation is in `C:\Users\artis\Documents\리볼로스트볼`.
+The verified full local implementation is in `C:\Users\artis\Documents\리볼로스트볼`.
 
 Implemented routes:
 
@@ -24,6 +24,22 @@ Verified locally:
 - `npm run build`
 - Browser QA: 3 banners, product menu opens directly under `상품소개`, no horizontal overflow, no text overflow, no broken visible images, no console errors.
 
+## GitHub remote status
+
+The repository currently contains a lightweight single-file `index.html` so there is a deployable public artifact on `main`.
+
+The complete full local source commit is prepared locally and can be fast-forward pushed after GitHub authentication is available on this PC:
+
+```text
+b70334d Build Reball Lostball static shop
+```
+
+Run after authenticating GitHub locally:
+
+```bash
+git push -u origin main
+```
+
 ## Supabase
 
 Project: `qbftalhhyfcndanrcwpy`
@@ -41,18 +57,6 @@ Verified data counts:
 - Variants: 18
 - Active banners: 3
 
-## Pending upload step
-
-A local commit exists with the complete implementation:
-
-```text
-cfb37e3 Build Reball Lostball static shop
-```
-
-Local `git push` is blocked until GitHub authentication is available on this PC. Install/authenticate GitHub CLI or provide a GitHub token with repository contents write access, then run:
-
-```bash
-git push -u origin main
-```
+A public Edge Function named `site` is deployed, but responses from the current Supabase connector deployment path are forced to `Content-Type: text/plain` with a sandbox CSP. That means it cannot serve executable HTML as the production static host in its current form. Use a static host such as GitHub Pages, Vercel, Netlify, or hosting.kr web hosting for the frontend, with Supabase as the backend.
 
 The old `meodai-skill-color-expert-https-github` folder is intentionally ignored and should not be used as the implementation source.
