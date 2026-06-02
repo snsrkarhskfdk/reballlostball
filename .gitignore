@@ -1,0 +1,8 @@
+artifacts/
+dev-server.*.log
+.server.pid
+meodai-skill-color-expert-https-github/
+node_modules/
+.next/
+dist/
+*.local
