@@ -26,13 +26,9 @@ Verified locally:
 
 ## GitHub remote status
 
-The repository currently contains a lightweight single-file `index.html` so there is a deployable public artifact on `main`.
+The repository currently contains a lightweight single-file `index.html`, `CNAME`, and `.nojekyll` so there is a deployable public artifact on `main` once GitHub Pages is enabled.
 
-The complete full local source commit is prepared locally and can be fast-forward pushed after GitHub authentication is available on this PC:
-
-```text
-b70334d Build Reball Lostball static shop
-```
+The complete full local source commit is prepared locally and can be fast-forward pushed after GitHub authentication is available on this PC.
 
 Run after authenticating GitHub locally:
 
