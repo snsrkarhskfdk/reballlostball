@@ -8,6 +8,9 @@ const errors = [];
 const requiredAssets = [
   "assets/figma/reball-logo.webp",
   "assets/figma/hero-poster.webp",
+  "assets/figma/banner-home-main-clean.webp",
+  "assets/figma/banner-store-event-clean.webp",
+  "assets/figma/banner-premium-selection-clean.webp",
   "assets/figma/banner-store-event.webp",
   "assets/figma/banner-premium-selection.webp",
   "assets/figma/ball-titleist.webp",

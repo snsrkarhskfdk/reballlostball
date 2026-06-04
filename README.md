@@ -58,3 +58,34 @@ Verified data counts:
 A public Edge Function named `site` is deployed, but responses from the current Supabase connector deployment path are forced to `Content-Type: text/plain` with a sandbox CSP. That means it cannot serve executable HTML as the production static host in its current form. Use a static host such as GitHub Pages, Vercel, Netlify, or hosting.kr web hosting for the frontend, with Supabase as the backend.
 
 The old `meodai-skill-color-expert-https-github` folder is intentionally ignored and should not be used as the implementation source.
+
+## Deployment target
+
+Deploy the root static SPA only:
+
+- `index.html`
+- `app.js`
+- `styles.css`
+- `assets/figma/**`
+- `public/fonts/**`
+
+Do not deploy `meodai-skill-color-expert-https-github`; it is an old implementation.
+
+## Admin status
+
+`#/admin` is a temporary client-side admin prototype for launch review. It is not production-grade access control.
+
+- Initial admin id: `admin`
+- The first non-empty admin password entered in a browser is stored only in that browser's `localStorage`.
+- Replace this with server-side authentication before treating the admin route as secure.
+
+## Payments status
+
+Toss Payments is not connected until real keys are available.
+
+- Toss mall id: `reballzgfl`
+- `TOSS_CLIENT_KEY` may be exposed to the browser only when issued.
+- `TOSS_SECRET_KEY` must be stored only in Vercel Environment Variables or another server-side secret store.
+- Never hardcode Toss secret keys, security keys, GitHub tokens, Supabase service-role keys, or hosting credentials in this repository.
+
+Current checkout remains a local/static order completion flow. Connect order persistence and Toss approval/webhook endpoints after production hosting is live.
