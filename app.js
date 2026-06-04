@@ -1,5 +1,5 @@
 ﻿const ASSET_PATH = "./assets/figma";
-const ASSET_VERSION = "20260604-36";
+const ASSET_VERSION = "20260605-02";
 const SUPABASE_URL = "https://qbftalhhyfcndanrcwpy.supabase.co";
 const SUPABASE_KEY = "sb_publishable_K876i166RCGtBxdp3xRQZw_yJxPaKwL";
 
@@ -76,6 +76,73 @@ const lostballNotice = [
   "실제 상품 상태는 브랜드 및 등급에 따라 차이가 있을 수 있습니다.",
 ];
 
+const faqItems = [
+  {
+    category: "등급",
+    question: "A+ / A / B 등급은 어떻게 구분하나요?",
+    answer:
+      "A+는 외관 사용감이 가장 적은 상품, A는 연습 및 라운딩에 무난한 상품, B는 스크래치나 마킹이 있을 수 있는 실속형 상품으로 분류합니다.",
+  },
+  {
+    category: "상품",
+    question: "사진과 동일한 로고나 번호의 공이 오나요?",
+    answer:
+      "로스트볼 특성상 모델, 번호, 로고, 펜마킹 상태는 재고 구성에 따라 달라질 수 있습니다. 사용에 지장이 있는 공은 선별 과정에서 제외합니다.",
+  },
+  {
+    category: "배송",
+    question: "언제 출고되나요?",
+    answer: `${shippingPolicy.cutoffTime} 이전 주문은 당일 출고 준비를 기준으로 운영합니다. 평균 배송 기간은 ${shippingPolicy.averageLeadTime}이며 지역과 택배사 사정에 따라 달라질 수 있습니다.`,
+  },
+  {
+    category: "주문",
+    question: "비회원 주문도 조회할 수 있나요?",
+    answer: "비회원 주문조회 화면에서 주문자명, 주문번호, 비회원 주문 비밀번호를 입력하면 주문 진행 상태를 확인할 수 있습니다.",
+  },
+  {
+    category: "교환/반품",
+    question: "단순변심 반품이 가능한가요?",
+    answer: `${shippingPolicy.simpleReturnWindow} 단순변심 반품 접수가 가능하며, 왕복 반품 배송비는 ${money.format(shippingPolicy.simpleReturnFee)}원 기준으로 안내합니다.`,
+  },
+  {
+    category: "고객센터",
+    question: "상담은 어디로 하면 되나요?",
+    answer: `고객센터 ${businessProfile.supportPhone} 또는 ${businessProfile.supportEmail}로 문의할 수 있습니다. 운영시간은 평일 ${businessProfile.operationHours}입니다.`,
+  },
+];
+
+const noticeItems = [
+  {
+    category: "운영",
+    date: "2025.07.01",
+    title: "리볼 로스트볼 쇼핑몰 오픈 안내",
+    body:
+      "리볼 로스트볼 공식 쇼핑몰이 2025년 7월에 오픈했습니다. 엄격한 검수 기준을 통과한 로스트볼을 등급별로 확인하고, 원하는 브랜드와 구성을 온라인에서 편하게 주문하실 수 있습니다.",
+    pinned: true,
+  },
+  {
+    category: "배송",
+    date: "2025.07.08",
+    title: "오후 3시 이전 주문 당일 출고 준비 안내",
+    body:
+      "평일 오후 3시 이전 결제 완료 주문은 당일 출고 준비를 기준으로 운영합니다. 택배사 물량, 도서산간 지역, 공휴일 전후 일정에 따라 실제 배송 기간은 달라질 수 있습니다.",
+  },
+  {
+    category: "상품",
+    date: "2025.07.15",
+    title: "로스트볼 등급 표기 기준 안내",
+    body:
+      "상품 상세페이지의 S, A, B 등급은 외관 사용감과 실전 사용 적합성을 기준으로 분류합니다. 로스트볼 특성상 로고, 번호, 펜마킹은 재고 구성에 따라 다를 수 있습니다.",
+  },
+  {
+    category: "혜택",
+    date: "2025.07.22",
+    title: "신규 회원 3,000원 쿠폰 지급 안내",
+    body:
+      "신규 일반회원 가입 시 바로 사용할 수 있는 3,000원 쿠폰이 지급됩니다. 쿠폰은 마이페이지 쿠폰함에서 확인할 수 있으며, 사용 조건은 주문 단계에서 함께 안내됩니다.",
+  },
+];
+
 const brandMenu = [
   ["titleist", "타이틀리스트"],
   ["taylormade", "테일러메이드"],
@@ -102,12 +169,8 @@ const products = [
     detailImage: "detail-titleist.webp",
     galleryVideo: "product-videos/reball-titleist-rotation.mp4",
     galleryImages: [
-      { image: "gallery/titleist-01.png", label: "타이틀리스트 로고 좌측" },
       { image: "gallery/titleist-02.png", label: "타이틀리스트 PRO V1 정렬선" },
-      { image: "gallery/titleist-03.png", label: "타이틀리스트 PRO V1 정면" },
-      { image: "gallery/titleist-04.png", label: "타이틀리스트 로고 정면" },
       { image: "gallery/titleist-05.png", label: "타이틀리스트 스탠딩 로고" },
-      { image: "gallery/titleist-06.png", label: "타이틀리스트 스탠딩 정렬선" },
       { image: "gallery/titleist-07.png", label: "타이틀리스트 스탠딩 좌측" },
       { image: "gallery/titleist-08.png", label: "타이틀리스트 기본 정면" },
     ],
@@ -243,7 +306,6 @@ const products = [
     models: ["Z-STAR", "반반볼"],
     image: "ball-srixon.png",
     detailImage: "detail-srixon.webp",
-    galleryVideo: "product-videos/reball-srixon-rotation.mp4",
     galleryImages: [
       { image: "gallery/srixon-01.png", label: "스릭슨 Z-STAR 측면" },
       { image: "gallery/srixon-02.png", label: "스릭슨 Z-STAR 후면" },
@@ -463,6 +525,7 @@ const banners = [
   {
     id: "quality",
     image: "banner-home-main-user-clean.webp",
+    mobileImage: "banner-home-main-mobile.webp",
     showOverlay: true,
     eyebrow: "엄선된 품질, 합리적인 가격",
     title: "검수된 로스트볼,\n새 볼같은 경험",
@@ -475,7 +538,9 @@ const banners = [
   {
     id: "store",
     image: "banner-store-event-clean.webp",
+    mobileImage: "banner-store-event-mobile.webp",
     showOverlay: false,
+    mobileOverlay: true,
     eyebrow: "오프라인 매장 이벤트",
     title: "부천 매장 직운영\n방문 혜택 준비",
     body: "매장 방문 고객에게 현장 상담과 전용 혜택을 제공합니다.",
@@ -485,7 +550,9 @@ const banners = [
   {
     id: "premium",
     image: "banner-premium-selection-clean.webp",
+    mobileImage: "banner-premium-selection-mobile.webp",
     showOverlay: false,
+    mobileOverlay: true,
     eyebrow: "믿을 수 있는 품질",
     title: "프리미엄 선별\nREBALL LOSTBALL",
     body: "성능과 외관을 기준으로 분류한 로스트볼을 같은 기준으로 제공합니다.",
@@ -752,7 +819,7 @@ function renderHeader() {
         <button class="icon-btn plain-header-icon image-icon-btn" type="button" data-product-menu aria-label="상품 선택">${renderUiIcon("search", "header-glyph-img")}</button>
         <a class="icon-btn plain-header-icon image-icon-btn" href="#/cart" aria-label="장바구니">${renderUiIcon("cart", "header-glyph-img")}<b>${state.cart.length}</b></a>
       </div>
-      <button class="mobile-menu" type="button" data-product-menu aria-label="상품 메뉴"><span></span><span></span><span></span></button>
+      <button class="mobile-menu ${state.menuOpen ? "is-open" : ""}" type="button" data-product-menu aria-label="상품 메뉴"><span></span><span></span><span></span></button>
       ${renderProductMenu("mobile-product-menu")}
     </header>
   `;
@@ -792,8 +859,8 @@ function renderFooter() {
     ["등급 안내", "/inspection"],
   ];
   const supportLinks = [
-    ["공지사항", "/customer-center"],
-    ["자주 묻는 질문", "/customer-center"],
+    ["공지사항", "/notice"],
+    ["자주 묻는 질문", "/faq"],
     ["문의하기", "/customer-center"],
   ];
   const shippingLinks = [
@@ -1042,13 +1109,13 @@ function renderBanner(banner) {
   const label = `${banner.eyebrow} ${banner.title.replaceAll("\n", " ")} ${banner.cta}`;
   const buttonsOnly = banner.buttonsOnly === true;
   const body = escapeHtml(banner.body).replaceAll("\n", "<br />");
-  return `
-    <article class="hero-slide hero-slide--${banner.id} ${banner.showOverlay === false ? "image-only" : "has-copy"}">
-      <img src="${asset(banner.image)}" alt="${banner.showOverlay === false ? escapeHtml(label) : ""}" ${banner.id === "quality" ? `fetchpriority="high" decoding="sync"` : ""} />
-      ${
-        banner.showOverlay === false
-          ? `<button class="hero-image-link" type="button" data-route="${banner.route}" aria-label="${escapeHtml(label)}"></button>`
-          : `<div class="hero-copy ${buttonsOnly ? "hero-copy--buttons-only" : ""}">
+  const image = `
+        <picture>
+          ${banner.mobileImage ? `<source media="(max-width: 680px)" srcset="${asset(banner.mobileImage)}" />` : ""}
+          <img src="${asset(banner.image)}" alt="${banner.showOverlay === false ? escapeHtml(label) : ""}" ${banner.id === "quality" ? `fetchpriority="high" decoding="sync"` : ""} />
+        </picture>`;
+  const copy = (className = "") => `
+            <div class="hero-copy ${className} ${buttonsOnly ? "hero-copy--buttons-only" : ""}">
               ${
                 buttonsOnly
                   ? ""
@@ -1064,7 +1131,14 @@ function renderBanner(banner) {
                     : ""
                 }
               </div>
-            </div>`
+            </div>`;
+  return `
+    <article class="hero-slide hero-slide--${banner.id} ${banner.showOverlay === false ? "image-only" : "has-copy"}">
+      ${image}
+      ${
+        banner.showOverlay === false
+          ? `<button class="hero-image-link" type="button" data-route="${banner.route}" aria-label="${escapeHtml(label)}"></button>${banner.mobileOverlay ? copy("hero-copy--mobile-only") : ""}`
+          : copy()
       }
     </article>
   `;
@@ -1398,7 +1472,7 @@ function renderGalleryStage(product, modalInitialImage) {
   }
   return `
     <div class="gallery-stage">
-      <img src="${asset(product.image)}" alt="${escapeHtml(product.name)}" loading="eager" fetchpriority="high" decoding="sync" />
+      <img src="${asset(modalInitialImage.image)}" alt="${escapeHtml(modalInitialImage.label)}" loading="eager" fetchpriority="high" decoding="sync" />
       <button class="gallery-more-btn" type="button" data-open-gallery data-gallery-src="${escapeHtml(modalInitialImage.image)}" data-gallery-label="${escapeHtml(modalInitialImage.label)}">더 많은 이미지 보기</button>
     </div>
   `;
@@ -1976,8 +2050,8 @@ function renderAuthPage(mode = "login", redirect = "/mypage") {
             <span>귀찮은 입력 없이 간편하게 1초만에 가입하세요.</span>
           </header>
           ${renderSignupBenefitBanner()}
-          <div class="signup-divider"><span>또는</span></div>
           <button class="id-signup-btn" type="button" data-route="/signup/form">ID/PW로 회원가입</button>
+          <div class="signup-divider"><span>또는</span></div>
           <div class="social-signup-row" aria-label="간편 회원가입">
             <button class="kakao-signup-btn" type="button" data-social-signup="kakao" aria-label="카카오 간편가입">
               <span class="kakao-bubble" aria-hidden="true"></span>
@@ -2894,6 +2968,93 @@ function renderCustomerCenter() {
       <img src="${asset("customer-center-full.png")}" alt="고객센터 안내 이미지" />
     </section>
   `);
+}
+
+function renderNotice() {
+  const pinned = noticeItems.find((item) => item.pinned) ?? noticeItems[0];
+
+  layout(`
+    <section class="notice-page">
+      <div class="notice-hero">
+        <div class="notice-hero-copy">
+          <p>NOTICE</p>
+          <h1>공지사항</h1>
+          <span>리볼 로스트볼의 쇼핑몰 운영, 배송, 상품 기준과 회원 혜택 소식을 확인하세요.</span>
+        </div>
+        <article class="notice-pin-card">
+          <span>${escapeHtml(pinned.category)}</span>
+          <time>${escapeHtml(pinned.date)}</time>
+          <strong>${escapeHtml(pinned.title)}</strong>
+          <p>${escapeHtml(pinned.body)}</p>
+        </article>
+      </div>
+
+      <div class="notice-summary-strip" aria-label="공지 분류">
+        ${["전체", ...new Set(noticeItems.map((item) => item.category))].map((label) => `<span>${escapeHtml(label)}</span>`).join("")}
+      </div>
+
+      <section class="notice-list" aria-label="공지사항 목록">
+        ${noticeItems.map(renderNoticeItem).join("")}
+      </section>
+    </section>
+  `);
+}
+
+function renderNoticeItem(item, index) {
+  return `
+    <details class="notice-item" ${index === 0 ? "open" : ""}>
+      <summary>
+        <span>${escapeHtml(item.category)}</span>
+        <strong>${escapeHtml(item.title)}</strong>
+        <time>${escapeHtml(item.date)}</time>
+        <b aria-hidden="true">${icons.chevron}</b>
+      </summary>
+      <p>${escapeHtml(item.body)}</p>
+    </details>
+  `;
+}
+
+function renderFaq() {
+  const categories = [...new Set(faqItems.map((item) => item.category))];
+
+  layout(`
+    <section class="faq-page">
+      <div class="faq-hero">
+        <div class="faq-hero-copy">
+          <p>FAQ</p>
+          <h1>자주 묻는 질문</h1>
+          <span>주문 전후로 가장 많이 확인하는 등급, 배송, 교환/반품 안내를 한곳에 정리했습니다.</span>
+        </div>
+        <div class="faq-contact-card">
+          <span class="faq-contact-icon">${renderUiIcon("service-headset", "faq-contact-img")}</span>
+          <strong>${businessProfile.supportPhone}</strong>
+          <p>평일 ${businessProfile.operationHours}<br />${businessProfile.supportEmail}</p>
+          <button class="secondary-btn compact" type="button" data-route="/customer-center">고객센터 보기</button>
+        </div>
+      </div>
+
+      <div class="faq-category-strip" aria-label="FAQ 분류">
+        ${categories.map((category) => `<span>${escapeHtml(category)}</span>`).join("")}
+      </div>
+
+      <section class="faq-list" aria-label="자주 묻는 질문 목록">
+        ${faqItems.map(renderFaqItem).join("")}
+      </section>
+    </section>
+  `);
+}
+
+function renderFaqItem(item, index) {
+  return `
+    <details class="faq-item" ${index === 0 ? "open" : ""}>
+      <summary>
+        <span>${escapeHtml(item.category)}</span>
+        <strong>${escapeHtml(item.question)}</strong>
+        <b aria-hidden="true">${icons.chevron}</b>
+      </summary>
+      <p>${escapeHtml(item.answer)}</p>
+    </details>
+  `;
 }
 
 function renderCustomerSummaryItem(title, body, iconName) {
@@ -5054,6 +5215,8 @@ function renderRoute() {
   if (base === "inspection") return renderInspection();
   if (base === "brand-story") return renderBrandStory();
   if (base === "customer-center") return renderCustomerCenter();
+  if (base === "notice") return renderNotice();
+  if (base === "faq") return renderFaq();
   if (base === "admin") return renderAdmin();
   renderHome();
 }

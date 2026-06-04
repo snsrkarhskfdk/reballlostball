@@ -48,7 +48,7 @@ for (const selector of [
   }
 }
 
-if (!index.includes('<script type="module" src="./app.js"></script>')) {
+if (!/<script\s+type="module"\s+src="\.\/app\.js(?:\?[^"]*)?"><\/script>/.test(index)) {
   errors.push("index.html must load app.js as an ES module");
 }
 
