@@ -23,12 +23,27 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+      - name: Prepare static artifact
+        run: |
+          rm -rf public
+          mkdir -p public
+          rsync -av \
+            --exclude='.git' \
+            --exclude='.github' \
+            --exclude='.vercel' \
+            --exclude='node_modules' \
+            --exclude='artifacts' \
+            --exclude='meodai-skill-color-expert-https-github' \
+            ./ public/
+          cp public/index.html public/404.html
       - name: Configure Pages
         uses: actions/configure-pages@v5
+        with:
+          enablement: true
       - name: Upload artifact
         uses: actions/upload-pages-artifact@v3
         with:
-          path: "."
+          path: "public"
       - name: Deploy to GitHub Pages
         id: deployment
         uses: actions/deploy-pages@v4
