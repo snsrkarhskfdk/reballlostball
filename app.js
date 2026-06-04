@@ -1,5 +1,5 @@
 ﻿const ASSET_PATH = "./assets/figma";
-const ASSET_VERSION = "20260604-34";
+const ASSET_VERSION = "20260604-35";
 const SUPABASE_URL = "https://qbftalhhyfcndanrcwpy.supabase.co";
 const SUPABASE_KEY = "sb_publishable_K876i166RCGtBxdp3xRQZw_yJxPaKwL";
 
@@ -225,6 +225,7 @@ const products = [
       { image: "gallery/callaway-03.png", label: "캘러웨이 로고 오른쪽" },
       { image: "gallery/callaway-04.png", label: "캘러웨이 로고 왼쪽" },
       { image: "gallery/callaway-05.png", label: "캘러웨이 로고 왼쪽 클로즈업" },
+      { image: "gallery/callaway-06.png", label: "캘러웨이 CHROME TOUR 누끼" },
     ],
     accent: "#B68935",
     stock: 44,
