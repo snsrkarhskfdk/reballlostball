@@ -1,5 +1,5 @@
 ﻿const ASSET_PATH = "./assets/figma";
-const ASSET_VERSION = "20260604-35";
+const ASSET_VERSION = "20260604-36";
 const SUPABASE_URL = "https://qbftalhhyfcndanrcwpy.supabase.co";
 const SUPABASE_KEY = "sb_publishable_K876i166RCGtBxdp3xRQZw_yJxPaKwL";
 
@@ -201,6 +201,7 @@ const products = [
       { image: "gallery/volvik-02.png", label: "볼빅 VTU3 측면" },
       { image: "gallery/volvik-03.png", label: "볼빅 VTU3 로고" },
       { image: "gallery/volvik-04.png", label: "볼빅 VTU3 정면" },
+      { image: "gallery/volvik-05.png", label: "볼빅 TIGER" },
     ],
     accent: "#E7D8B8",
     stock: 55,
@@ -264,9 +265,6 @@ const products = [
     models: ["화이트", "컬러"],
     image: "ball-volvik.png",
     detailImage: "detail-volvik.webp",
-    galleryImages: [
-      { image: "gallery/mix-01.png", label: "브랜드혼합 TIGER" },
-    ],
     accent: "#113A2A",
     stock: 70,
   },
