@@ -377,13 +377,13 @@ svg {
 }
 
 .shop-icon-22 {
-  width: 22px !important;
-  height: 22px !important;
-  max-width: 22px;
-  max-height: 22px;
+  width: 29px !important;
+  height: 29px !important;
+  max-width: 29px;
+  max-height: 29px;
   object-fit: contain;
   object-position: center;
-  flex: 0 0 22px;
+  flex: 0 0 29px;
 }
 
 .image-icon-btn b {
