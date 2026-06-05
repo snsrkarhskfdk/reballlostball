@@ -1,5 +1,5 @@
 ﻿const ASSET_PATH = "./assets/figma";
-const ASSET_VERSION = "20260605-02";
+const ASSET_VERSION = "20260606-01";
 const SUPABASE_URL = "https://qbftalhhyfcndanrcwpy.supabase.co";
 const SUPABASE_KEY = "sb_publishable_K876i166RCGtBxdp3xRQZw_yJxPaKwL";
 const ADMIN_MEMBERS_FUNCTION_URL = `${SUPABASE_URL}/functions/v1/admin-members`;
@@ -25,6 +25,36 @@ const money = new Intl.NumberFormat("ko-KR");
 const app = document.querySelector("#app");
 const inlineIcon = (name) => `<img class="inline-action-icon" src="${ASSET_PATH}/ui-icons/${name}.png?v=${ASSET_VERSION}" alt="" />`;
 const svgUiIconNames = new Set(["order-fast", "safe-pack"]);
+const shopIconFileMap = {
+  cart: "shop-cart",
+  "header-cart": "shop-cart",
+  "mini-cart": "shop-cart",
+  "bundle-cart": "shop-cart",
+  "order-cart": "shop-cart",
+  search: "shop-search",
+  "header-search": "shop-search",
+  "process-inspect": "shop-search",
+  cardPay: "shop-payment",
+  "order-payment": "shop-payment",
+  "service-truck": "shop-truck",
+  "order-truck": "shop-truck",
+  "order-fast": "shop-truck",
+  truck: "shop-truck",
+  "service-box": "shop-package",
+  "process-inbound": "shop-box-up",
+  "process-pack": "shop-box-check",
+  "order-box": "shop-box-check",
+  box: "shop-box-check",
+  "service-return": "shop-return",
+  "process-test": "shop-return",
+  "why-leaf": "shop-return",
+  "why-shield": "shop-shield",
+  shield: "shop-shield",
+  "safe-pack": "shop-shield",
+  "why-medal": "shop-box-check",
+  "why-headset": "shop-shield",
+  "service-headset": "shop-shield",
+};
 
 const icons = {
   menu: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16M4 12h16M4 17h16"/></svg>',
@@ -47,6 +77,12 @@ const icons = {
   chevron: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="m9 18 6-6-6-6"/></svg>',
   check: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="m5 12 5 5L20 7"/></svg>',
   coupon: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 8a2 2 0 0 1 2-2h16v5a2 2 0 0 0 0 4v5H6a2 2 0 0 1-2-2v-5a2 2 0 0 0 0-4V8Z"/><path d="M13 7v2M13 11v2M13 15v2"/></svg>',
+};
+
+const shopIcons = {
+  cart: renderShopIcon("cart", "inline-action-icon"),
+  cardPay: renderShopIcon("cardPay", "inline-action-icon"),
+  shield: renderShopIcon("shield", "inline-action-icon"),
 };
 
 const ORDER_STATUS_LABELS = {
@@ -1333,6 +1369,14 @@ function renderUiIcon(name, className = "ui-icon") {
   return `<img class="${className}" src="${iconAsset(name)}" alt="" />`;
 }
 
+function shopIconAsset(name) {
+  return asset(`ui-icons/${shopIconFileMap[name] ?? name}.png`);
+}
+
+function renderShopIcon(name, className = "ui-icon") {
+  return `<img class="${className} shop-icon-22" src="${shopIconAsset(name)}" alt="" />`;
+}
+
 function productBySlug(slug) {
   return catalogProducts().find((product) => product.slug === slug || product.aliasSlugs?.includes(slug)) ?? catalogProducts()[0];
 }
@@ -1483,6 +1527,10 @@ function layout(content, options = {}) {
 }
 
 function renderHeader() {
+  const route = parseRoute();
+  const isExcludedIconRoute = route.startsWith("/mypage") || route.startsWith("/admin");
+  const headerSearchIcon = isExcludedIconRoute ? renderUiIcon("search", "header-glyph-img") : renderShopIcon("search", "header-glyph-img");
+  const headerCartIcon = isExcludedIconRoute ? renderUiIcon("cart", "header-glyph-img") : renderShopIcon("cart", "header-glyph-img");
   const items = [
     ["검수기준", "/inspection"],
     ["매장소개", "/store"],
@@ -1505,8 +1553,8 @@ function renderHeader() {
       </nav>
       <div class="header-actions">
         ${renderHeaderAuth()}
-        <button class="icon-btn plain-header-icon image-icon-btn" type="button" data-product-menu aria-label="상품 선택">${renderUiIcon("search", "header-glyph-img")}</button>
-        <a class="icon-btn plain-header-icon image-icon-btn" href="#/cart" aria-label="장바구니">${renderUiIcon("cart", "header-glyph-img")}<b>${state.cart.length}</b></a>
+        <button class="icon-btn plain-header-icon image-icon-btn" type="button" data-product-menu aria-label="상품 선택">${headerSearchIcon}</button>
+        <a class="icon-btn plain-header-icon image-icon-btn" href="#/cart" aria-label="장바구니">${headerCartIcon}<b>${state.cart.length}</b></a>
       </div>
       <button class="mobile-menu ${state.menuOpen ? "is-open" : ""}" type="button" data-product-menu aria-label="상품 메뉴"><span></span><span></span><span></span></button>
       ${renderProductMenu("mobile-product-menu")}
@@ -1627,7 +1675,7 @@ function renderCartMovePrompt() {
         <h2 id="cart-move-title">장바구니 화면으로 이동하시겠습니까?</h2>
         <div>
           <button class="secondary-btn compact" type="button" data-cart-continue>계속 쇼핑</button>
-          <button class="gold-cart-btn compact" type="button" data-cart-confirm>장바구니 이동 ${icons.cart}</button>
+          <button class="gold-cart-btn compact" type="button" data-cart-confirm>장바구니 이동 ${shopIcons.cart}</button>
         </div>
       </section>
     </div>
@@ -1700,7 +1748,7 @@ function renderHome() {
           .join("")}
       </div>
       <div class="home-filter-actions">
-        <button class="gold-cart-btn compact" type="button" data-add-card="${titleist.slug}">장바구니 담기 ${icons.cart}</button>
+        <button class="gold-cart-btn compact" type="button" data-add-card="${titleist.slug}">장바구니 담기 ${shopIcons.cart}</button>
         <button class="secondary-btn compact" type="button" data-route="/product/${titleist.slug}">전체보기</button>
       </div>
     </section>
@@ -1905,7 +1953,7 @@ function renderHomeSystemImageBody(name, alt) {
 }
 
 function renderTrustItem(iconName, title, body) {
-  return `<article>${renderUiIcon(iconName, "trust-icon")}<div><strong>${escapeHtml(title)}</strong><span>${escapeHtml(body)}</span></div></article>`;
+  return `<article>${renderShopIcon(iconName, "trust-icon")}<div><strong>${escapeHtml(title)}</strong><span>${escapeHtml(body)}</span></div></article>`;
 }
 
 function renderBestSellerCard(product) {
@@ -1945,7 +1993,7 @@ function renderBestSellerCard(product) {
 }
 
 function renderReasonCard(iconName, title, body) {
-  return `<article>${renderUiIcon(iconName, "section-icon reason-icon")}<div><h2>${escapeHtml(title)}</h2><p>${escapeHtml(body)}</p></div></article>`;
+  return `<article>${renderShopIcon(iconName, "section-icon reason-icon")}<div><h2>${escapeHtml(title)}</h2><p>${escapeHtml(body)}</p></div></article>`;
 }
 
 function renderGradeCard(grade) {
@@ -1966,7 +2014,7 @@ function renderProcessStep(step, index) {
   const [iconName, title, body] = Array.isArray(step) ? step : ["process-inbound", step, ""];
   return `
     <article>
-      <span>${renderUiIcon(iconName, "process-icon")}</span>
+      <span>${renderShopIcon(iconName, "process-icon")}</span>
       <b>${String(index + 1).padStart(2, "0")}</b>
       <strong>${escapeHtml(title)}</strong>
       ${body ? `<small>${escapeHtml(body)}</small>` : ""}
@@ -1977,7 +2025,7 @@ function renderProcessStep(step, index) {
 function renderServiceCard(iconName, title, body) {
   return `
     <article>
-      ${renderUiIcon(iconName, "service-icon")}
+      ${renderShopIcon(iconName, "service-icon")}
       <div>
         <h2>${escapeHtml(title)}</h2>
         <p>${escapeHtml(body).replaceAll("\n", "<br />")}</p>
@@ -2012,7 +2060,7 @@ function renderBundleCard(bundle) {
       <h2>${escapeHtml(bundle.title)}</h2>
       <p>${escapeHtml(bundle.desc)}</p>
       <strong>₩${money.format(bundle.price)}</strong>
-      <button class="bundle-cart-btn" type="button" data-add-bundle="${id}" aria-label="${escapeHtml(bundle.title)} 장바구니 담기">${renderUiIcon("bundle-cart", "bundle-cart-img")}</button>
+      <button class="bundle-cart-btn" type="button" data-add-bundle="${id}" aria-label="${escapeHtml(bundle.title)} 장바구니 담기">${renderShopIcon("bundle-cart", "bundle-cart-img")}</button>
     </article>
   `;
 }
@@ -2038,7 +2086,7 @@ function renderProductCard(product) {
         </dl>
         <div class="product-bottom">
           <strong>₩${money.format(product.price)}부터</strong>
-          <button class="gold-cart-btn card-cart-btn" type="button" data-add-card="${product.slug}">장바구니 담기 ${icons.cart}</button>
+          <button class="gold-cart-btn card-cart-btn" type="button" data-add-card="${product.slug}">장바구니 담기 ${shopIcons.cart}</button>
         </div>
       </div>
     </article>
@@ -2117,7 +2165,7 @@ function renderDetail(slug) {
             <b>₩${money.format(price)}</b>
           </div>
           <div class="action-row">
-            <button class="gold-cart-btn" type="button" data-add-detail="${product.slug}">장바구니 담기 ${icons.cart}</button>
+            <button class="gold-cart-btn" type="button" data-add-detail="${product.slug}">장바구니 담기 ${shopIcons.cart}</button>
             <button class="secondary-btn" type="button" data-buy-now="${product.slug}">바로 구매</button>
           </div>
         </aside>
@@ -2194,7 +2242,7 @@ function renderDetailCheckStrip(product) {
 function renderDetailCheckItem(iconName, title, body) {
   return `
     <article>
-      <span>${renderUiIcon(iconName, "detail-check-icon")}</span>
+      <span>${renderShopIcon(iconName, "detail-check-icon")}</span>
       <div><strong>${escapeHtml(title)}</strong><small>${body}</small></div>
     </article>
   `;
@@ -2216,13 +2264,13 @@ function renderDetailInfoSection(product) {
         </article>
         <article class="detail-info-card">
           <span class="detail-info-media">
-            ${renderUiIcon("order-box", "detail-info-icon")}
+            ${renderShopIcon("order-box", "detail-info-icon")}
           </span>
           <div><strong>구성 안내</strong><small>10구 / 30구 단위 선택 가능<br />등급 S / A / B 선택<br />브랜드별 옵션 구성 상이</small></div>
         </article>
         <article class="detail-info-card">
           <span class="detail-info-media">
-            ${renderUiIcon("order-truck", "detail-info-icon")}
+            ${renderShopIcon("order-truck", "detail-info-icon")}
           </span>
           <div><strong>배송 안내</strong><small>${shippingPolicy.cutoffTime} 전 주문 시 당일 출고 준비<br />평균 배송 ${shippingPolicy.averageLeadTime}<br />제주/도서산간 ${money.format(shippingPolicy.islandExtra)}원 추가</small></div>
         </article>
@@ -2339,7 +2387,7 @@ function renderDetailPostContent(product) {
         <h2>${escapeHtml(product.name)}, 지금 합리적으로 만나보세요</h2>
         <p>정직한 품질과 합리적인 가격으로 준비했습니다.</p>
       </div>
-      <button class="gold-cart-btn compact home-bottom-cta-btn" type="button" data-buy-now="${product.slug}">지금 바로 구매하기 ${icons.cart}</button>
+      <button class="gold-cart-btn compact home-bottom-cta-btn" type="button" data-buy-now="${product.slug}">지금 바로 구매하기 ${shopIcons.cart}</button>
     </section>
   `;
 }
@@ -2443,7 +2491,7 @@ function renderCart() {
         <hr />
         <div class="grand"><span>총 결제금액</span><strong>₩${money.format(finalAmount)}</strong></div>
         <small>기본 배송비는 ${money.format(shippingPolicy.baseFee)}원으로 적용했습니다. 단순변심 반품비 ${money.format(shippingPolicy.simpleReturnFee)}원 기준에 맞춘 운영값입니다.</small>
-        <button class="gold-cart-btn" type="button" data-route="/checkout" ${state.cart.length ? "" : "disabled"}>주문서 작성 ${icons.cart}</button>
+        <button class="gold-cart-btn" type="button" data-route="/checkout" ${state.cart.length ? "" : "disabled"}>주문서 작성 ${shopIcons.cart}</button>
       </aside>
     </section>
   `);
@@ -2524,7 +2572,7 @@ function renderCheckoutMainSection() {
       <div class="checkout-section">
         <div class="checkout-section-label">결제수단</div>
         <div class="checkout-method-grid">
-          ${renderCheckoutMethod("card", "카드 결제", icons.cardPay, true)}
+          ${renderCheckoutMethod("card", "카드 결제", shopIcons.cardPay, true)}
           ${renderCheckoutMethod("transfer", "계좌이체", icons.bank)}
           ${renderCheckoutMethod("virtual", "가상계좌", icons.receipt)}
           ${renderCheckoutMethod("easy", "간편결제", icons.bolt)}
@@ -2538,7 +2586,7 @@ function renderCheckoutMainSection() {
           `배송비 ${money.format(shippingPolicy.baseFee)}원 / ${money.format(shippingPolicy.freeThreshold)}원 이상 무료 / 제주·도서산간 ${money.format(shippingPolicy.islandExtra)}원 추가`
         )}
         ${renderCheckoutPolicyCard(
-          icons.shield,
+          shopIcons.shield,
           "교환 / 환불 안내",
           `${shippingPolicy.simpleReturnText}<br />${shippingPolicy.defectReturnText}`,
           `반품 주소 ${businessProfile.returnAddress}`
@@ -3761,7 +3809,7 @@ function renderFaq() {
           <span>주문 전후로 가장 많이 확인하는 등급, 배송, 교환/반품 안내를 한곳에 정리했습니다.</span>
         </div>
         <div class="faq-contact-card">
-          <span class="faq-contact-icon">${renderUiIcon("service-headset", "faq-contact-img")}</span>
+          <span class="faq-contact-icon">${renderShopIcon("service-headset", "faq-contact-img")}</span>
           <strong>${businessProfile.supportPhone}</strong>
           <p>평일 ${businessProfile.operationHours}<br />${businessProfile.supportEmail}</p>
           <button class="secondary-btn compact" type="button" data-route="/customer-center">고객센터 보기</button>
@@ -3795,7 +3843,7 @@ function renderFaqItem(item, index) {
 function renderCustomerSummaryItem(title, body, iconName) {
   return `
     <article class="customer-service-summary-item">
-      ${renderUiIcon(iconName, "customer-service-summary-icon")}
+      ${renderShopIcon(iconName, "customer-service-summary-icon")}
       <strong>${escapeHtml(title)}</strong>
       <span>${escapeHtml(body)}</span>
     </article>
@@ -3806,7 +3854,7 @@ function renderCustomerInfoCard(title, body, iconName) {
   return `
     <article class="customer-info-card">
       <div class="customer-info-head">
-        <span class="customer-info-icon-wrap">${renderUiIcon(iconName, "customer-info-icon")}</span>
+        <span class="customer-info-icon-wrap">${renderShopIcon(iconName, "customer-info-icon")}</span>
         <h2>${escapeHtml(title)}</h2>
       </div>
       <div class="customer-info-body">${body}</div>
