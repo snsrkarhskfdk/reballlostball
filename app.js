@@ -2,6 +2,7 @@
 const ASSET_VERSION = "20260605-02";
 const SUPABASE_URL = "https://qbftalhhyfcndanrcwpy.supabase.co";
 const SUPABASE_KEY = "sb_publishable_K876i166RCGtBxdp3xRQZw_yJxPaKwL";
+const ADMIN_MEMBERS_FUNCTION_URL = `${SUPABASE_URL}/functions/v1/admin-members`;
 const AUTH_REDIRECT_DEFAULT = "/mypage";
 const LEGACY_MEMBER_STATE_RESET_VERSION = "20260605-supabase-auth-cutover-v1";
 const PENDING_SIGNUP_EMAIL_KEY = "reball.pendingSignupEmail";
@@ -487,6 +488,10 @@ const state = {
   adminProfile: load("reball.adminProfile", defaultAdminProfile()),
   adminBanners: load("reball.adminBanners", defaultAdminBanners()),
   adminCustomers: load("reball.adminCustomers", []),
+  adminMembers: [],
+  adminMembersLoading: false,
+  adminMembersLoaded: false,
+  adminMembersError: "",
   adminProducts: load("reball.adminProducts", []),
   adminModal: null,
   adminModalContext: null,
@@ -837,6 +842,9 @@ async function initializeAuth() {
       .then(async () => {
         if (event === "SIGNED_OUT") {
           emptyAuthData();
+          state.adminMembers = [];
+          state.adminMembersLoaded = false;
+          state.adminMembersError = "";
           if (parseRoute() === "/mypage") routeTo("/login");
           else renderRoute();
           return;
@@ -853,6 +861,9 @@ async function initializeAuth() {
             return;
           }
 
+          if (parseRoute().startsWith("/admin")) {
+            state.adminMembersLoaded = false;
+          }
           renderRoute();
         }
       })
@@ -968,6 +979,44 @@ async function handleLogout(redirect = "/") {
     routeTo(redirect);
   } catch (error) {
     showToast(normalizeAuthError(error, "로그아웃하지 못했습니다."));
+  }
+}
+
+async function loadAdminMembers(options = {}) {
+  const { force = false, silent = true } = options;
+  if (!state.adminUser || state.adminMembersLoading) return;
+  if (state.adminMembersLoaded && !force) return;
+  if (!state.authReady) return;
+
+  if (!state.authSession?.access_token) {
+    state.adminMembersLoaded = true;
+    state.adminMembersError = "관리자 회원 목록은 Supabase owner_admin 세션으로 로그인해야 조회할 수 있습니다.";
+    if (!silent && parseRoute().startsWith("/admin")) renderAdmin();
+    return;
+  }
+
+  state.adminMembersLoading = true;
+  state.adminMembersError = "";
+  if (!silent && parseRoute().startsWith("/admin")) renderAdmin();
+
+  try {
+    const response = await fetch(ADMIN_MEMBERS_FUNCTION_URL, {
+      method: "GET",
+      headers: {
+        apikey: SUPABASE_KEY,
+        Authorization: `Bearer ${state.authSession.access_token}`,
+      },
+    });
+    const payload = await response.json().catch(() => ({}));
+    if (!response.ok) throw new Error(payload?.message || "회원 목록을 불러오지 못했습니다.");
+    state.adminMembers = Array.isArray(payload.members) ? payload.members : [];
+    state.adminMembersLoaded = true;
+  } catch (error) {
+    state.adminMembersLoaded = true;
+    state.adminMembersError = normalizeAuthError(error, "회원 목록을 불러오지 못했습니다.");
+  } finally {
+    state.adminMembersLoading = false;
+    if (parseRoute().startsWith("/admin")) renderAdmin();
   }
 }
 
@@ -3811,6 +3860,7 @@ function renderAdmin() {
     `,
     { admin: true, noHeader: true, mainClass: "admin-main" }
   );
+  void loadAdminMembers();
 }
 
 function renderAdminLogin() {
@@ -3972,6 +4022,12 @@ function renderAdminStats(tab) {
 function renderAdminTable(tab) {
   const rows = filterAdminRows(adminRowsForTab(tab));
   if (!rows.length) {
+    if (tab === "customer" && state.adminMembersLoading) {
+      return `<div class="admin-empty"><strong>회원 데이터를 불러오는 중입니다.</strong><span>Supabase profiles 테이블에서 가입 회원을 확인하고 있습니다.</span></div>`;
+    }
+    if (tab === "customer" && state.adminMembersError) {
+      return `<div class="admin-empty"><strong>회원 데이터를 불러오지 못했습니다.</strong><span>${escapeHtml(state.adminMembersError)}</span></div>`;
+    }
     return `<div class="admin-empty"><strong>검색 결과가 없습니다.</strong><span>다른 주문번호, 고객명, 상품명으로 다시 검색하세요.</span></div>`;
   }
 
@@ -4775,6 +4831,26 @@ function adminSettlementRows() {
 }
 
 function adminCustomerRows() {
+  const remoteMembers = (state.adminMembers || []).map((member, index) => {
+    const joinedAt = member.createdAt || member.created_at || "";
+    const joinedDate = joinedAt ? formatDateLabel(joinedAt) : "";
+    const isNew = joinedAt ? Date.now() - new Date(joinedAt).getTime() < 7 * 24 * 60 * 60 * 1000 : false;
+    return {
+      id: member.id ? `MB-${String(member.id).slice(0, 8)}` : `MB-${index + 1}`,
+      mark: (member.name || member.loginId || member.email || "회").slice(0, 1),
+      title: member.name || member.loginId || member.email || "회원",
+      meta: `${member.loginId || member.authEmail || member.email || "아이디 미입력"} / ${member.phone || "연락처 미입력"}`,
+      status: member.status || "정상",
+      tone: "ok",
+      value: `₩${money.format(Number(member.totalKrw) || 0)}`,
+      subValue: `${isNew ? "신규 가입" : "가입"}${joinedDate ? ` ${joinedDate}` : ""}`,
+      action: "상세",
+      modal: "addCustomer",
+      sourceId: member.id || "",
+    };
+  });
+
+  const remoteKeys = new Set(remoteMembers.map((member) => member.sourceId).filter(Boolean));
   const registered = (state.adminCustomers || []).map((customer, index) => ({
     id: customer.id || `CU-NEW-${index + 1}`,
     mark: (customer.name || "고").slice(0, 1),
@@ -4787,7 +4863,7 @@ function adminCustomerRows() {
     action: "상세",
     modal: "addCustomer",
   }));
-  return registered;
+  return [...remoteMembers, ...registered.filter((customer) => !remoteKeys.has(customer.sourceId))];
 }
 
 function adminReviewRows() {
@@ -5624,6 +5700,8 @@ function bindPageEvents() {
         save("reball.adminCredentials", state.adminCredentials);
       }
       state.adminUser = { id, role: state.adminProfile.role, email: state.adminProfile.email };
+      state.adminMembersLoaded = false;
+      state.adminMembersError = "";
       state.adminLoginError = "";
       save("reball.adminUser", state.adminUser);
       renderAdmin();
@@ -5636,6 +5714,9 @@ function bindPageEvents() {
     state.adminUser = null;
     state.adminModal = null;
     state.adminModalContext = null;
+    state.adminMembers = [];
+    state.adminMembersLoaded = false;
+    state.adminMembersError = "";
     save("reball.adminUser", state.adminUser);
     renderAdmin();
   });
@@ -5652,6 +5733,7 @@ function bindPageEvents() {
       state.adminTab = node.dataset.adminTab;
       state.adminModal = null;
       state.adminModalContext = null;
+      if (state.adminTab === "customer") state.adminMembersLoaded = false;
       renderAdmin();
     });
   });
