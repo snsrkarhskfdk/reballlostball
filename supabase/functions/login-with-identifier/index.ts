@@ -5,10 +5,11 @@ const ALLOWED_ORIGINS = new Set([
   "https://www.reballlostball.com",
   "http://localhost:3000",
   "http://127.0.0.1:3000",
+  "http://127.0.0.1:3001",
 ]);
 
 const LOGIN_ID_PATTERN = /^[a-z0-9][a-z0-9._-]{3,19}$/;
-const INVALID_CREDENTIALS_MESSAGE = "아이디 또는 비밀번호를 확인하세요.";
+const INVALID_CREDENTIALS_MESSAGE = "Invalid login credentials";
 
 function isAllowedOrigin(origin: string): boolean {
   if (ALLOWED_ORIGINS.has(origin)) return true;
@@ -58,10 +59,15 @@ function secretKey(): string {
   return parseJsonKey("SUPABASE_SECRET_KEYS") || Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") || "";
 }
 
-function supabaseHeaders(key: string): HeadersInit {
-  const headers: Record<string, string> = { apikey: key };
-  if (!key.startsWith("sb_")) headers.Authorization = `Bearer ${key}`;
-  return headers;
+function publishableHeaders(key: string): HeadersInit {
+  return { apikey: key };
+}
+
+function serviceHeaders(key: string): HeadersInit {
+  return {
+    apikey: key,
+    Authorization: `Bearer ${key}`,
+  };
 }
 
 function isEmailLike(value: string): boolean {
@@ -86,7 +92,7 @@ async function resolveAuthEmail(identifier: string): Promise<string | null> {
   });
 
   const response = await fetch(`${Deno.env.get("SUPABASE_URL")}/rest/v1/profiles?${params}`, {
-    headers: supabaseHeaders(key),
+    headers: serviceHeaders(key),
   });
 
   if (!response.ok) {
@@ -107,7 +113,7 @@ async function passwordGrant(email: string, password: string): Promise<Response>
     method: "POST",
     headers: {
       "Content-Type": "application/json",
-      ...supabaseHeaders(key),
+      ...publishableHeaders(key),
     },
     body: JSON.stringify({ email, password }),
   });
@@ -146,6 +152,6 @@ Deno.serve(async (req: Request) => {
     return jsonResponse(req, authPayload);
   } catch (error) {
     console.error("login-with-identifier failed", error);
-    return jsonResponse(req, { message: "로그인 처리 중 오류가 발생했습니다." }, 500);
+    return jsonResponse(req, { message: "Login failed" }, 500);
   }
 });

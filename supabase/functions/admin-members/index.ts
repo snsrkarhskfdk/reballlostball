@@ -56,11 +56,17 @@ function secretKey(): string {
   return parseJsonKey("SUPABASE_SECRET_KEYS") || Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") || "";
 }
 
-function supabaseHeaders(key: string, token?: string): HeadersInit {
+function publishableHeaders(key: string, token?: string): HeadersInit {
   const headers: Record<string, string> = { apikey: key };
   if (token) headers.Authorization = `Bearer ${token}`;
-  else if (!key.startsWith("sb_")) headers.Authorization = `Bearer ${key}`;
   return headers;
+}
+
+function serviceHeaders(key: string): HeadersInit {
+  return {
+    apikey: key,
+    Authorization: `Bearer ${key}`,
+  };
 }
 
 async function getSessionUser(req: Request): Promise<{ id: string } | null> {
@@ -71,7 +77,7 @@ async function getSessionUser(req: Request): Promise<{ id: string } | null> {
   if (!key) throw new Error("Missing Supabase publishable key");
 
   const response = await fetch(`${Deno.env.get("SUPABASE_URL")}/auth/v1/user`, {
-    headers: supabaseHeaders(key, token),
+    headers: publishableHeaders(key, token),
   });
   if (!response.ok) return null;
   const user = await response.json().catch(() => null);
@@ -89,7 +95,7 @@ async function isOwnerAdmin(userId: string): Promise<boolean> {
     limit: "1",
   });
   const response = await fetch(`${Deno.env.get("SUPABASE_URL")}/rest/v1/user_roles?${params}`, {
-    headers: supabaseHeaders(key),
+    headers: serviceHeaders(key),
   });
   if (!response.ok) throw new Error("Role lookup failed");
   const rows = await response.json().catch(() => []);
@@ -106,7 +112,7 @@ async function fetchProfiles(): Promise<any[]> {
     limit: "200",
   });
   const response = await fetch(`${Deno.env.get("SUPABASE_URL")}/rest/v1/profiles?${params}`, {
-    headers: supabaseHeaders(key),
+    headers: serviceHeaders(key),
   });
   if (!response.ok) throw new Error("Profile lookup failed");
   return response.json();
@@ -121,7 +127,7 @@ async function fetchOrders(): Promise<any[]> {
     limit: "1000",
   });
   const response = await fetch(`${Deno.env.get("SUPABASE_URL")}/rest/v1/orders?${params}`, {
-    headers: supabaseHeaders(key),
+    headers: serviceHeaders(key),
   });
   if (!response.ok) return [];
   return response.json();
@@ -138,10 +144,10 @@ Deno.serve(async (req: Request) => {
 
   try {
     const user = await getSessionUser(req);
-    if (!user) return jsonResponse(req, { message: "관리자 세션을 확인할 수 없습니다." }, 401);
+    if (!user) return jsonResponse(req, { message: "Admin session required" }, 401);
 
     const allowed = await isOwnerAdmin(user.id);
-    if (!allowed) return jsonResponse(req, { message: "회원 목록 조회 권한이 없습니다." }, 403);
+    if (!allowed) return jsonResponse(req, { message: "Admin access denied" }, 403);
 
     const [profiles, orders] = await Promise.all([fetchProfiles(), fetchOrders()]);
     const orderTotals = new Map<string, { count: number; totalKrw: number }>();
@@ -167,13 +173,13 @@ Deno.serve(async (req: Request) => {
         createdAt: profile.created_at || "",
         orderCount: totals.count,
         totalKrw: totals.totalKrw,
-        status: "정상",
+        status: "",
       };
     });
 
     return jsonResponse(req, { members });
   } catch (error) {
     console.error("admin-members failed", error);
-    return jsonResponse(req, { message: "회원 목록을 불러오는 중 오류가 발생했습니다." }, 500);
+    return jsonResponse(req, { message: "Admin member lookup failed" }, 500);
   }
 });
