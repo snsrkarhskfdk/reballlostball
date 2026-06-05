@@ -2,6 +2,19 @@
 const ASSET_VERSION = "20260605-02";
 const SUPABASE_URL = "https://qbftalhhyfcndanrcwpy.supabase.co";
 const SUPABASE_KEY = "sb_publishable_K876i166RCGtBxdp3xRQZw_yJxPaKwL";
+const AUTH_REDIRECT_DEFAULT = "/mypage";
+const LEGACY_MEMBER_STATE_RESET_VERSION = "20260605-supabase-auth-cutover-v1";
+
+const { createClient } = await import("https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/+esm");
+
+const supabase = createClient(SUPABASE_URL, SUPABASE_KEY, {
+  auth: {
+    autoRefreshToken: true,
+    detectSessionInUrl: true,
+    persistSession: true,
+    storageKey: "reballlostball.auth",
+  },
+});
 
 const money = new Intl.NumberFormat("ko-KR");
 const app = document.querySelector("#app");
@@ -29,6 +42,29 @@ const icons = {
   chevron: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="m9 18 6-6-6-6"/></svg>',
   check: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="m5 12 5 5L20 7"/></svg>',
   coupon: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 8a2 2 0 0 1 2-2h16v5a2 2 0 0 0 0 4v5H6a2 2 0 0 1-2-2v-5a2 2 0 0 0 0-4V8Z"/><path d="M13 7v2M13 11v2M13 15v2"/></svg>',
+};
+
+const ORDER_STATUS_LABELS = {
+  draft: "주문 접수",
+  payment_ready: "결제 대기",
+  payment_auth_started: "결제 진행 중",
+  waiting_for_deposit: "입금 대기",
+  paid: "결제 완료",
+  payment_failed: "결제 실패",
+  cancel_requested: "취소 요청",
+  canceled: "주문 취소",
+  partially_canceled: "부분 취소",
+  refunded: "환불 완료",
+  shipping_ready: "상품 준비중",
+  shipped: "배송중",
+  delivered: "배송완료",
+};
+
+const PAYMENT_METHOD_LABELS = {
+  card: "카드",
+  transfer: "계좌이체",
+  virtual_account: "가상계좌",
+  easy_pay: "간편결제",
 };
 
 const businessProfile = {
@@ -489,7 +525,6 @@ const defaultOrders = [
     ],
   },
 ];
-const MEMBER_INFO_RESET_VERSION = "20260604-member-info-empty-v1";
 
 resetSeededMemberStorage();
 
@@ -498,10 +533,17 @@ const state = {
   products,
   cart: load("reball.cart", []),
   wishlist: load("reball.wishlist", []),
-  orders: load("reball.orders", defaultOrders),
-  viewer: load("reball.viewer", null),
-  addresses: load("reball.addresses", defaultAddresses),
-  paymentMethods: load("reball.paymentMethods", defaultPaymentMethods),
+  orders: [],
+  ephemeralOrders: [],
+  viewer: null,
+  authSession: null,
+  authUser: null,
+  authReady: false,
+  authBusy: false,
+  authRedirect: AUTH_REDIRECT_DEFAULT,
+  accountLoading: false,
+  addresses: [],
+  paymentMethods: [],
   notifications: normalizeNotifications(load("reball.notifications", defaultNotifications)),
   coupons: load("reball.coupons", defaultCoupons),
   posts: normalizePosts(load("reball.posts", defaultPosts)),
@@ -583,27 +625,381 @@ function save(key, value) {
 
 function resetSeededMemberStorage() {
   try {
-    if (localStorage.getItem("reball.memberInfoResetVersion") === MEMBER_INFO_RESET_VERSION) return;
+    if (localStorage.getItem("reball.memberInfoResetVersion") === LEGACY_MEMBER_STATE_RESET_VERSION) return;
 
-    localStorage.removeItem("reball.addresses");
-    localStorage.removeItem("reball.paymentMethods");
-    localStorage.removeItem("reball.notifications");
+    [
+      "reball.viewer",
+      "reball.orders",
+      "reball.addresses",
+      "reball.paymentMethods",
+      "reball.notifications",
+      "reball.coupons",
+      "reball.posts",
+    ].forEach((key) => localStorage.removeItem(key));
 
-    const rawViewer = localStorage.getItem("reball.viewer");
-    const viewer = rawViewer ? JSON.parse(rawViewer) : null;
-    if (viewer && typeof viewer === "object" && !Array.isArray(viewer)) {
-      const cleanedViewer = { ...viewer };
-      ["address", "telephone", "phone", "smsOptIn", "emailOptIn", "birthday", "anniversary", "spouseBirthday", "region", "passwordConfirmed"].forEach((key) => {
-        delete cleanedViewer[key];
-      });
-      if (["리볼 회원", "카카오 회원", "네이버 회원"].includes(cleanedViewer.name)) delete cleanedViewer.name;
-      if (String(cleanedViewer.email || "").endsWith("@reball.local")) delete cleanedViewer.email;
-      save("reball.viewer", Object.keys(cleanedViewer).length ? cleanedViewer : { memberInfoReset: true });
+    localStorage.setItem("reball.memberInfoResetVersion", LEGACY_MEMBER_STATE_RESET_VERSION);
+  } catch {
+    localStorage.setItem("reball.memberInfoResetVersion", LEGACY_MEMBER_STATE_RESET_VERSION);
+  }
+}
+
+function setAuthRedirect(route = AUTH_REDIRECT_DEFAULT) {
+  const nextRoute = String(route || AUTH_REDIRECT_DEFAULT);
+  state.authRedirect = nextRoute.startsWith("/") ? nextRoute : AUTH_REDIRECT_DEFAULT;
+}
+
+function consumeAuthRedirect() {
+  const nextRoute = state.authRedirect || AUTH_REDIRECT_DEFAULT;
+  state.authRedirect = AUTH_REDIRECT_DEFAULT;
+  return nextRoute;
+}
+
+function setFormBusy(form, pending) {
+  state.authBusy = pending;
+  const submitButton = form?.querySelector('[type="submit"]');
+  if (submitButton) {
+    submitButton.disabled = pending;
+    submitButton.dataset.originalLabel ||= submitButton.textContent;
+    submitButton.textContent = pending ? "처리 중..." : submitButton.dataset.originalLabel;
+  }
+}
+
+async function ensureProfileRecord(user, profileOverrides = null) {
+  const { data: currentProfile, error: selectError } = await supabase
+    .from("profiles")
+    .select("id, name, phone, telephone, email, provider, marketing_email, marketing_sms, birth_date, anniversary_date, spouse_birth_date, region")
+    .eq("id", user.id)
+    .maybeSingle();
+
+  if (selectError) throw selectError;
+  if (currentProfile && !profileOverrides) return currentProfile;
+
+  const metadata = user.user_metadata ?? {};
+  const payload = {
+    id: user.id,
+    name: stringOrEmpty(profileOverrides?.name ?? currentProfile?.name ?? metadata.name),
+    phone: stringOrEmpty(profileOverrides?.phone ?? currentProfile?.phone ?? metadata.phone),
+    telephone: stringOrEmpty(profileOverrides?.telephone ?? currentProfile?.telephone ?? metadata.telephone),
+    email: stringOrEmpty(profileOverrides?.email ?? currentProfile?.email ?? user.email),
+    provider: stringOrEmpty(profileOverrides?.provider ?? currentProfile?.provider ?? user.app_metadata?.provider ?? metadata.provider ?? "email"),
+    marketing_email: profileOverrides?.marketing_email ?? currentProfile?.marketing_email ?? Boolean(metadata.marketing_email),
+    marketing_sms: profileOverrides?.marketing_sms ?? currentProfile?.marketing_sms ?? Boolean(metadata.marketing_sms),
+    birth_date: stringOrEmpty(profileOverrides?.birth_date ?? currentProfile?.birth_date ?? metadata.birth_date),
+    anniversary_date: stringOrEmpty(profileOverrides?.anniversary_date ?? currentProfile?.anniversary_date ?? metadata.anniversary_date),
+    spouse_birth_date: stringOrEmpty(profileOverrides?.spouse_birth_date ?? currentProfile?.spouse_birth_date ?? metadata.spouse_birth_date),
+    region: stringOrEmpty(profileOverrides?.region ?? currentProfile?.region ?? metadata.region),
+    updated_at: new Date().toISOString(),
+  };
+
+  const { data: profile, error: upsertError } = await supabase
+    .from("profiles")
+    .upsert(payload, { onConflict: "id" })
+    .select("id, name, phone, telephone, email, provider, marketing_email, marketing_sms, birth_date, anniversary_date, spouse_birth_date, region")
+    .single();
+
+  if (upsertError) throw upsertError;
+  return profile;
+}
+
+async function loadAccountData(user, options = {}) {
+  const { silent = false } = options;
+  state.accountLoading = true;
+  if (!silent && parseRoute() === "/mypage") renderMypage();
+
+  try {
+    const profile = await ensureProfileRecord(user);
+    const [addressesResult, ordersResult, orderItemsResult] = await Promise.all([
+      supabase
+        .from("addresses")
+        .select("id, profile_id, receiver_name, receiver_phone, zip_code, road_address, detail_address, is_default")
+        .order("is_default", { ascending: false })
+        .order("id", { ascending: true }),
+      supabase
+        .from("orders")
+        .select("id, order_no, status, payment_status, payment_method, total_krw, created_at, address_snapshot")
+        .order("created_at", { ascending: false }),
+      supabase
+        .from("order_items")
+        .select("order_id, product_name, variant_name, qty, unit_price_krw, line_total_krw"),
+    ]);
+
+    if (addressesResult.error) throw addressesResult.error;
+    if (ordersResult.error) throw ordersResult.error;
+    if (orderItemsResult.error) throw orderItemsResult.error;
+
+    const itemsByOrderId = new Map();
+    for (const item of orderItemsResult.data ?? []) {
+      const group = itemsByOrderId.get(item.order_id) ?? [];
+      group.push(item);
+      itemsByOrderId.set(item.order_id, group);
     }
 
-    localStorage.setItem("reball.memberInfoResetVersion", MEMBER_INFO_RESET_VERSION);
-  } catch {
-    localStorage.setItem("reball.memberInfoResetVersion", MEMBER_INFO_RESET_VERSION);
+    state.viewer = buildViewer(user, profile);
+    state.addresses = (addressesResult.data ?? []).map(mapAddressRecord);
+    state.orders = (ordersResult.data ?? []).map((order) => mapOrderRecord(order, itemsByOrderId.get(order.id) ?? []));
+    state.paymentMethods = [];
+  } finally {
+    state.accountLoading = false;
+  }
+}
+
+async function syncSessionState(session, options = {}) {
+  const { silent = false } = options;
+
+  if (!session?.user) {
+    emptyAuthData();
+    return;
+  }
+
+  state.authSession = session;
+  state.authUser = session.user;
+  await loadAccountData(session.user, { silent });
+}
+
+async function initializeAuth() {
+  try {
+    const {
+      data: { session },
+      error,
+    } = await supabase.auth.getSession();
+    if (error) throw error;
+    await syncSessionState(session, { silent: true });
+  } catch (error) {
+    emptyAuthData();
+    showToast(normalizeAuthError(error, "로그인 상태를 확인하지 못했습니다."));
+  } finally {
+    state.authReady = true;
+    renderRoute();
+  }
+
+  supabase.auth.onAuthStateChange((event, session) => {
+    Promise.resolve()
+      .then(async () => {
+        if (event === "SIGNED_OUT") {
+          emptyAuthData();
+          if (parseRoute() === "/mypage") routeTo("/login");
+          else renderRoute();
+          return;
+        }
+
+        if (session?.user) {
+          state.authSession = session;
+          state.authUser = session.user;
+          if (event !== "TOKEN_REFRESHED") await loadAccountData(session.user, { silent: true });
+          else if (!state.viewer) state.viewer = buildViewer(session.user);
+
+          if ((event === "SIGNED_IN" || event === "USER_UPDATED") && parseRoute().startsWith("/login")) {
+            routeTo(consumeAuthRedirect());
+            return;
+          }
+
+          renderRoute();
+        }
+      })
+      .catch((error) => showToast(normalizeAuthError(error)));
+  });
+}
+
+async function handleAuthFormSubmit(form) {
+  const mode = form.dataset.authMode;
+  const formData = new FormData(form);
+  const email = stringOrEmpty(formData.get("email")).trim().toLowerCase();
+  const password = stringOrEmpty(formData.get("password"));
+
+  if (!email || !password) {
+    showToast("이메일과 비밀번호를 입력하세요.");
+    return;
+  }
+
+  setAuthRedirect(form.dataset.authRedirect || AUTH_REDIRECT_DEFAULT);
+  setFormBusy(form, true);
+
+  try {
+    if (mode === "signup") {
+      const passwordConfirm = stringOrEmpty(formData.get("passwordConfirm"));
+      if (password !== passwordConfirm) {
+        showToast("비밀번호 확인이 일치하지 않습니다.");
+        return;
+      }
+
+      const name = stringOrEmpty(formData.get("name")).trim();
+      const phone = stringOrEmpty(formData.get("phone")).trim();
+      if (!name || !phone) {
+        showToast("이름과 휴대전화를 입력하세요.");
+        return;
+      }
+
+      const signupPayload = {
+        email,
+        password,
+        options: {
+          emailRedirectTo: siteUrl(),
+          data: {
+            name,
+            phone,
+            telephone: stringOrEmpty(formData.get("tel")).trim(),
+            contact_email: stringOrEmpty(formData.get("contactEmail")).trim() || email,
+            marketing_email: boolFromYesNo(formData.get("emailOptIn")),
+            marketing_sms: boolFromYesNo(formData.get("smsOptIn")),
+            birth_date: stringOrEmpty(formData.get("birthday")).trim(),
+            anniversary_date: stringOrEmpty(formData.get("anniversary")).trim(),
+            spouse_birth_date: stringOrEmpty(formData.get("spouseBirthday")).trim(),
+            region: stringOrEmpty(formData.get("region")).trim(),
+            default_address_zip: "",
+            default_address_road: stringOrEmpty(formData.get("address")).trim(),
+            default_address_detail: "",
+            provider: "email",
+          },
+        },
+      };
+
+      const { data, error } = await supabase.auth.signUp(signupPayload);
+      if (error) throw error;
+
+      if (data.session?.user) {
+        await loadAccountData(data.session.user);
+        showToast("회원가입이 완료되었습니다.");
+        routeTo(consumeAuthRedirect());
+      } else {
+        showToast("회원가입이 완료되었습니다. 이메일 인증 후 로그인해 주세요.");
+        routeTo("/login");
+      }
+
+      return;
+    }
+
+    const { data, error } = await supabase.auth.signInWithPassword({ email, password });
+    if (error) throw error;
+
+    await loadAccountData(data.user);
+    showToast("로그인되었습니다.");
+    routeTo(consumeAuthRedirect());
+  } catch (error) {
+    showToast(normalizeAuthError(error));
+  } finally {
+    setFormBusy(form, false);
+  }
+}
+
+async function handleLogout(redirect = "/") {
+  try {
+    await supabase.auth.signOut();
+    emptyAuthData();
+    showToast("로그아웃되었습니다.");
+    routeTo(redirect);
+  } catch (error) {
+    showToast(normalizeAuthError(error, "로그아웃하지 못했습니다."));
+  }
+}
+
+async function handleProfileSave(form) {
+  if (!state.authUser) {
+    showToast("로그인 상태를 다시 확인해 주세요.");
+    routeTo("/login");
+    return;
+  }
+
+  const formData = new FormData(form);
+  const payload = {
+    name: stringOrEmpty(formData.get("name")).trim(),
+    phone: stringOrEmpty(formData.get("phone")).trim(),
+    telephone: stringOrEmpty(formData.get("telephone")).trim(),
+    email: stringOrEmpty(formData.get("email")).trim() || stringOrEmpty(state.authUser.email),
+    marketing_sms: boolFromYesNo(formData.get("smsOptIn")),
+    marketing_email: boolFromYesNo(formData.get("emailOptIn")),
+    birth_date: stringOrEmpty(formData.get("birthday")).trim(),
+    anniversary_date: stringOrEmpty(formData.get("anniversary")).trim(),
+    spouse_birth_date: stringOrEmpty(formData.get("spouseBirthday")).trim(),
+    region: stringOrEmpty(formData.get("region")).trim(),
+  };
+
+  try {
+    const profile = await ensureProfileRecord(state.authUser, payload);
+    state.viewer = buildViewer(state.authUser, profile);
+    showToast("회원 정보가 수정되었습니다.");
+    renderMypage();
+  } catch (error) {
+    showToast(normalizeAuthError(error, "회원 정보를 저장하지 못했습니다."));
+  }
+}
+
+async function handleAddressCreate(form) {
+  if (!state.authUser) {
+    showToast("로그인 상태를 다시 확인해 주세요.");
+    routeTo("/login");
+    return;
+  }
+
+  const formData = new FormData(form);
+  const payload = {
+    profile_id: state.authUser.id,
+    receiver_name: stringOrEmpty(formData.get("recipient")).trim(),
+    receiver_phone: stringOrEmpty(formData.get("phone")).trim(),
+    zip_code: stringOrEmpty(formData.get("zipCode")).trim(),
+    road_address: stringOrEmpty(formData.get("roadAddress")).trim(),
+    detail_address: stringOrEmpty(formData.get("detailAddress")).trim(),
+    is_default: state.addresses.length === 0,
+  };
+
+  if (!payload.receiver_name || !payload.receiver_phone || !payload.road_address) {
+    showToast("수령인, 연락처, 주소를 입력하세요.");
+    return;
+  }
+
+  try {
+    const { error } = await supabase.from("addresses").insert(payload);
+    if (error) throw error;
+    await loadAccountData(state.authUser, { silent: true });
+    showToast("배송지를 추가했습니다.");
+    renderMypage();
+  } catch (error) {
+    showToast(normalizeAuthError(error, "배송지를 저장하지 못했습니다."));
+  }
+}
+
+async function handleAddressDefault(addressId) {
+  if (!state.authUser) return;
+
+  try {
+    const { error: clearError } = await supabase.from("addresses").update({ is_default: false }).eq("profile_id", state.authUser.id);
+    if (clearError) throw clearError;
+    const { error: setError } = await supabase.from("addresses").update({ is_default: true }).eq("id", addressId).eq("profile_id", state.authUser.id);
+    if (setError) throw setError;
+    await loadAccountData(state.authUser, { silent: true });
+    showToast("기본 배송지를 변경했습니다.");
+    renderMypage();
+  } catch (error) {
+    showToast(normalizeAuthError(error, "기본 배송지를 변경하지 못했습니다."));
+  }
+}
+
+async function handleAddressDelete(addressId) {
+  if (!state.authUser) return;
+
+  try {
+    const deletingAddress = state.addresses.find((address) => address.id === addressId);
+    const { error: deleteError } = await supabase.from("addresses").delete().eq("id", addressId).eq("profile_id", state.authUser.id);
+    if (deleteError) throw deleteError;
+
+    if (deletingAddress?.isDefault) {
+      const { data: remainingRows, error: remainingError } = await supabase
+        .from("addresses")
+        .select("id, is_default")
+        .eq("profile_id", state.authUser.id)
+        .order("id", { ascending: true });
+
+      if (remainingError) throw remainingError;
+      if (remainingRows?.length && !remainingRows.some((row) => row.is_default)) {
+        const { error: defaultError } = await supabase.from("addresses").update({ is_default: true }).eq("id", remainingRows[0].id).eq("profile_id", state.authUser.id);
+        if (defaultError) throw defaultError;
+      }
+    }
+
+    await loadAccountData(state.authUser, { silent: true });
+    showToast("배송지를 삭제했습니다.");
+    renderMypage();
+  } catch (error) {
+    showToast(normalizeAuthError(error, "배송지를 삭제하지 못했습니다."));
   }
 }
 
@@ -616,6 +1012,143 @@ function normalizeNotifications(notifications) {
 
 function todayIso() {
   return new Date().toISOString().slice(0, 10);
+}
+
+function siteUrl() {
+  return `${location.origin}${location.pathname}`;
+}
+
+function stringOrEmpty(value) {
+  return value == null ? "" : String(value);
+}
+
+function asYesNo(value) {
+  return value ? "yes" : "no";
+}
+
+function boolFromYesNo(value) {
+  return String(value || "").toLowerCase() === "yes";
+}
+
+function formatDateLabel(value) {
+  if (!value) return "";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return String(value);
+  return new Intl.DateTimeFormat("ko-KR", { year: "numeric", month: "numeric", day: "numeric" }).format(date);
+}
+
+function formatAccountAddress(address) {
+  return [address.zipCode, address.roadAddress, address.detailAddress].filter(Boolean).join(" ").trim();
+}
+
+function translateOrderStatus(status) {
+  return ORDER_STATUS_LABELS[status] ?? status ?? "주문 접수";
+}
+
+function translatePaymentMethod(method) {
+  return PAYMENT_METHOD_LABELS[method] ?? method ?? "결제수단 미정";
+}
+
+function allOrders() {
+  return [...state.ephemeralOrders, ...state.orders];
+}
+
+function findOrderById(orderId) {
+  return allOrders().find((item) => item.id === orderId);
+}
+
+function normalizeAuthError(error, fallback = "요청을 처리하지 못했습니다.") {
+  const message = String(error?.message || fallback);
+  if (message.includes("Invalid login credentials")) return "이메일 또는 비밀번호를 확인하세요.";
+  if (message.includes("Email not confirmed")) return "이메일 인증 후 다시 로그인해 주세요.";
+  if (message.includes("User already registered")) return "이미 가입된 이메일입니다. 로그인해 주세요.";
+  if (message.includes("Password should be at least")) return "비밀번호는 6자 이상으로 입력해 주세요.";
+  return message;
+}
+
+function emptyAuthData() {
+  state.viewer = null;
+  state.authSession = null;
+  state.authUser = null;
+  state.orders = [];
+  state.addresses = [];
+  state.paymentMethods = [];
+}
+
+function buildViewer(user, profile = {}) {
+  const metadata = user?.user_metadata ?? {};
+  const appMetadata = user?.app_metadata ?? {};
+  return {
+    id: user?.id ?? profile.id ?? "",
+    loginEmail: stringOrEmpty(user?.email),
+    email: stringOrEmpty(profile.email ?? user?.email),
+    name: stringOrEmpty(profile.name ?? metadata.name ?? user?.email?.split("@")[0]),
+    phone: stringOrEmpty(profile.phone ?? metadata.phone),
+    telephone: stringOrEmpty(profile.telephone ?? metadata.telephone),
+    smsOptIn: asYesNo(profile.marketing_sms ?? metadata.marketing_sms),
+    emailOptIn: asYesNo(profile.marketing_email ?? metadata.marketing_email),
+    birthday: stringOrEmpty(profile.birth_date ?? metadata.birth_date),
+    anniversary: stringOrEmpty(profile.anniversary_date ?? metadata.anniversary_date),
+    spouseBirthday: stringOrEmpty(profile.spouse_birth_date ?? metadata.spouse_birth_date),
+    region: stringOrEmpty(profile.region ?? metadata.region),
+    provider: stringOrEmpty(profile.provider ?? appMetadata.provider ?? metadata.provider ?? "email"),
+  };
+}
+
+function mapAddressRecord(row) {
+  const address = {
+    id: row.id,
+    profileId: row.profile_id,
+    label: row.is_default ? "기본 배송지" : "배송지",
+    recipient: stringOrEmpty(row.receiver_name),
+    phone: stringOrEmpty(row.receiver_phone),
+    zipCode: stringOrEmpty(row.zip_code),
+    roadAddress: stringOrEmpty(row.road_address),
+    detailAddress: stringOrEmpty(row.detail_address),
+    address: [row.zip_code, row.road_address, row.detail_address].filter(Boolean).join(" "),
+    memo: "",
+    isDefault: Boolean(row.is_default),
+  };
+  return address;
+}
+
+function guessProductFromOrderItem(item) {
+  const name = stringOrEmpty(item?.product_name);
+  return state.products.find((product) => name.includes(product.brandName) || name.includes(product.name.replace(" 로스트볼", ""))) ?? null;
+}
+
+function mapOrderRecord(row, items = []) {
+  const normalizedItems = items.map((item) => {
+    const product = guessProductFromOrderItem(item);
+    return {
+      key: `${row.order_no || row.id}-${item.product_name}-${item.variant_name}`,
+      slug: product?.slug ?? "",
+      name: stringOrEmpty(item.product_name),
+      brandName: product?.brandName ?? stringOrEmpty(item.product_name).split(" ")[0],
+      image: product?.image ?? "ball-titleist.png",
+      selection: { model: stringOrEmpty(item.variant_name) },
+      price: Number(item.unit_price_krw ?? 0),
+      quantity: Number(item.qty ?? 0),
+    };
+  });
+
+  const payment = translatePaymentMethod(row.payment_method);
+  return {
+    id: stringOrEmpty(row.order_no || row.id),
+    dbId: row.id,
+    date: formatDateLabel(row.created_at),
+    status: translateOrderStatus(row.status),
+    delivery: translateOrderStatus(row.status),
+    total: Number(row.total_krw ?? 0),
+    customer: {
+      name: stringOrEmpty(state.viewer?.name),
+      phone: stringOrEmpty(state.viewer?.phone),
+      address: stringOrEmpty(row.address_snapshot?.road_address || row.address_snapshot?.address || ""),
+      memo: stringOrEmpty(row.address_snapshot?.memo || ""),
+      payment,
+    },
+    items: normalizedItems,
+  };
 }
 
 function parseRoute() {
@@ -739,7 +1272,7 @@ function cartTotal() {
 }
 
 function isLoggedIn() {
-  return Boolean(state.viewer);
+  return Boolean(state.authUser);
 }
 
 function isWished(slug) {
@@ -1942,15 +2475,14 @@ function createOrder(formData) {
     items: state.cart,
   };
 
-  state.orders.unshift(order);
+  state.ephemeralOrders.unshift(order);
   state.cart = [];
-  save("reball.orders", state.orders);
   save("reball.cart", state.cart);
   routeTo(`/order/${order.id}`);
 }
 
 function renderOrder(orderId) {
-  const order = state.orders.find((item) => item.id === orderId);
+  const order = findOrderById(orderId);
   if (!order) {
     layout(`<section class="empty-card"><strong>주문을 찾을 수 없습니다.</strong><button class="primary-btn" type="button" data-route="/mypage">마이페이지로 이동</button></section>`);
     return;
@@ -1976,8 +2508,14 @@ function renderOrder(orderId) {
 }
 
 function renderMypage() {
+  if (!state.authReady) {
+    layout(`<section class="empty-card"><strong>로그인 상태를 확인하고 있습니다.</strong><span>잠시만 기다려 주세요.</span></section>`);
+    return;
+  }
+
   if (!isLoggedIn()) {
-    renderAuthPage("login", "/mypage");
+    setAuthRedirect("/mypage");
+    routeTo("/login");
     return;
   }
 
@@ -2047,6 +2585,7 @@ function renderMypage() {
 function renderAuthPage(mode = "login", redirect = "/mypage") {
   const isSignup = mode === "signup";
   const isGuestOrder = mode === "guest-order";
+  const authRedirect = state.authRedirect || redirect || AUTH_REDIRECT_DEFAULT;
 
   if (mode === "signup") {
     layout(`
@@ -2079,7 +2618,7 @@ function renderAuthPage(mode = "login", redirect = "/mypage") {
           <h1>회원 정보 입력</h1>
           <p>기본정보와 추가정보를 입력하고 회원정보를 저장합니다.</p>
         </header>
-        <form class="signup-detail-form panel-card" data-auth-form data-auth-mode="signup" data-auth-redirect="${escapeHtml(redirect)}">
+        <form class="signup-detail-form panel-card" data-auth-form data-auth-mode="signup" data-auth-redirect="${escapeHtml(authRedirect)}">
           <fieldset>
             <legend>기본정보</legend>
             <div class="signup-field required">
@@ -2184,7 +2723,7 @@ function renderAuthPage(mode = "login", redirect = "/mypage") {
         ${renderSignupBenefitBanner()}
         <div class="signup-divider login-divider"><span>또는</span></div>
         ${renderLoginMemberTabs(isGuestOrder)}
-        ${isGuestOrder ? renderGuestOrderLookupForm() : renderMemberLoginForm(redirect)}
+        ${isGuestOrder ? renderGuestOrderLookupForm() : renderMemberLoginForm(authRedirect)}
         ${isGuestOrder ? "" : renderLoginHelperLinks()}
       </div>
     </section>
@@ -2276,6 +2815,13 @@ function renderSignupBenefitBanner() {
 }
 
 function renderMypageContent() {
+  if (state.accountLoading) {
+    return `
+      <div class="page-title compact"><p>MY 페이지</p><h1>회원 정보 불러오는 중</h1><span>프로필, 주문, 배송지를 Supabase에서 확인하고 있습니다.</span></div>
+      <article class="empty-card"><strong>데이터를 불러오는 중입니다.</strong><span>잠시만 기다려 주세요.</span></article>
+    `;
+  }
+
   if (state.myTab === "orders") {
     return `
       <div class="page-title compact"><p>MY 쇼핑</p><h1>주문목록</h1><span>구매하신 상품의 주문 내역과 배송 현황을 확인하실 수 있습니다.</span></div>
@@ -2379,16 +2925,8 @@ function renderMypageContent() {
         <fieldset>
           <legend>기본정보</legend>
           <div class="signup-field required">
-            <label for="member-password-confirm">비밀번호 확인</label>
-            <input id="member-password-confirm" name="passwordConfirm" type="password" autocomplete="current-password" />
-          </div>
-          <div class="signup-field required">
             <label for="member-name">이름</label>
             <input id="member-name" name="name" value="${escapeHtml(state.viewer?.name ?? "")}" autocomplete="name" />
-          </div>
-          <div class="signup-field">
-            <label for="member-address">주소</label>
-            <input id="member-address" name="address" value="${escapeHtml(state.viewer?.address ?? "")}" placeholder="기본주소" autocomplete="street-address" />
           </div>
           <div class="signup-field">
             <label for="member-telephone">일반전화</label>
@@ -2406,8 +2944,12 @@ function renderMypageContent() {
             </div>
           </div>
           <div class="signup-field required">
-            <label for="member-email">이메일</label>
+            <label for="member-email">안내 이메일</label>
             <input id="member-email" name="email" type="email" value="${escapeHtml(state.viewer?.email ?? "")}" autocomplete="email" />
+          </div>
+          <div class="signup-field">
+            <label for="member-login-email">로그인 이메일</label>
+            <input id="member-login-email" value="${escapeHtml(state.viewer?.loginEmail ?? "")}" readonly />
           </div>
           <div class="signup-field required">
             <label>이메일 수신여부</label>
@@ -2421,15 +2963,15 @@ function renderMypageContent() {
           <legend>추가정보</legend>
           <div class="signup-field">
             <label for="member-birthday">생년월일</label>
-            <input id="member-birthday" name="birthday" value="${escapeHtml(state.viewer?.birthday ?? "")}" placeholder="년    월    일" />
+            <input id="member-birthday" name="birthday" value="${escapeHtml(state.viewer?.birthday ?? "")}" placeholder="YYYY-MM-DD" />
           </div>
           <div class="signup-field">
             <label for="member-anniversary">결혼기념일</label>
-            <input id="member-anniversary" name="anniversary" value="${escapeHtml(state.viewer?.anniversary ?? "")}" placeholder="년    월    일" />
+            <input id="member-anniversary" name="anniversary" value="${escapeHtml(state.viewer?.anniversary ?? "")}" placeholder="YYYY-MM-DD" />
           </div>
           <div class="signup-field">
             <label for="member-spouse">배우자생일</label>
-            <input id="member-spouse" name="spouseBirthday" value="${escapeHtml(state.viewer?.spouseBirthday ?? "")}" placeholder="년    월    일" />
+            <input id="member-spouse" name="spouseBirthday" value="${escapeHtml(state.viewer?.spouseBirthday ?? "")}" placeholder="YYYY-MM-DD" />
           </div>
           <div class="signup-field">
             <label for="member-region">지역</label>
@@ -2445,6 +2987,7 @@ function renderMypageContent() {
           <button class="primary-btn" type="submit">회원정보 수정</button>
         </div>
       </form>
+      <article class="empty-card"><strong>기본 배송지는 배송지 관리 탭에서 수정합니다.</strong><span>프로필과 배송지를 분리해 현재 로그인한 회원 데이터만 관리합니다.</span></article>
     `;
   }
   if (state.myTab === "shipping-addresses") return renderAddressBook("배송 주소록 관리");
@@ -2604,10 +3147,11 @@ function renderAddressBook(title = "배송지 관리") {
       <div class="address-form-row address-form-row-top">
         <label>수령인<input name="recipient" placeholder="수령인" required /></label>
         <label>연락처<input name="phone" placeholder="010-0000-0000" required /></label>
+        <label>우편번호<input name="zipCode" placeholder="우편번호" /></label>
       </div>
       <div class="address-form-row address-form-row-bottom">
-        <label>주소<input name="address" placeholder="주소를 입력하세요" required /></label>
-        <label>배송 메모<input name="memo" placeholder="배송 요청사항" /></label>
+        <label>기본주소<input name="roadAddress" placeholder="주소를 입력하세요" required /></label>
+        <label>상세주소<input name="detailAddress" placeholder="상세 주소" /></label>
         <button class="gold-cart-btn compact" type="submit">배송지 추가</button>
       </div>
     </form>
@@ -2622,7 +3166,7 @@ function renderAddressCard(address) {
     <article class="mypage-info-card">
       <div class="mypage-card-title"><strong>${escapeHtml(address.label)}</strong>${address.isDefault ? "<span>기본</span>" : ""}</div>
       <p>${escapeHtml(address.recipient)} · ${escapeHtml(address.phone)}</p>
-      <small>${escapeHtml(address.address)}<br />${escapeHtml(address.memo || "배송 메모 없음")}</small>
+      <small>${escapeHtml(formatAccountAddress(address) || address.address || "주소 정보 없음")}</small>
       <div class="mypage-card-actions">
         <button class="secondary-btn compact" type="button" data-address-default="${address.id}">기본 설정</button>
         <button class="secondary-btn compact" type="button" data-address-delete="${address.id}">삭제</button>
@@ -2633,16 +3177,8 @@ function renderAddressCard(address) {
 
 function renderPaymentMethods() {
   return `
-    <div class="page-title compact"><p>MY 정보</p><h1>결제수단 관리</h1></div>
-    <form class="mypage-inline-form" data-payment-form>
-      <label>결제 유형<select name="type"><option>카드</option><option>계좌이체</option><option>가상계좌</option><option>간편결제</option></select></label>
-      <label>이름<input name="name" placeholder="결제수단 이름" required /></label>
-      <label>식별 정보<input name="detail" placeholder="카드 뒤 4자리 또는 계좌 메모" required /></label>
-      <button class="gold-cart-btn compact" type="submit">결제수단 추가</button>
-    </form>
-    <section class="mypage-card-grid">
-      ${state.paymentMethods.length ? state.paymentMethods.map(renderPaymentCard).join("") : `<article class="empty-card">등록된 결제수단이 없습니다.</article>`}
-    </section>
+    <div class="page-title compact"><p>MY 정보</p><h1>결제 정보</h1><span>PG 결제 연동 전이라 실제 결제수단과 결제내역은 아직 저장되지 않습니다.</span></div>
+    <article class="empty-card"><strong>등록된 결제 데이터가 없습니다.</strong><span>Toss Payments 연동 단계에서 결제수단과 결제내역을 연결할 예정입니다.</span></article>
   `;
 }
 
@@ -2690,7 +3226,7 @@ function renderAccountWithdraw() {
     <div class="page-title compact"><p>MY 정보</p><h1>회원 탈퇴</h1></div>
     <section class="mypage-danger-card">
       <strong>탈퇴 전 확인</strong>
-      <p>저장된 회원 정보, 배송지, 결제수단, 쿠폰 정보가 로컬 프로토타입에서 삭제됩니다. 주문 확인이 필요한 경우 먼저 주문목록을 확인하세요.</p>
+      <p>실제 회원 탈퇴는 운영 확인이 필요한 작업입니다. 고객센터를 통해 요청해 주세요.</p>
       <label>확인 문구<input data-withdraw-confirm-input placeholder="탈퇴합니다" /></label>
       <button class="secondary-btn compact danger" type="button" data-withdraw-account>회원 탈퇴</button>
     </section>
@@ -2698,6 +3234,13 @@ function renderAccountWithdraw() {
 }
 
 function renderReceipts() {
+  if (!state.orders.length) {
+    return `
+      <div class="page-title compact"><p>MY 쇼핑</p><h1>영수증 조회 / 출력</h1><span>실제 주문과 결제가 생기면 영수증을 이곳에서 확인합니다.</span></div>
+      <article class="empty-card"><strong>출력할 영수증이 없습니다.</strong><span>아직 결제 완료된 주문 데이터가 없습니다.</span></article>
+    `;
+  }
+
   return `
     <div class="page-title compact"><p>MY 쇼핑</p><h1>영수증 조회 / 출력</h1><span>주문별 영수증과 세금계산서를 확인하고 출력합니다.</span></div>
     <form class="mypage-inline-form" data-receipt-search-form>
@@ -4682,15 +5225,9 @@ function bindPageEvents() {
       renderRoute();
     });
   });
-  document.querySelector("[data-auth-form]")?.addEventListener("submit", (event) => {
+  document.querySelector("[data-auth-form]")?.addEventListener("submit", async (event) => {
     event.preventDefault();
-    const form = event.currentTarget;
-    const formData = new FormData(form);
-    const email = String(formData.get("email") || "");
-    const name = String(formData.get("name") || email.split("@")[0] || "리볼 회원");
-    state.viewer = { name, email };
-    save("reball.viewer", state.viewer);
-    routeTo(form.dataset.authRedirect || "/mypage");
+    await handleAuthFormSubmit(event.currentTarget);
   });
   document.querySelectorAll("[data-toggle-password]").forEach((node) => {
     node.addEventListener("click", () => {
@@ -4709,7 +5246,7 @@ function bindPageEvents() {
     const form = event.currentTarget;
     const formData = new FormData(form);
     const orderId = String(formData.get("orderId") || "").replace(/\s+/g, "");
-    const matchedOrder = state.orders.find((order) => order.id === orderId);
+    const matchedOrder = findOrderById(orderId);
     if (matchedOrder) {
       routeTo(`/order/${matchedOrder.id}`);
       return;
@@ -4726,19 +5263,12 @@ function bindPageEvents() {
     node.addEventListener("click", () => {
       const provider = node.dataset.socialSignup;
       const providerName = provider === "naver" ? "네이버" : "카카오";
-      state.viewer = {
-        provider,
-        providerName,
-      };
-      save("reball.viewer", state.viewer);
-      routeTo("/mypage");
+      showToast(`${providerName} 로그인은 다음 단계에서 연결합니다. 현재는 이메일 회원가입/로그인을 사용해 주세요.`);
     });
   });
   document.querySelectorAll("[data-logout]").forEach((node) => {
-    node.addEventListener("click", () => {
-      state.viewer = null;
-      save("reball.viewer", state.viewer);
-      routeTo("/");
+    node.addEventListener("click", async () => {
+      await handleLogout("/");
     });
   });
   document.querySelectorAll("[data-buy-now]").forEach((node) =>
@@ -4790,27 +5320,9 @@ function bindPageEvents() {
   document.querySelectorAll("[data-order-period]").forEach((node) => {
     node.addEventListener("click", () => showToast(`${node.dataset.orderPeriod} 주문 내역을 확인했습니다.`));
   });
-  document.querySelector("[data-profile-form]")?.addEventListener("submit", (event) => {
+  document.querySelector("[data-profile-form]")?.addEventListener("submit", async (event) => {
     event.preventDefault();
-    const formData = new FormData(event.currentTarget);
-    state.viewer = {
-      ...(state.viewer ?? {}),
-      name: String(formData.get("name") || ""),
-      email: String(formData.get("email") || ""),
-      phone: String(formData.get("phone") || ""),
-      passwordConfirmed: Boolean(formData.get("passwordConfirm")),
-      address: String(formData.get("address") || ""),
-      telephone: String(formData.get("telephone") || ""),
-      smsOptIn: String(formData.get("smsOptIn") || ""),
-      emailOptIn: String(formData.get("emailOptIn") || ""),
-      birthday: String(formData.get("birthday") || ""),
-      anniversary: String(formData.get("anniversary") || ""),
-      spouseBirthday: String(formData.get("spouseBirthday") || ""),
-      region: String(formData.get("region") || ""),
-    };
-    save("reball.viewer", state.viewer);
-    showToast("회원 정보가 수정되었습니다.");
-    renderMypage();
+    await handleProfileSave(event.currentTarget);
   });
   document.querySelector("[data-profile-cancel]")?.addEventListener("click", () => {
     state.myTab = "orders";
@@ -4853,68 +5365,18 @@ function bindPageEvents() {
       renderMypage();
     });
   });
-  document.querySelector("[data-address-form]")?.addEventListener("submit", (event) => {
+  document.querySelector("[data-address-form]")?.addEventListener("submit", async (event) => {
     event.preventDefault();
-    const formData = new FormData(event.currentTarget);
-    state.addresses.push({
-      id: `addr-${Date.now()}`,
-      label: `배송지 ${state.addresses.length + 1}`,
-      recipient: String(formData.get("recipient") || ""),
-      phone: String(formData.get("phone") || ""),
-      address: String(formData.get("address") || ""),
-      memo: String(formData.get("memo") || ""),
-      isDefault: state.addresses.length === 0,
-    });
-    save("reball.addresses", state.addresses);
-    showToast("배송지를 추가했습니다.");
-    renderMypage();
+    await handleAddressCreate(event.currentTarget);
   });
   document.querySelectorAll("[data-address-default]").forEach((node) => {
-    node.addEventListener("click", () => {
-      state.addresses = state.addresses.map((address) => ({ ...address, isDefault: address.id === node.dataset.addressDefault }));
-      save("reball.addresses", state.addresses);
-      showToast("기본 배송지를 변경했습니다.");
-      renderMypage();
+    node.addEventListener("click", async () => {
+      await handleAddressDefault(node.dataset.addressDefault);
     });
   });
   document.querySelectorAll("[data-address-delete]").forEach((node) => {
-    node.addEventListener("click", () => {
-      state.addresses = state.addresses.filter((address) => address.id !== node.dataset.addressDelete);
-      if (state.addresses.length && !state.addresses.some((address) => address.isDefault)) state.addresses[0].isDefault = true;
-      save("reball.addresses", state.addresses);
-      showToast("배송지를 삭제했습니다.");
-      renderMypage();
-    });
-  });
-  document.querySelector("[data-payment-form]")?.addEventListener("submit", (event) => {
-    event.preventDefault();
-    const formData = new FormData(event.currentTarget);
-    state.paymentMethods.push({
-      id: `pay-${Date.now()}`,
-      type: String(formData.get("type") || "카드"),
-      name: String(formData.get("name") || ""),
-      detail: String(formData.get("detail") || ""),
-      isDefault: state.paymentMethods.length === 0,
-    });
-    save("reball.paymentMethods", state.paymentMethods);
-    showToast("결제수단을 추가했습니다.");
-    renderMypage();
-  });
-  document.querySelectorAll("[data-payment-default]").forEach((node) => {
-    node.addEventListener("click", () => {
-      state.paymentMethods = state.paymentMethods.map((method) => ({ ...method, isDefault: method.id === node.dataset.paymentDefault }));
-      save("reball.paymentMethods", state.paymentMethods);
-      showToast("기본 결제수단을 변경했습니다.");
-      renderMypage();
-    });
-  });
-  document.querySelectorAll("[data-payment-delete]").forEach((node) => {
-    node.addEventListener("click", () => {
-      state.paymentMethods = state.paymentMethods.filter((method) => method.id !== node.dataset.paymentDelete);
-      if (state.paymentMethods.length && !state.paymentMethods.some((method) => method.isDefault)) state.paymentMethods[0].isDefault = true;
-      save("reball.paymentMethods", state.paymentMethods);
-      showToast("결제수단을 삭제했습니다.");
-      renderMypage();
+    node.addEventListener("click", async () => {
+      await handleAddressDelete(node.dataset.addressDelete);
     });
   });
   document.querySelectorAll("[data-notification-toggle]").forEach((node) => {
@@ -4945,7 +5407,7 @@ function bindPageEvents() {
   });
   document.querySelectorAll("[data-shipping-track]").forEach((node) => {
     node.addEventListener("click", () => {
-      const order = state.orders.find((item) => item.id === node.dataset.shippingTrack);
+      const order = findOrderById(node.dataset.shippingTrack);
       showToast(order ? `${order.trackingCompany ?? "배송사"} ${order.trackingNumber ?? ""} 배송 조회` : "배송 정보를 확인했습니다.");
     });
   });
@@ -5032,20 +5494,7 @@ function bindPageEvents() {
       showToast("확인 문구를 정확히 입력하세요.");
       return;
     }
-    state.viewer = null;
-    state.addresses = [...defaultAddresses];
-    state.paymentMethods = [...defaultPaymentMethods];
-    state.notifications = { ...defaultNotifications };
-    state.coupons = [...defaultCoupons];
-    state.posts = [...defaultPosts];
-    save("reball.viewer", state.viewer);
-    localStorage.removeItem("reball.addresses");
-    localStorage.removeItem("reball.paymentMethods");
-    localStorage.removeItem("reball.notifications");
-    localStorage.removeItem("reball.coupons");
-    localStorage.removeItem("reball.posts");
-    showToast("회원 탈퇴가 처리되었습니다.");
-    routeTo("/");
+    showToast("실제 회원 탈퇴는 고객센터를 통해 접수해 주세요.");
   });
   document.querySelector("[data-admin-login-form]")?.addEventListener("submit", (event) => {
     event.preventDefault();
@@ -5210,6 +5659,10 @@ function renderRoute() {
   const [base, a] = state.route.split("/").filter(Boolean);
 
   if (!base) return renderHome();
+  if ((base === "login" || base === "signup") && a !== "order" && state.authReady && isLoggedIn()) {
+    routeTo("/mypage");
+    return;
+  }
   if (base === "product") return renderDetail(a);
   if (base === "story") return renderProductStory(a);
   if (base === "login") return renderAuthPage(a === "order" ? "guest-order" : "login");
@@ -5240,6 +5693,7 @@ window.setInterval(() => {
 }, 5200);
 
 renderRoute();
+void initializeAuth();
 hydrateFromSupabase();
 
 
