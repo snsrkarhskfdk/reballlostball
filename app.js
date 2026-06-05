@@ -1,5 +1,5 @@
 ﻿const ASSET_PATH = "./assets/figma";
-const ASSET_VERSION = "20260606-01";
+const ASSET_VERSION = "20260606-02";
 const SUPABASE_URL = "https://qbftalhhyfcndanrcwpy.supabase.co";
 const SUPABASE_KEY = "sb_publishable_K876i166RCGtBxdp3xRQZw_yJxPaKwL";
 const ADMIN_MEMBERS_FUNCTION_URL = `${SUPABASE_URL}/functions/v1/admin-members`;
@@ -1893,9 +1893,33 @@ function renderHomeProtectedSectionImage(name, alt) {
 
 function renderHomeGradeOverviewSection() {
   const gradeCards = [
-    ["S", "새 볼에 가까운 최상급", "스크래치와 변색이 매우 적어 새 볼에 가까운 상태입니다.", "추천도", 4, "strong"],
-    ["A", "실전 라운드용 우수급", "미세한 사용감은 있으나 실전 라운드용으로 안정적입니다.", "추천도", 3, "soft"],
-    ["B", "연습과 가성비 중심 실속급", "연습과 가성비 구매에 적합한 실속 등급입니다.", "추천도", 2, "warm"],
+    {
+      id: "S",
+      image: "home-grade-s.png",
+      title: "새 볼에 가까운 최상급",
+      body: "스크래치와 변색이 매우 적어 선물용과 실전 라운드에 적합합니다.",
+      label: "프리미엄 추천",
+      rating: 4,
+      tone: "strong",
+    },
+    {
+      id: "A",
+      image: "home-grade-a.png",
+      title: "실전 라운드용 우수급",
+      body: "미세한 사용감은 있으나 퍼포먼스와 가격 균형이 가장 좋습니다.",
+      label: "가장 많이 선택",
+      rating: 3,
+      tone: "soft",
+    },
+    {
+      id: "B",
+      image: "home-grade-b.png",
+      title: "연습과 가성비 중심 실속급",
+      body: "연습장, 스크린, 부담 없는 필드용으로 편하게 쓰기 좋습니다.",
+      label: "실속 구매",
+      rating: 2,
+      tone: "warm",
+    },
   ];
   return `
     <section class="home-section panel-card home-system-section home-grade-overview">
@@ -1903,8 +1927,26 @@ function renderHomeGradeOverviewSection() {
         <h2>등급 안내</h2>
         <p>S · A · B 상태를 한눈에 보기</p>
       </header>
-      ${renderHomeSystemImageBody("home-grade-guide-body.png", "S A B 등급 안내 카드")}
+      <div class="home-grade-system-grid" aria-label="S A B 등급 안내 카드">
+        ${gradeCards.map(renderHomeGradeSystemCard).join("")}
+      </div>
     </section>
+  `;
+}
+
+function renderHomeGradeSystemCard(card) {
+  const score = "●".repeat(card.rating) + "○".repeat(Math.max(0, 4 - card.rating));
+  return `
+    <article class="home-grade-system-card ${escapeHtml(card.tone)}">
+      <span class="home-grade-letter" aria-hidden="true">
+        <img src="${asset(card.image)}" alt="" loading="lazy" decoding="async" />
+      </span>
+      <div>
+        <small><span>${escapeHtml(card.label)}</span><b>${escapeHtml(score)}</b></small>
+        <h3>${escapeHtml(card.id)} 등급 · ${escapeHtml(card.title)}</h3>
+        <p>${escapeHtml(card.body)}</p>
+      </div>
+    </article>
   `;
 }
 
