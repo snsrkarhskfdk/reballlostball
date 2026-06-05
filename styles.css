@@ -1028,17 +1028,97 @@ svg {
   gap: 12px;
   width: min(530px, 100%);
   margin-top: 8px;
+  align-items: stretch;
 }
 
 .signup-form-actions button {
+  width: 100%;
+  height: 52px;
   min-height: 52px;
+  margin: 0;
+  padding: 0 22px;
+  box-sizing: border-box;
   font-size: 15px;
+}
+
+.signup-form-actions .secondary-btn,
+.signup-form-actions .primary-btn {
+  margin-top: 0;
 }
 
 .signup-form-actions .primary-btn {
   background: var(--deep);
   color: #FFFFFF;
   box-shadow: none;
+}
+
+.signup-complete-page {
+  width: min(720px, 100%);
+  margin: 38px auto 0;
+}
+
+.signup-complete-card {
+  display: grid;
+  gap: 18px;
+  padding: 42px;
+  text-align: center;
+}
+
+.signup-complete-kicker {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 950;
+  letter-spacing: 0.16em;
+}
+
+.signup-complete-card h1 {
+  margin: 0;
+  color: var(--ink);
+  font-size: clamp(26px, 4vw, 38px);
+  font-weight: 950;
+  line-height: 1.18;
+}
+
+.signup-complete-card p {
+  margin: 0 auto;
+  max-width: 520px;
+  color: var(--muted);
+  font-size: 15px;
+  font-weight: 700;
+  line-height: 1.8;
+}
+
+.signup-complete-card p strong {
+  color: var(--deep);
+}
+
+.signup-complete-notice {
+  display: grid;
+  gap: 6px;
+  margin: 8px auto 2px;
+  width: min(520px, 100%);
+  border: 1px solid var(--line);
+  border-radius: 18px;
+  background: #F7FAF7;
+  padding: 18px 20px;
+  text-align: left;
+}
+
+.signup-complete-notice b {
+  color: var(--ink);
+  font-size: 14px;
+  font-weight: 950;
+}
+
+.signup-complete-notice span {
+  color: var(--muted);
+  font-size: 13px;
+  font-weight: 700;
+  line-height: 1.6;
+}
+
+.signup-complete-actions {
+  margin: 8px auto 0;
 }
 
 .mobile-menu {

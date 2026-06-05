@@ -4,6 +4,7 @@ const SUPABASE_URL = "https://qbftalhhyfcndanrcwpy.supabase.co";
 const SUPABASE_KEY = "sb_publishable_K876i166RCGtBxdp3xRQZw_yJxPaKwL";
 const AUTH_REDIRECT_DEFAULT = "/mypage";
 const LEGACY_MEMBER_STATE_RESET_VERSION = "20260605-supabase-auth-cutover-v1";
+const PENDING_SIGNUP_EMAIL_KEY = "reball.pendingSignupEmail";
 
 const { createClient } = await import("https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/+esm");
 
@@ -578,6 +579,26 @@ function consumeAuthRedirect() {
   return nextRoute;
 }
 
+function setPendingSignupEmail(email) {
+  try {
+    localStorage.setItem(PENDING_SIGNUP_EMAIL_KEY, email);
+  } catch {}
+}
+
+function getPendingSignupEmail() {
+  try {
+    return localStorage.getItem(PENDING_SIGNUP_EMAIL_KEY) || "";
+  } catch {
+    return "";
+  }
+}
+
+function clearPendingSignupEmail() {
+  try {
+    localStorage.removeItem(PENDING_SIGNUP_EMAIL_KEY);
+  } catch {}
+}
+
 function setFormBusy(form, pending) {
   state.authBusy = pending;
   const submitButton = form?.querySelector('[type="submit"]');
@@ -781,12 +802,14 @@ async function handleAuthFormSubmit(form) {
       if (error) throw error;
 
       if (data.session?.user) {
+        clearPendingSignupEmail();
         await loadAccountData(data.session.user);
         showToast("회원가입이 완료되었습니다.");
         routeTo(consumeAuthRedirect());
       } else {
-        showToast("회원가입이 완료되었습니다. 이메일 인증 후 로그인해 주세요.");
-        routeTo("/login");
+        setPendingSignupEmail(email);
+        showToast("회원가입 신청이 완료되었습니다. 인증 메일을 확인해 주세요.");
+        routeTo("/signup/complete");
       }
 
       return;
@@ -796,6 +819,7 @@ async function handleAuthFormSubmit(form) {
     if (error) throw error;
 
     await loadAccountData(data.user);
+    clearPendingSignupEmail();
     showToast("로그인되었습니다.");
     routeTo(consumeAuthRedirect());
   } catch (error) {
@@ -2626,6 +2650,35 @@ function renderAuthPage(mode = "login", redirect = "/mypage") {
             <button class="primary-btn" type="submit">회원가입 완료</button>
           </div>
         </form>
+      </section>
+    `);
+    return;
+  }
+
+  if (mode === "signup-complete") {
+    const pendingEmail = getPendingSignupEmail();
+    layout(`
+      <section class="signup-complete-page">
+        <article class="signup-complete-card panel-card">
+          <span class="signup-complete-kicker">REBALL LOSTBALL</span>
+          <h1>회원가입 신청이 완료되었습니다.</h1>
+          <p>
+            ${
+              pendingEmail
+                ? `<strong>${escapeHtml(pendingEmail)}</strong> 주소로 인증 메일을 보냈습니다.`
+                : "입력하신 이메일 주소로 인증 메일을 보냈습니다."
+            }
+            메일 인증을 완료한 뒤 로그인해 주세요.
+          </p>
+          <div class="signup-complete-notice">
+            <b>인증 메일이 보이지 않으면</b>
+            <span>스팸함을 확인하거나, 입력 이메일이 잘못된 경우 회원 정보를 다시 입력해 주세요.</span>
+          </div>
+          <div class="signup-form-actions signup-complete-actions">
+            <button class="secondary-btn" type="button" data-route="/signup/form">정보 다시 입력</button>
+            <button class="primary-btn" type="button" data-route="/login">인증 후 로그인</button>
+          </div>
+        </article>
       </section>
     `);
     return;
@@ -5590,7 +5643,7 @@ function renderRoute() {
   if (base === "product") return renderDetail(a);
   if (base === "story") return renderProductStory(a);
   if (base === "login") return renderAuthPage(a === "order" ? "guest-order" : "login");
-  if (base === "signup") return renderAuthPage(a === "form" ? "signup-form" : "signup");
+  if (base === "signup") return renderAuthPage(a === "form" ? "signup-form" : a === "complete" ? "signup-complete" : "signup");
   if (base === "category") return renderCategory(a);
   if (base === "cart") return renderCart();
   if (base === "checkout") return renderCheckout();
