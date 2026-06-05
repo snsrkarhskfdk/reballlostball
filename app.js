@@ -392,10 +392,6 @@ const packOptions = [
   { id: "30구", qty: 30, multiplier: 2.62 },
 ];
 
-const defaultAddresses = [];
-
-const defaultPaymentMethods = [];
-
 const defaultNotifications = {
   order: false,
   delivery: false,
@@ -453,78 +449,6 @@ function defaultAdminBanners() {
     { id: "BN-003", title: "프리미엄 선별 배너", meta: "세 번째 캐러셀", status: "노출중", order: 3, placement: "홈" },
   ];
 }
-
-const defaultOrders = [
-  {
-    id: "20260522891234",
-    date: "2026. 5. 22",
-    status: "배송완료",
-    delivery: "배송완료",
-    arrival: "5/23(토) 도착",
-    trackingCompany: "CJ대한통운",
-    trackingNumber: "1234-5678-9012",
-    total: 32000,
-    customer: { name: "이영석", phone: businessProfile.supportPhone, address: businessProfile.address, memo: "", payment: "카드" },
-    items: [
-      {
-        key: "titleist-pro-v1-v1x-lostball|PRO V1|A+|10구|화이트",
-        slug: "titleist-pro-v1-v1x-lostball",
-        name: "타이틀리스트 Pro V1",
-        brandName: "타이틀리스트",
-        image: "ball-titleist.png",
-        selection: { model: "PRO V1", grade: "A+", pack: "10구", color: "화이트" },
-        price: 32000,
-        quantity: 1,
-      },
-    ],
-  },
-  {
-    id: "20260515891234",
-    date: "2026. 5. 15",
-    status: "배송완료",
-    delivery: "배송완료",
-    arrival: "5/23(토) 도착",
-    trackingCompany: "CJ대한통운",
-    trackingNumber: "1234-5678-9013",
-    total: 28000,
-    customer: { name: "이영석", phone: businessProfile.supportPhone, address: businessProfile.address, memo: "", payment: "카드" },
-    items: [
-      {
-        key: "bridgestone-tour-b-lostball|투어 X|A|10구|화이트",
-        slug: "bridgestone-tour-b-lostball",
-        name: "브리지스톤 TOUR B X",
-        brandName: "브리지스톤",
-        image: "ball-bridgestone.png",
-        selection: { model: "투어 X", grade: "A", pack: "10구", color: "화이트" },
-        price: 28000,
-        quantity: 1,
-      },
-    ],
-  },
-  {
-    id: "20260508891234",
-    date: "2026. 5. 08",
-    status: "배송완료",
-    delivery: "배송완료",
-    arrival: "5/23(토) 도착",
-    trackingCompany: "CJ대한통운",
-    trackingNumber: "1234-5678-9014",
-    total: 30000,
-    customer: { name: "이영석", phone: businessProfile.supportPhone, address: businessProfile.address, memo: "", payment: "카드" },
-    items: [
-      {
-        key: "taylormade-tp5-lostball|TP5|A|10구|화이트",
-        slug: "taylormade-tp5-lostball",
-        name: "테일러메이드 TP5",
-        brandName: "테일러메이드",
-        image: "ball-taylormade.png",
-        selection: { model: "TP5", grade: "A", pack: "10구", color: "화이트" },
-        price: 30000,
-        quantity: 1,
-      },
-    ],
-  },
-];
 
 resetSeededMemberStorage();
 
