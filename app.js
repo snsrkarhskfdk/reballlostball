@@ -5,6 +5,8 @@ const SUPABASE_KEY = "sb_publishable_K876i166RCGtBxdp3xRQZw_yJxPaKwL";
 const AUTH_REDIRECT_DEFAULT = "/mypage";
 const LEGACY_MEMBER_STATE_RESET_VERSION = "20260605-supabase-auth-cutover-v1";
 const PENDING_SIGNUP_EMAIL_KEY = "reball.pendingSignupEmail";
+const PENDING_SIGNUP_LOGIN_ID_KEY = "reball.pendingSignupLoginId";
+const LOGIN_ID_PATTERN = /^[a-z0-9][a-z0-9._-]{3,19}$/;
 
 const { createClient } = await import("https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/+esm");
 
@@ -585,9 +587,23 @@ function setPendingSignupEmail(email) {
   } catch {}
 }
 
+function setPendingSignupLoginId(loginId) {
+  try {
+    localStorage.setItem(PENDING_SIGNUP_LOGIN_ID_KEY, loginId);
+  } catch {}
+}
+
 function getPendingSignupEmail() {
   try {
     return localStorage.getItem(PENDING_SIGNUP_EMAIL_KEY) || "";
+  } catch {
+    return "";
+  }
+}
+
+function getPendingSignupLoginId() {
+  try {
+    return localStorage.getItem(PENDING_SIGNUP_LOGIN_ID_KEY) || "";
   } catch {
     return "";
   }
@@ -597,6 +613,86 @@ function clearPendingSignupEmail() {
   try {
     localStorage.removeItem(PENDING_SIGNUP_EMAIL_KEY);
   } catch {}
+}
+
+function clearPendingSignupLoginId() {
+  try {
+    localStorage.removeItem(PENDING_SIGNUP_LOGIN_ID_KEY);
+  } catch {}
+}
+
+function clearPendingSignup() {
+  clearPendingSignupEmail();
+  clearPendingSignupLoginId();
+}
+
+function normalizeLoginId(value) {
+  return stringOrEmpty(value).trim().toLowerCase();
+}
+
+function isEmailLike(value) {
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(String(value || "").trim());
+}
+
+function validateLoginId(loginId) {
+  if (!loginId) return "아이디를 입력하세요.";
+  if (isEmailLike(loginId)) return "아이디는 이메일 주소가 아닌 영문/숫자 조합으로 입력하세요.";
+  if (!LOGIN_ID_PATTERN.test(loginId)) return "아이디는 영문 소문자 또는 숫자로 시작하고, 영문/숫자/./_/- 조합 4~20자로 입력하세요.";
+  return "";
+}
+
+function showToastAfterNavigation(message) {
+  const emit = () => window.requestAnimationFrame(() => showToast(message));
+  window.addEventListener("hashchange", emit, { once: true });
+  window.setTimeout(emit, 300);
+}
+
+async function signInWithIdentifier(identifier, password) {
+  const normalizedIdentifier = stringOrEmpty(identifier).trim().toLowerCase();
+  if (!isEmailLike(normalizedIdentifier)) {
+    const invalidMessage = validateLoginId(normalizeLoginId(normalizedIdentifier));
+    if (invalidMessage) throw new Error(invalidMessage);
+  }
+
+  const response = await fetch(`${SUPABASE_URL}/functions/v1/login-with-identifier`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      apikey: SUPABASE_KEY,
+    },
+    body: JSON.stringify({ identifier: normalizedIdentifier, password }),
+  });
+
+  const payload = await response.json().catch(() => ({}));
+  if (!response.ok) throw new Error(payload?.message || "아이디 또는 비밀번호를 확인하세요.");
+  if (!payload?.access_token || !payload?.refresh_token) throw new Error("로그인 응답을 처리하지 못했습니다.");
+
+  const { data, error } = await supabase.auth.setSession({
+    access_token: payload.access_token,
+    refresh_token: payload.refresh_token,
+  });
+  if (error) throw error;
+  return data;
+}
+
+function handleAuthCallbackHash() {
+  const hash = location.hash.replace(/^#/, "");
+  if (!hash || hash.startsWith("/")) return false;
+
+  const params = new URLSearchParams(hash);
+  const hasAuthToken = params.has("access_token") || params.has("refresh_token");
+  const hasAuthError = params.has("error") || params.has("error_code");
+  if (!hasAuthToken && !hasAuthError) return false;
+
+  if (hasAuthError) {
+    showToastAfterNavigation("인증 링크가 이미 처리되었거나 만료되었습니다. 가입한 아이디 또는 이메일로 로그인해 주세요.");
+    routeTo("/login");
+    return true;
+  }
+
+  showToastAfterNavigation("이메일 인증이 완료되었습니다.");
+  routeTo("/mypage");
+  return true;
 }
 
 function setFormBusy(form, pending) {
@@ -612,7 +708,7 @@ function setFormBusy(form, pending) {
 async function ensureProfileRecord(user, profileOverrides = null) {
   const { data: currentProfile, error: selectError } = await supabase
     .from("profiles")
-    .select("id, name, phone, telephone, email, provider, marketing_email, marketing_sms, birth_date, anniversary_date, spouse_birth_date, region")
+    .select("id, login_id, auth_email, name, phone, telephone, email, provider, marketing_email, marketing_sms, birth_date, anniversary_date, spouse_birth_date, region")
     .eq("id", user.id)
     .maybeSingle();
 
@@ -622,6 +718,8 @@ async function ensureProfileRecord(user, profileOverrides = null) {
   const metadata = user.user_metadata ?? {};
   const payload = {
     id: user.id,
+    login_id: normalizeLoginId(profileOverrides?.login_id ?? currentProfile?.login_id ?? metadata.login_id),
+    auth_email: stringOrEmpty(currentProfile?.auth_email ?? user.email),
     name: stringOrEmpty(profileOverrides?.name ?? currentProfile?.name ?? metadata.name),
     phone: stringOrEmpty(profileOverrides?.phone ?? currentProfile?.phone ?? metadata.phone),
     telephone: stringOrEmpty(profileOverrides?.telephone ?? currentProfile?.telephone ?? metadata.telephone),
@@ -636,10 +734,27 @@ async function ensureProfileRecord(user, profileOverrides = null) {
     updated_at: new Date().toISOString(),
   };
 
-  const { data: profile, error: upsertError } = await supabase
-    .from("profiles")
-    .upsert(payload, { onConflict: "id" })
-    .select("id, name, phone, telephone, email, provider, marketing_email, marketing_sms, birth_date, anniversary_date, spouse_birth_date, region")
+  const profileQuery = currentProfile
+    ? supabase
+        .from("profiles")
+        .update({
+          name: payload.name,
+          phone: payload.phone,
+          telephone: payload.telephone,
+          email: payload.email,
+          marketing_email: payload.marketing_email,
+          marketing_sms: payload.marketing_sms,
+          birth_date: payload.birth_date,
+          anniversary_date: payload.anniversary_date,
+          spouse_birth_date: payload.spouse_birth_date,
+          region: payload.region,
+          updated_at: payload.updated_at,
+        })
+        .eq("id", user.id)
+    : supabase.from("profiles").insert(payload);
+
+  const { data: profile, error: upsertError } = await profileQuery
+    .select("id, login_id, auth_email, name, phone, telephone, email, provider, marketing_email, marketing_sms, birth_date, anniversary_date, spouse_birth_date, region")
     .single();
 
   if (upsertError) throw upsertError;
@@ -714,7 +829,7 @@ async function initializeAuth() {
     showToast(normalizeAuthError(error, "로그인 상태를 확인하지 못했습니다."));
   } finally {
     state.authReady = true;
-    renderRoute();
+    if (!handleAuthCallbackHash()) renderRoute();
   }
 
   supabase.auth.onAuthStateChange((event, session) => {
@@ -748,11 +863,11 @@ async function initializeAuth() {
 async function handleAuthFormSubmit(form) {
   const mode = form.dataset.authMode;
   const formData = new FormData(form);
-  const email = stringOrEmpty(formData.get("email")).trim().toLowerCase();
+  const identifier = stringOrEmpty(formData.get("identifier") ?? formData.get("loginId") ?? formData.get("email")).trim();
   const password = stringOrEmpty(formData.get("password"));
 
-  if (!email || !password) {
-    showToast("이메일과 비밀번호를 입력하세요.");
+  if (!identifier || !password) {
+    showToast("아이디와 비밀번호를 입력하세요.");
     return;
   }
 
@@ -761,6 +876,19 @@ async function handleAuthFormSubmit(form) {
 
   try {
     if (mode === "signup") {
+      const loginId = normalizeLoginId(formData.get("loginId"));
+      const loginIdError = validateLoginId(loginId);
+      if (loginIdError) {
+        showToast(loginIdError);
+        return;
+      }
+
+      const email = stringOrEmpty(formData.get("contactEmail")).trim().toLowerCase();
+      if (!email || !isEmailLike(email)) {
+        showToast("인증 메일을 받을 이메일 주소를 입력하세요.");
+        return;
+      }
+
       const passwordConfirm = stringOrEmpty(formData.get("passwordConfirm"));
       if (password !== passwordConfirm) {
         showToast("비밀번호 확인이 일치하지 않습니다.");
@@ -780,10 +908,11 @@ async function handleAuthFormSubmit(form) {
         options: {
           emailRedirectTo: siteUrl(),
           data: {
+            login_id: loginId,
             name,
             phone,
             telephone: stringOrEmpty(formData.get("tel")).trim(),
-            contact_email: stringOrEmpty(formData.get("contactEmail")).trim() || email,
+            contact_email: email,
             marketing_email: boolFromYesNo(formData.get("emailOptIn")),
             marketing_sms: boolFromYesNo(formData.get("smsOptIn")),
             birth_date: stringOrEmpty(formData.get("birthday")).trim(),
@@ -802,12 +931,13 @@ async function handleAuthFormSubmit(form) {
       if (error) throw error;
 
       if (data.session?.user) {
-        clearPendingSignupEmail();
+        clearPendingSignup();
         await loadAccountData(data.session.user);
         showToast("회원가입이 완료되었습니다.");
         routeTo(consumeAuthRedirect());
       } else {
         setPendingSignupEmail(email);
+        setPendingSignupLoginId(loginId);
         showToast("회원가입 신청이 완료되었습니다. 인증 메일을 확인해 주세요.");
         routeTo("/signup/complete");
       }
@@ -815,11 +945,12 @@ async function handleAuthFormSubmit(form) {
       return;
     }
 
-    const { data, error } = await supabase.auth.signInWithPassword({ email, password });
-    if (error) throw error;
+    const data = await signInWithIdentifier(identifier, password);
+    const signedInUser = data.user ?? data.session?.user;
+    if (!signedInUser) throw new Error("로그인 응답을 처리하지 못했습니다.");
 
-    await loadAccountData(data.user);
-    clearPendingSignupEmail();
+    await loadAccountData(signedInUser);
+    clearPendingSignup();
     showToast("로그인되었습니다.");
     routeTo(consumeAuthRedirect());
   } catch (error) {
@@ -1007,9 +1138,10 @@ function findOrderById(orderId) {
 
 function normalizeAuthError(error, fallback = "요청을 처리하지 못했습니다.") {
   const message = String(error?.message || fallback);
-  if (message.includes("Invalid login credentials")) return "이메일 또는 비밀번호를 확인하세요.";
+  if (message.includes("Invalid login credentials")) return "아이디 또는 비밀번호를 확인하세요.";
   if (message.includes("Email not confirmed")) return "이메일 인증 후 다시 로그인해 주세요.";
   if (message.includes("User already registered")) return "이미 가입된 이메일입니다. 로그인해 주세요.";
+  if (message.includes("Database error saving new user")) return "이미 사용 중인 아이디이거나 회원 정보를 저장하지 못했습니다.";
   if (message.includes("Password should be at least")) return "비밀번호는 6자 이상으로 입력해 주세요.";
   return message;
 }
@@ -1028,6 +1160,7 @@ function buildViewer(user, profile = {}) {
   const appMetadata = user?.app_metadata ?? {};
   return {
     id: user?.id ?? profile.id ?? "",
+    loginId: stringOrEmpty(profile.login_id ?? metadata.login_id),
     loginEmail: stringOrEmpty(user?.email),
     email: stringOrEmpty(profile.email ?? user?.email),
     name: stringOrEmpty(profile.name ?? metadata.name ?? user?.email?.split("@")[0]),
@@ -1329,6 +1462,7 @@ function renderHeaderAuth() {
 }
 
 function renderProductMenu(extraClass) {
+  const isMobileMenu = extraClass.includes("mobile-product-menu");
   return `
     <div class="product-menu ${extraClass} ${state.menuOpen ? "is-open" : ""}" data-product-panel>
       <a href="#/">전체(로스트볼)</a>
@@ -1338,6 +1472,7 @@ function renderProductMenu(extraClass) {
           return `<a href="${href}">${escapeHtml(label)}</a>`;
         })
         .join("")}
+      ${isMobileMenu ? '<a class="product-menu-account" href="#/mypage">마이페이지</a>' : ""}
     </div>
   `;
 }
@@ -2570,8 +2705,8 @@ function renderAuthPage(mode = "login", redirect = "/mypage") {
           <fieldset>
             <legend>기본정보</legend>
             <div class="signup-field required">
-              <label for="signup-email">아이디</label>
-              <input id="signup-email" name="email" type="email" autocomplete="email" placeholder="이메일 아이디를 입력하세요" />
+              <label for="signup-login-id">아이디</label>
+              <input id="signup-login-id" name="loginId" autocomplete="username" placeholder="영문/숫자 4~20자" />
             </div>
             <div class="signup-field required">
               <label for="signup-password">비밀번호</label>
@@ -2606,7 +2741,7 @@ function renderAuthPage(mode = "login", redirect = "/mypage") {
             </div>
             <div class="signup-field required">
               <label for="signup-contact-email">이메일</label>
-              <input id="signup-contact-email" name="contactEmail" type="email" autocomplete="email" />
+              <input id="signup-contact-email" name="contactEmail" type="email" autocomplete="email" placeholder="인증 메일을 받을 이메일" />
             </div>
             <div class="signup-field required">
               <label>이메일 수신여부</label>
@@ -2657,6 +2792,7 @@ function renderAuthPage(mode = "login", redirect = "/mypage") {
 
   if (mode === "signup-complete") {
     const pendingEmail = getPendingSignupEmail();
+    const pendingLoginId = getPendingSignupLoginId();
     layout(`
       <section class="signup-complete-page">
         <article class="signup-complete-card panel-card">
@@ -2668,7 +2804,7 @@ function renderAuthPage(mode = "login", redirect = "/mypage") {
                 ? `<strong>${escapeHtml(pendingEmail)}</strong> 주소로 인증 메일을 보냈습니다.`
                 : "입력하신 이메일 주소로 인증 메일을 보냈습니다."
             }
-            메일 인증을 완료한 뒤 로그인해 주세요.
+            ${pendingLoginId ? `<br />인증 후 <strong>${escapeHtml(pendingLoginId)}</strong> 아이디로 로그인할 수 있습니다.` : "메일 인증을 완료한 뒤 로그인해 주세요."}
           </p>
           <div class="signup-complete-notice">
             <b>인증 메일이 보이지 않으면</b>
@@ -2721,7 +2857,7 @@ function renderMemberLoginForm(redirect) {
     <form class="login-form" data-auth-form data-auth-mode="login" data-auth-redirect="${escapeHtml(redirect)}">
       <label class="login-field">
         <span>아이디</span>
-        <input name="email" autocomplete="username" placeholder="아이디를 입력해주세요." />
+        <input name="identifier" autocomplete="username" placeholder="아이디 또는 이메일을 입력해주세요." />
       </label>
       <label class="login-field">
         <span>비밀번호</span>
@@ -2925,7 +3061,11 @@ function renderMypageContent() {
             <input id="member-email" name="email" type="email" value="${escapeHtml(state.viewer?.email ?? "")}" autocomplete="email" />
           </div>
           <div class="signup-field">
-            <label for="member-login-email">로그인 이메일</label>
+            <label for="member-login-id">로그인 아이디</label>
+            <input id="member-login-id" value="${escapeHtml(state.viewer?.loginId || "이메일 로그인")}" readonly />
+          </div>
+          <div class="signup-field">
+            <label for="member-login-email">인증 이메일</label>
             <input id="member-login-email" value="${escapeHtml(state.viewer?.loginEmail ?? "")}" readonly />
           </div>
           <div class="signup-field required">
