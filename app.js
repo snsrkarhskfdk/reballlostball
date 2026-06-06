@@ -1,5 +1,5 @@
 ﻿const ASSET_PATH = "./assets/figma";
-const ASSET_VERSION = "20260606-07";
+const ASSET_VERSION = "20260606-08";
 const SUPABASE_URL = "https://qbftalhhyfcndanrcwpy.supabase.co";
 const SUPABASE_KEY = "sb_publishable_K876i166RCGtBxdp3xRQZw_yJxPaKwL";
 const ADMIN_MEMBERS_FUNCTION_URL = `${SUPABASE_URL}/functions/v1/admin-members`;
