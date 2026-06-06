@@ -1,5 +1,5 @@
 ﻿const ASSET_PATH = "./assets/figma";
-const ASSET_VERSION = "20260606-06";
+const ASSET_VERSION = "20260606-07";
 const SUPABASE_URL = "https://qbftalhhyfcndanrcwpy.supabase.co";
 const SUPABASE_KEY = "sb_publishable_K876i166RCGtBxdp3xRQZw_yJxPaKwL";
 const ADMIN_MEMBERS_FUNCTION_URL = `${SUPABASE_URL}/functions/v1/admin-members`;
@@ -554,6 +554,11 @@ const banners = [
     secondaryCta: "브랜드 전체 보기",
     secondaryScrollTarget: "products",
     route: "/product/titleist-pro-v1-v1x-lostball",
+    gradeMarks: [
+      { grade: "s", image: "hero-grade-s.png" },
+      { grade: "a", image: "hero-grade-a.png" },
+      { grade: "b", image: "hero-grade-b.png" },
+    ],
   },
   {
     id: "store",
@@ -1849,6 +1854,17 @@ function renderBanner(banner) {
   const label = `${banner.eyebrow} ${banner.title.replaceAll("\n", " ")} ${banner.cta}`;
   const buttonsOnly = banner.buttonsOnly === true;
   const body = escapeHtml(banner.body).replaceAll("\n", "<br />");
+  const gradeMarks = Array.isArray(banner.gradeMarks)
+    ? `
+        <div class="hero-grade-marks" aria-hidden="true">
+          ${banner.gradeMarks
+            .map(
+              (mark) => `
+            <img class="hero-grade-mark hero-grade-mark--${escapeHtml(mark.grade)}" src="${asset(mark.image)}" alt="" />`
+            )
+            .join("")}
+        </div>`
+    : "";
   const image = `
         <picture>
           ${banner.mobileImage ? `<source media="(max-width: 680px)" srcset="${asset(banner.mobileImage)}" />` : ""}
@@ -1875,6 +1891,7 @@ function renderBanner(banner) {
   return `
     <article class="hero-slide hero-slide--${banner.id} ${banner.showOverlay === false ? "image-only" : "has-copy"}">
       ${image}
+      ${gradeMarks}
       ${
         banner.showOverlay === false
           ? `<button class="hero-image-link" type="button" data-route="${banner.route}" aria-label="${escapeHtml(label)}"></button>${banner.mobileOverlay ? copy("hero-copy--mobile-only") : ""}`
