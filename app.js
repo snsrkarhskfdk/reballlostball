@@ -554,6 +554,7 @@ const banners = [
     secondaryCta: "브랜드 전체 보기",
     secondaryScrollTarget: "products",
     route: "/product/titleist-pro-v1-v1x-lostball",
+    gradeMarksTarget: "home-grade-overview",
     gradeMarks: [
       { grade: "s", image: "hero-grade-s.png" },
       { grade: "a", image: "hero-grade-a.png" },
@@ -1772,7 +1773,7 @@ function renderHome() {
       </div>
     </section>
 
-    <section class="home-section panel-card">
+    <section class="home-section panel-card home-reason-section">
       <header class="home-section-head">
         <div>
           <p>왜 리볼 로스트볼인가요?</p>
@@ -1791,7 +1792,7 @@ function renderHome() {
     ${renderHomeInspectionProcessSection()}
     ${renderHomeOrderProcessSection()}
 
-    <section class="home-section panel-card">
+    <section class="home-section panel-card home-shipping-section">
       <header class="home-section-head">
         <div>
           <p>배송 및 주문 안내</p>
@@ -1828,7 +1829,7 @@ function renderHome() {
       </div>
     </section>
 
-    <section class="home-section panel-card">
+    <section class="home-section panel-card home-bundle-section">
       <header class="home-section-head">
         <div>
           <p>함께 보면 좋은 추천 세트</p>
@@ -1854,12 +1855,21 @@ function renderBanner(banner) {
   const label = `${banner.eyebrow} ${banner.title.replaceAll("\n", " ")} ${banner.cta}`;
   const buttonsOnly = banner.buttonsOnly === true;
   const body = escapeHtml(banner.body).replaceAll("\n", "<br />");
+  const gradeMarksTarget = typeof banner.gradeMarksTarget === "string" && banner.gradeMarksTarget ? banner.gradeMarksTarget : "";
   const gradeMarks = Array.isArray(banner.gradeMarks)
     ? `
-        <div class="hero-grade-marks" aria-hidden="true">
+        <div class="hero-grade-marks"${gradeMarksTarget ? "" : ' aria-hidden="true"'}>
           ${banner.gradeMarks
             .map(
-              (mark) => `
+              (mark) =>
+                gradeMarksTarget
+                  ? `
+            <button class="hero-grade-mark hero-grade-mark--${escapeHtml(mark.grade)} hero-grade-mark-btn" type="button" data-scroll-to="${escapeHtml(
+                      gradeMarksTarget
+                    )}" aria-label="${escapeHtml(mark.grade.toUpperCase())} 등급 안내로 이동">
+              <img class="hero-grade-mark-image" src="${asset(mark.image)}" alt="" />
+            </button>`
+                  : `
             <img class="hero-grade-mark hero-grade-mark--${escapeHtml(mark.grade)}" src="${asset(mark.image)}" alt="" />`
             )
             .join("")}
@@ -1911,7 +1921,7 @@ function renderHomeProtectedSectionImage(name, alt) {
 
 function renderHomeGradeOverviewSection() {
   return `
-    <section class="home-section panel-card home-system-section home-grade-overview">
+    <section class="home-section panel-card home-system-section home-grade-overview" id="home-grade-overview">
       <header class="home-system-head">
         <h2>등급 안내</h2>
         <p>S · A · B 상태를 한눈에 보기</p>

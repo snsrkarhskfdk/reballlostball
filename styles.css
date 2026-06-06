@@ -1408,10 +1408,37 @@ main.inspection-main {
   display: block;
   width: 110px;
   height: auto;
+  border: 0;
+  padding: 0;
+  background: transparent;
+  background-position: center;
+  background-repeat: no-repeat;
+  background-size: contain;
+  appearance: none;
+  -webkit-appearance: none;
   object-fit: contain;
   filter: drop-shadow(0 18px 22px rgba(6, 20, 14, 0.16));
   opacity: 0.88;
   user-select: none;
+  pointer-events: auto;
+}
+
+.hero-slide .hero-grade-mark-btn {
+  line-height: 0;
+  cursor: pointer;
+}
+
+.hero-slide .hero-grade-mark-image {
+  display: block;
+  width: 100%;
+  height: auto;
+  object-fit: contain;
+  pointer-events: none;
+}
+
+.hero-slide .hero-grade-mark:focus-visible {
+  outline: 3px solid rgba(11, 61, 46, 0.28);
+  outline-offset: 6px;
 }
 
 .hero-slide .hero-grade-mark--s {
@@ -1938,6 +1965,10 @@ main.inspection-main {
   font-family: var(--font-pretendard);
   color: var(--ink);
   padding: 26px;
+}
+
+.home-grade-overview {
+  scroll-margin-top: 116px;
 }
 
 .home-system-head {
@@ -2649,15 +2680,47 @@ main.inspection-main {
 }
 
 .service-grid article {
+  position: relative;
+  overflow: hidden;
   display: grid;
   grid-template-columns: 44px minmax(0, 1fr);
   align-items: center;
   gap: 14px;
   min-height: 108px;
+  border: 1px solid rgba(255, 255, 255, 0.18);
   border-radius: 12px;
-  background: var(--gradient-deep);
+  background:
+    linear-gradient(135deg, var(--icon-card-glass-3) 0%, rgba(255, 255, 255, 0.012) 100%),
+    var(--gradient-deep);
+  background-clip: padding-box;
   color: #FFFFFF;
   padding: 20px;
+  -webkit-backdrop-filter: blur(10px) saturate(1.04);
+  backdrop-filter: blur(10px) saturate(1.04);
+  box-shadow:
+    inset 0 0 0 1px rgba(255, 255, 255, 0.24),
+    inset 0 0 0 2px rgba(6, 20, 14, 0.14),
+    inset 0 1px 0 rgba(255, 255, 255, 0.24),
+    inset 0 -1px 0 rgba(6, 20, 14, 0.28),
+    0 18px 30px -28px rgba(6, 20, 14, 0.45);
+  isolation: isolate;
+}
+
+.service-grid article::after {
+  content: "";
+  position: absolute;
+  inset: 1px;
+  z-index: 0;
+  border-radius: 11px;
+  box-shadow:
+    inset 7px 7px 18px rgba(255, 255, 255, 0.06),
+    inset -7px -7px 18px rgba(255, 255, 255, 0.035);
+  pointer-events: none;
+}
+
+.service-grid article > * {
+  position: relative;
+  z-index: 1;
 }
 
 .service-icon {
@@ -6370,6 +6433,10 @@ main.admin-main {
     width: clamp(66px, 8.4vw, 86px);
   }
 
+  .home-grade-overview {
+    scroll-margin-top: 96px;
+  }
+
   .footer-main {
     grid-template-columns: repeat(3, minmax(0, 1fr));
     gap: 24px;
@@ -6601,6 +6668,10 @@ main.admin-main {
     bottom: auto;
     width: 60px;
     transform: rotate(8deg);
+  }
+
+  .home-grade-overview {
+    scroll-margin-top: 84px;
   }
 
   .hero-slide.image-only img {
@@ -7207,8 +7278,6 @@ main.admin-main {
 }
 
 .service-grid article:has(.shop-icon-22) {
-  position: relative;
-  overflow: hidden;
   border: 1px solid rgba(255, 255, 255, 0.18);
   background:
     linear-gradient(135deg, var(--icon-card-glass-3) 0%, rgba(255, 255, 255, 0.012) 100%),
@@ -7217,10 +7286,10 @@ main.admin-main {
   -webkit-backdrop-filter: blur(10px) saturate(1.04);
   backdrop-filter: blur(10px) saturate(1.04);
   box-shadow:
-    inset 0 0 0 1px rgba(255, 255, 255, 0.2),
-    inset 0 0 0 2px rgba(0, 0, 0, 0.11),
-    inset 0 1px 0 rgba(255, 255, 255, 0.22),
-    inset 0 -1px 0 rgba(0, 0, 0, 0.24),
+    inset 0 0 0 1px rgba(255, 255, 255, 0.24),
+    inset 0 0 0 2px rgba(6, 20, 14, 0.14),
+    inset 0 1px 0 rgba(255, 255, 255, 0.24),
+    inset 0 -1px 0 rgba(6, 20, 14, 0.28),
     0 18px 30px -28px rgba(6, 20, 14, 0.45);
 }
 
@@ -9377,4 +9446,52 @@ main.admin-main {
     width: 100%;
     min-height: 40px;
   }
+}
+
+.bestseller-section,
+.home-reason-section,
+.home-process-system--inspection,
+.home-shipping-section,
+.home-bundle-section,
+.bestseller-section .best-card,
+.bestseller-section .best-media,
+.bestseller-section .best-review,
+.home-reason-section .reason-grid article,
+.home-process-system--inspection .home-system-image-body,
+.home-process-system--inspection .home-process-system-grid article,
+.home-shipping-section .service-grid article,
+.home-bundle-section .bundle-card {
+  border: 1px solid rgba(255, 255, 255, 0.32);
+  background:
+    linear-gradient(145deg, rgba(255, 255, 255, 0.03) 0%, rgba(255, 255, 255, 0.014) 58%, rgba(255, 255, 255, 0.008) 100%),
+    rgba(255, 255, 255, 0.92);
+  background-clip: padding-box;
+  -webkit-backdrop-filter: blur(10px) saturate(1.04);
+  backdrop-filter: blur(10px) saturate(1.04);
+  box-shadow:
+    inset 0 0 0 1px rgba(255, 255, 255, 0.54),
+    inset 0 0 0 2px rgba(6, 20, 14, 0.055),
+    inset 6px 6px 16px rgba(255, 255, 255, 0.055),
+    inset -6px -6px 16px rgba(6, 20, 14, 0.025),
+    0 18px 34px -30px rgba(6, 20, 14, 0.32);
+}
+
+.home-shipping-section .service-grid article {
+  border-color: rgba(255, 255, 255, 0.18);
+  background:
+    linear-gradient(135deg, var(--icon-card-glass-3) 0%, rgba(255, 255, 255, 0.012) 100%),
+    var(--gradient-deep);
+  color: #FFFFFF;
+  box-shadow:
+    inset 0 0 0 1px rgba(255, 255, 255, 0.24),
+    inset 0 0 0 2px rgba(6, 20, 14, 0.14),
+    inset 0 1px 0 rgba(255, 255, 255, 0.24),
+    inset 0 -1px 0 rgba(6, 20, 14, 0.28),
+    inset 7px 7px 18px rgba(255, 255, 255, 0.06),
+    inset -7px -7px 18px rgba(255, 255, 255, 0.035),
+    0 18px 30px -28px rgba(6, 20, 14, 0.45);
+}
+
+.home-shipping-section .service-grid p {
+  color: rgba(255, 255, 255, 0.72);
 }
