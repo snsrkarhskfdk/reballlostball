@@ -1,5 +1,5 @@
 ﻿const ASSET_PATH = "./assets/figma";
-const ASSET_VERSION = "20260606-05";
+const ASSET_VERSION = "20260606-06";
 const SUPABASE_URL = "https://qbftalhhyfcndanrcwpy.supabase.co";
 const SUPABASE_KEY = "sb_publishable_K876i166RCGtBxdp3xRQZw_yJxPaKwL";
 const ADMIN_MEMBERS_FUNCTION_URL = `${SUPABASE_URL}/functions/v1/admin-members`;
@@ -47,13 +47,13 @@ const shopIconFileMap = {
   box: "shop-box-check",
   "service-return": "shop-return",
   "process-test": "shop-return",
-  "why-leaf": "shop-return",
+  "why-leaf": "shop-leaf",
   "why-shield": "shop-shield",
   shield: "shop-shield",
   "safe-pack": "shop-shield",
-  "why-medal": "shop-box-check",
-  "why-headset": "shop-shield",
-  "service-headset": "shop-shield",
+  "why-medal": "shop-medal",
+  "why-headset": "shop-headset",
+  "service-headset": "shop-headset",
 };
 
 const icons = {
