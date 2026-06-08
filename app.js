@@ -1,5 +1,5 @@
 ﻿const ASSET_PATH = "./assets/figma";
-const ASSET_VERSION = "20260606-08";
+const ASSET_VERSION = "20260608-02";
 const SUPABASE_URL = "https://qbftalhhyfcndanrcwpy.supabase.co";
 const SUPABASE_KEY = "sb_publishable_K876i166RCGtBxdp3xRQZw_yJxPaKwL";
 const ADMIN_MEMBERS_FUNCTION_URL = `${SUPABASE_URL}/functions/v1/admin-members`;
@@ -554,12 +554,6 @@ const banners = [
     secondaryCta: "브랜드 전체 보기",
     secondaryScrollTarget: "products",
     route: "/product/titleist-pro-v1-v1x-lostball",
-    gradeMarksTarget: "home-grade-overview",
-    gradeMarks: [
-      { grade: "s", image: "hero-grade-s.png" },
-      { grade: "a", image: "hero-grade-a.png" },
-      { grade: "b", image: "hero-grade-b.png" },
-    ],
   },
   {
     id: "store",
@@ -1926,8 +1920,29 @@ function renderHomeGradeOverviewSection() {
         <h2>등급 안내</h2>
         <p>S · A · B 상태를 한눈에 보기</p>
       </header>
-      ${renderHomeSystemImageBody("home-grade-guide-body.png", "S A B 등급 안내 카드")}
+      ${renderHomeGradeGuideBody()}
     </section>
+  `;
+}
+
+function renderHomeGradeGuideBody() {
+  const marks = [
+    { grade: "s", image: "hero-grade-s.png", label: "S 등급" },
+    { grade: "a", image: "hero-grade-a.png", label: "A 등급" },
+    { grade: "b", image: "hero-grade-b.png", label: "B 등급" },
+  ];
+  return `
+    <div class="home-system-image-body home-grade-visual">
+      <img class="home-grade-base-image" src="${asset("home-grade-guide-body.png")}" alt="S A B 등급 안내 카드" loading="eager" decoding="sync" />
+      ${marks
+        .map(
+          (mark) => `
+        <span class="home-grade-overlay home-grade-overlay--${escapeHtml(mark.grade)}" aria-hidden="true">
+          <img src="${asset(mark.image)}" alt="${escapeHtml(mark.label)}" />
+        </span>`
+        )
+        .join("")}
+    </div>
   `;
 }
 

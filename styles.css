@@ -2011,6 +2011,55 @@ main.inspection-main {
   object-position: center;
 }
 
+.home-grade-visual {
+  position: relative;
+}
+
+.home-grade-visual .home-grade-base-image {
+  width: 80%;
+}
+
+.home-grade-overlay {
+  position: absolute;
+  z-index: 2;
+  display: grid;
+  place-items: center;
+  width: clamp(28px, 5.8vw, 92px);
+  height: clamp(28px, 5.8vw, 92px);
+  aspect-ratio: 1;
+  border: 1px solid rgba(220, 229, 221, 0.92);
+  border-radius: clamp(10px, 1vw, 18px);
+  background: rgba(255, 255, 255, 0.96);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.9), 0 14px 24px -22px rgba(5, 35, 24, 0.46);
+  transform: translate(-50%, -50%);
+  pointer-events: none;
+}
+
+.home-grade-visual .home-grade-overlay img {
+  display: block;
+  width: auto;
+  max-width: 112%;
+  height: auto;
+  max-height: 112%;
+  object-fit: contain;
+  filter: drop-shadow(0 9px 11px rgba(5, 35, 24, 0.13));
+}
+
+.home-grade-overlay--s {
+  left: 14.3%;
+  top: 41%;
+}
+
+.home-grade-overlay--a {
+  left: 42.85%;
+  top: 41%;
+}
+
+.home-grade-overlay--b {
+  left: 68.9%;
+  top: 41%;
+}
+
 .home-grade-system-grid {
   display: grid;
   grid-template-columns: 1.08fr 0.98fr 0.98fr;
@@ -9461,7 +9510,7 @@ main.admin-main {
 .home-process-system--inspection .home-process-system-grid article,
 .home-shipping-section .service-grid article,
 .home-bundle-section .bundle-card {
-  background: #f4f4f4;
+  background: #ffffff;
 }
 
 .home-shipping-section .service-grid article {
