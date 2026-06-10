@@ -1,9 +1,11 @@
 ﻿const ASSET_PATH = "./assets/figma";
-const ASSET_VERSION = "20260610-04";
+const HERO_TRANSITION_PATH = "./assets/hero-transition";
+const ASSET_VERSION = "20260610-12";
 const SUPABASE_URL = "https://qbftalhhyfcndanrcwpy.supabase.co";
 const SUPABASE_KEY = "sb_publishable_K876i166RCGtBxdp3xRQZw_yJxPaKwL";
 const ADMIN_MEMBERS_FUNCTION_URL = `${SUPABASE_URL}/functions/v1/admin-members`;
 const SIGNUP_FUNCTION_URL = `${SUPABASE_URL}/functions/v1/signup-with-login-id`;
+const AUTH_ASSIST_FUNCTION_URL = `${SUPABASE_URL}/functions/v1/auth-assist`;
 const AUTH_REDIRECT_DEFAULT = "/mypage";
 const LEGACY_MEMBER_STATE_RESET_VERSION = "20260605-supabase-auth-cutover-v1";
 const PENDING_SIGNUP_EMAIL_KEY = "reball.pendingSignupEmail";
@@ -25,6 +27,7 @@ const supabase = createClient(SUPABASE_URL, SUPABASE_KEY, {
 const money = new Intl.NumberFormat("ko-KR");
 const app = document.querySelector("#app");
 const inlineIcon = (name) => `<img class="inline-action-icon" src="${ASSET_PATH}/ui-icons/${name}.png?v=${ASSET_VERSION}" alt="" />`;
+const heroTransitionAsset = (name) => `${HERO_TRANSITION_PATH}/${name}?v=${ASSET_VERSION}`;
 const svgUiIconNames = new Set(["order-fast", "safe-pack"]);
 const shopIconFileMap = {
   cart: "shop-cart",
@@ -573,6 +576,53 @@ const state = {
 
 const bundleRegistry = new Map();
 
+function heroFrameAsset(index) {
+  return heroTransitionAsset(`frames/reball_ball_drop_${String(index).padStart(4, "0")}.webp`);
+}
+
+function renderHeroTransitionSection(representativeProducts) {
+  return `
+    <section class="hero-transition" data-hero-transition aria-label="리볼 로스트볼 인트로 전환">
+      <div class="hero-transition-stage">
+        <video
+          class="hero-transition-video"
+          data-hero-intro-video
+          src="${heroTransitionAsset("reball-intro-1.mp4")}"
+          poster="${asset("hero-poster.webp")}"
+          muted
+          playsinline
+          autoplay
+          preload="auto"
+        ></video>
+        <div class="hero-transition-sky" aria-hidden="true"></div>
+        <img class="hero-transition-ball" data-hero-ball-frame src="${heroFrameAsset(0)}" alt="" loading="eager" decoding="sync" />
+        <div class="hero-transition-field" aria-hidden="true">
+          <span class="hero-transition-hole"></span>
+        </div>
+        <div class="hero-transition-copy">
+          <p>REBALL LOSTBALL</p>
+          <h1>검수된 로스트볼이 대표 상품으로 이어집니다</h1>
+          <span>인트로 후 공이 내려오며 아래 상품 영역으로 자연스럽게 연결됩니다.</span>
+        </div>
+        <div class="hero-transition-products" aria-label="대표 상품 바로가기">
+          ${representativeProducts
+            .map(
+              (product) => `
+                <button class="hero-transition-product" type="button" data-route="/product/${product.slug}">
+                  <span class="hero-transition-product-media"><img src="${asset(product.image)}" alt="" loading="eager" decoding="async" /></span>
+                  <span>
+                    <b>${escapeHtml(product.brandName)}</b>
+                    <small>${escapeHtml(product.line.split("/")[0].trim())}</small>
+                  </span>
+                </button>`
+            )
+            .join("")}
+        </div>
+      </div>
+    </section>
+  `;
+}
+
 const banners = [
   {
     id: "quality",
@@ -794,18 +844,60 @@ async function signUpWithLoginId(payload) {
   return data;
 }
 
-function handleAuthCallbackHash() {
+async function requestAuthAssist(payload) {
+  const response = await fetch(AUTH_ASSIST_FUNCTION_URL, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      apikey: SUPABASE_KEY,
+    },
+    body: JSON.stringify(payload),
+  });
+
+  const result = await response.json().catch(() => ({}));
+  if (!response.ok) throw new Error(result?.message || "계정 정보를 확인하지 못했습니다.");
+  return result;
+}
+
+async function handleAuthCallbackHash() {
   const hash = location.hash.replace(/^#/, "");
   if (!hash || hash.startsWith("/")) return false;
 
   const params = new URLSearchParams(hash);
   const hasAuthToken = params.has("access_token") || params.has("refresh_token");
   const hasAuthError = params.has("error") || params.has("error_code");
+  const authType = stringOrEmpty(params.get("type")).toLowerCase();
   if (!hasAuthToken && !hasAuthError) return false;
 
   if (hasAuthError) {
-    showToastAfterNavigation("인증 링크가 이미 처리되었거나 만료되었습니다. 가입한 아이디 또는 이메일로 로그인해 주세요.");
+    const message =
+      authType === "recovery"
+        ? "비밀번호 재설정 링크가 만료되었습니다. 다시 비밀번호 찾기를 진행해 주세요."
+        : "인증 링크가 이미 처리되었거나 만료되었습니다. 가입한 아이디 또는 이메일로 로그인해 주세요.";
+    showToastAfterNavigation(message);
     routeTo("/login");
+    return true;
+  }
+
+  if (hasAuthToken) {
+    const accessToken = params.get("access_token");
+    const refreshToken = params.get("refresh_token");
+    if (accessToken && refreshToken) {
+      const { error } = await supabase.auth.setSession({
+        access_token: accessToken,
+        refresh_token: refreshToken,
+      });
+      if (error) {
+        showToastAfterNavigation(normalizeAuthError(error, "인증 링크를 처리하지 못했습니다."));
+        routeTo("/login");
+        return true;
+      }
+    }
+  }
+
+  if (authType === "recovery") {
+    showToastAfterNavigation("새 비밀번호를 입력해 주세요.");
+    routeTo("/login/reset-password");
     return true;
   }
 
@@ -948,7 +1040,7 @@ async function initializeAuth() {
     showToast(normalizeAuthError(error, "로그인 상태를 확인하지 못했습니다."));
   } finally {
     state.authReady = true;
-    if (!handleAuthCallbackHash()) renderRoute();
+    if (!(await handleAuthCallbackHash())) renderRoute();
   }
 
   supabase.auth.onAuthStateChange((event, session) => {
@@ -970,7 +1062,12 @@ async function initializeAuth() {
           if (event !== "TOKEN_REFRESHED") await loadAccountData(session.user, { silent: true });
           else if (!state.viewer) state.viewer = buildViewer(session.user);
 
-          if ((event === "SIGNED_IN" || event === "USER_UPDATED") && parseRoute().startsWith("/login")) {
+          if (event === "PASSWORD_RECOVERY") {
+            routeTo("/login/reset-password");
+            return;
+          }
+
+          if ((event === "SIGNED_IN" || event === "USER_UPDATED") && parseRoute() === "/login") {
             routeTo(consumeAuthRedirect());
             return;
           }
@@ -1081,6 +1178,107 @@ async function handleAuthFormSubmit(form) {
     routeTo(consumeAuthRedirect());
   } catch (error) {
     showToast(normalizeAuthError(error));
+  } finally {
+    setFormBusy(form, false);
+  }
+}
+
+async function handleAuthAssistFormSubmit(form) {
+  const mode = form.dataset.assistMode;
+  const formData = new FormData(form);
+  const resultNode = form.querySelector("[data-auth-assist-result]");
+  const setResult = (message, status = "info") => {
+    if (!resultNode) return;
+    resultNode.hidden = false;
+    resultNode.dataset.status = status;
+    resultNode.innerHTML = message;
+  };
+  const name = stringOrEmpty(formData.get("name")).trim();
+  const phone = stringOrEmpty(formData.get("phone")).trim();
+
+  if (!name || !phone) {
+    showToast("이름과 휴대전화를 입력하세요.");
+    return;
+  }
+
+  setFormBusy(form, true);
+
+  try {
+    if (mode === "find-id") {
+      const email = stringOrEmpty(formData.get("contactEmail")).trim().toLowerCase();
+      if (!email || !isEmailLike(email)) {
+        showToast("가입 이메일을 입력하세요.");
+        return;
+      }
+      const result = await requestAuthAssist({
+        mode: "find-id",
+        name,
+        phone,
+        email,
+      });
+      setResult(
+        `<strong>가입 아이디</strong><b>${escapeHtml(result.loginId || "이메일 계정")}</b><span>인증 이메일 ${escapeHtml(
+          result.emailMasked || "-"
+        )}</span>`,
+        "success"
+      );
+      showToast("아이디를 찾았습니다.");
+      return;
+    }
+
+    const identifier = stringOrEmpty(formData.get("identifier")).trim();
+    if (!identifier) {
+      showToast("아이디 또는 이메일을 입력하세요.");
+      return;
+    }
+
+    const result = await requestAuthAssist({
+      mode: "password-reset",
+      identifier,
+      name,
+      phone,
+      redirectTo: `${location.origin}${location.pathname}`,
+    });
+    setResult(
+      `<strong>재설정 메일 발송 완료</strong><span>${escapeHtml(result.emailMasked || "가입 이메일")}로 보낸 링크에서 새 비밀번호를 입력해 주세요.</span>`,
+      "success"
+    );
+    showToast("비밀번호 재설정 메일을 보냈습니다.");
+  } catch (error) {
+    const message = normalizeAuthError(error, "입력한 회원 정보를 확인하지 못했습니다.");
+    setResult(`<strong>확인 실패</strong><span>${escapeHtml(message)}</span>`, "error");
+    showToast(message);
+  } finally {
+    setFormBusy(form, false);
+  }
+}
+
+async function handlePasswordResetFormSubmit(form) {
+  const formData = new FormData(form);
+  const password = stringOrEmpty(formData.get("password"));
+  const passwordConfirm = stringOrEmpty(formData.get("passwordConfirm"));
+
+  if (password.length < 6) {
+    showToast("새 비밀번호는 6자 이상 입력하세요.");
+    return;
+  }
+
+  if (password !== passwordConfirm) {
+    showToast("새 비밀번호 확인이 일치하지 않습니다.");
+    return;
+  }
+
+  setFormBusy(form, true);
+
+  try {
+    const { error } = await supabase.auth.updateUser({ password });
+    if (error) throw error;
+    await supabase.auth.signOut();
+    emptyAuthData();
+    showToastAfterNavigation("비밀번호가 변경되었습니다. 새 비밀번호로 로그인해 주세요.");
+    routeTo("/login");
+  } catch (error) {
+    showToast(normalizeAuthError(error, "비밀번호를 변경하지 못했습니다. 재설정 링크를 다시 요청해 주세요."));
   } finally {
     setFormBusy(form, false);
   }
@@ -2003,6 +2201,8 @@ function renderHome() {
     ...brandMenu.map(([slug, label]) => [label, brandProductRoute(slug)]),
   ];
   layout(`
+    ${renderHeroTransitionSection([titleist, taylormade, bridgestone])}
+
     <section class="hero-carousel" aria-label="프로모션 배너">
       <div class="hero-track" style="transform: translateX(-${state.activeBanner * 100}%);">
         ${banners.map((banner) => renderBanner(banner)).join("")}
@@ -2040,7 +2240,6 @@ function renderHome() {
       <header class="home-section-head">
         <div>
           <p>추천 상품</p>
-          <h1>이미지와 옵션을 크게 보는 상품 카드</h1>
         </div>
         <button class="secondary-btn compact" type="button" data-route="/category/titleist">브랜드별 보기</button>
       </header>
@@ -3341,6 +3540,121 @@ function renderAuthPage(mode = "login", redirect = "/mypage") {
     return;
   }
 
+  if (mode === "find-id") {
+    layout(`
+      <section class="login-choice-page">
+        <div class="login-choice-card auth-assist-card">
+          <header class="signup-choice-header">
+            <h1>아이디 찾기</h1>
+            <p>가입 시 입력한 정보로 아이디를 확인합니다.</p>
+            <span>이름, 휴대전화, 가입 이메일이 모두 일치해야 아이디를 보여드립니다.</span>
+          </header>
+          <form class="login-form auth-assist-form" data-auth-assist-form data-assist-mode="find-id">
+            <label class="login-field">
+              <span>이름</span>
+              <input name="name" autocomplete="name" placeholder="가입자 이름" />
+            </label>
+            <label class="login-field">
+              <span>휴대전화</span>
+              <input name="phone" inputmode="tel" autocomplete="tel" placeholder="010-0000-0000" />
+            </label>
+            <label class="login-field">
+              <span>가입 이메일</span>
+              <input name="contactEmail" type="email" autocomplete="email" placeholder="주문 안내를 받는 이메일" />
+            </label>
+            <div class="auth-assist-result" data-auth-assist-result hidden></div>
+            <button class="gold-cart-btn login-submit-btn" type="submit">아이디 확인</button>
+          </form>
+          <div class="login-helper-links auth-assist-nav">
+            <span>
+              <button type="button" data-route="/login/find-password">비밀번호 찾기</button>
+              <button type="button" data-route="/login">로그인</button>
+            </span>
+            <button type="button" data-route="/signup">회원가입</button>
+          </div>
+        </div>
+      </section>
+    `);
+    return;
+  }
+
+  if (mode === "find-password") {
+    layout(`
+      <section class="login-choice-page">
+        <div class="login-choice-card auth-assist-card">
+          <header class="signup-choice-header">
+            <h1>비밀번호 찾기</h1>
+            <p>가입 정보를 확인한 뒤 재설정 메일을 보내드립니다.</p>
+            <span>메일의 링크를 열면 새 비밀번호 입력 화면으로 이동합니다.</span>
+          </header>
+          <form class="login-form auth-assist-form" data-auth-assist-form data-assist-mode="password-reset">
+            <label class="login-field">
+              <span>아이디 또는 이메일</span>
+              <input name="identifier" autocomplete="username" placeholder="아이디 또는 가입 이메일" />
+            </label>
+            <label class="login-field">
+              <span>이름</span>
+              <input name="name" autocomplete="name" placeholder="가입자 이름" />
+            </label>
+            <label class="login-field">
+              <span>휴대전화</span>
+              <input name="phone" inputmode="tel" autocomplete="tel" placeholder="010-0000-0000" />
+            </label>
+            <div class="auth-assist-result" data-auth-assist-result hidden></div>
+            <button class="gold-cart-btn login-submit-btn" type="submit">재설정 메일 받기</button>
+          </form>
+          <div class="login-helper-links auth-assist-nav">
+            <span>
+              <button type="button" data-route="/login/find-id">아이디 찾기</button>
+              <button type="button" data-route="/login">로그인</button>
+            </span>
+            <button type="button" data-route="/signup">회원가입</button>
+          </div>
+        </div>
+      </section>
+    `);
+    return;
+  }
+
+  if (mode === "reset-password") {
+    layout(`
+      <section class="login-choice-page">
+        <div class="login-choice-card auth-assist-card">
+          <header class="signup-choice-header">
+            <h1>새 비밀번호 설정</h1>
+            <p>메일로 받은 재설정 링크가 확인되었습니다.</p>
+            <span>앞으로 사용할 새 비밀번호를 입력해 주세요.</span>
+          </header>
+          <form class="login-form auth-assist-form" data-password-reset-form>
+            <label class="login-field">
+              <span>새 비밀번호</span>
+              <span class="password-input-wrap">
+                <input name="password" type="password" autocomplete="new-password" placeholder="6자 이상" />
+                <button type="button" data-toggle-password aria-label="새 비밀번호 보기" aria-pressed="false">${icons.eye}</button>
+              </span>
+            </label>
+            <label class="login-field">
+              <span>새 비밀번호 확인</span>
+              <span class="password-input-wrap">
+                <input name="passwordConfirm" type="password" autocomplete="new-password" placeholder="새 비밀번호 재입력" />
+                <button type="button" data-toggle-password aria-label="새 비밀번호 확인 보기" aria-pressed="false">${icons.eye}</button>
+              </span>
+            </label>
+            <small class="guest-order-privacy">재설정 링크가 만료되었으면 비밀번호 찾기를 다시 진행해 주세요.</small>
+            <button class="gold-cart-btn login-submit-btn" type="submit">비밀번호 변경</button>
+          </form>
+          <div class="login-helper-links auth-assist-nav">
+            <span>
+              <button type="button" data-route="/login/find-password">재설정 메일 다시 받기</button>
+              <button type="button" data-route="/login">로그인</button>
+            </span>
+          </div>
+        </div>
+      </section>
+    `);
+    return;
+  }
+
   layout(`
     <section class="login-choice-page">
       <div class="login-choice-card">
@@ -3424,8 +3738,8 @@ function renderLoginHelperLinks() {
   return `
     <div class="login-helper-links">
       <span>
-        <button type="button" data-auth-assist="id">아이디 찾기</button>
-        <button type="button" data-auth-assist="password">비밀번호 찾기</button>
+        <button type="button" data-route="/login/find-id">아이디 찾기</button>
+        <button type="button" data-route="/login/find-password">비밀번호 찾기</button>
       </span>
       <button type="button" data-route="/signup">회원가입</button>
     </div>
@@ -6090,7 +6404,156 @@ function bindGlobalEvents() {
   });
 }
 
+function initHeroTransition() {
+  if (typeof state.heroTransitionCleanup === "function") {
+    state.heroTransitionCleanup();
+    state.heroTransitionCleanup = null;
+  }
+
+  const root = document.querySelector("[data-hero-transition]");
+  const video = root?.querySelector("[data-hero-intro-video]");
+  const frameImage = root?.querySelector("[data-hero-ball-frame]");
+  if (!root || !video || !frameImage) return;
+  root.dataset.heroTransitionReady = "true";
+
+  const frameCount = 60;
+  let introEnded = video.ended;
+  let currentFrame = -1;
+  let autoProgress = introEnded ? 1 : 0;
+  let autoRaf = 0;
+  let scrollRaf = 0;
+  let introWatchRaf = 0;
+  let introFallbackTimer = 0;
+  let disposed = false;
+  const introStartTime = performance.now();
+
+  [0, 15, 30, 45, 59].forEach((frame) => {
+    const preload = new Image();
+    preload.src = heroFrameAsset(frame);
+  });
+
+  const clamp01 = (value) => Math.min(1, Math.max(0, value));
+  const setFrame = (progress) => {
+    const frame = Math.min(frameCount - 1, Math.max(0, Math.round(progress * (frameCount - 1))));
+    if (frame === currentFrame) return;
+    currentFrame = frame;
+    frameImage.src = heroFrameAsset(frame);
+  };
+
+  const update = () => {
+    if (disposed) return;
+    const rect = root.getBoundingClientRect();
+    const scrollDistance = Math.max(1, root.offsetHeight - window.innerHeight);
+    const scrollProgress = clamp01(-rect.top / scrollDistance);
+    const progress = introEnded ? clamp01(Math.max(scrollProgress, autoProgress)) : 0;
+    root.style.setProperty("--hero-scroll-progress", scrollProgress.toFixed(4));
+    root.style.setProperty("--hero-sequence-progress", progress.toFixed(4));
+    root.classList.toggle("is-intro-ended", introEnded);
+    root.classList.toggle("is-sequence-complete", progress > 0.96);
+    setFrame(progress);
+  };
+
+  const requestUpdate = () => {
+    if (scrollRaf) return;
+    scrollRaf = window.requestAnimationFrame(() => {
+      scrollRaf = 0;
+      update();
+    });
+  };
+
+  const startAutoSequence = () => {
+    const duration = 1800;
+    let start = 0;
+    const tick = (time) => {
+      if (disposed) return;
+      if (!start) start = time;
+      autoProgress = clamp01((time - start) / duration);
+      update();
+      if (autoProgress < 1) {
+        autoRaf = window.requestAnimationFrame(tick);
+      }
+    };
+    autoRaf = window.requestAnimationFrame(tick);
+  };
+
+  const onIntroEnd = () => {
+    if (introEnded) return;
+    introEnded = true;
+    root.dataset.heroIntroEnded = "true";
+    root.classList.add("is-intro-ended");
+    startAutoSequence();
+  };
+
+  const forceCurrentRootSequence = () => {
+    const activeRoot = document.querySelector("[data-hero-transition]");
+    const activeFrame = activeRoot?.querySelector("[data-hero-ball-frame]");
+    if (!activeRoot || !activeFrame || activeRoot.dataset.heroIntroEnded === "true") return;
+    activeRoot.dataset.heroIntroEnded = "true";
+    activeRoot.classList.add("is-intro-ended");
+    let forceStart = 0;
+    const tick = (time) => {
+      if (!forceStart) forceStart = time;
+      const progress = clamp01((time - forceStart) / 1800);
+      const frame = Math.min(frameCount - 1, Math.max(0, Math.round(progress * (frameCount - 1))));
+      activeRoot.style.setProperty("--hero-sequence-progress", progress.toFixed(4));
+      activeRoot.classList.toggle("is-sequence-complete", progress > 0.96);
+      activeFrame.src = heroFrameAsset(frame);
+      if (progress < 1 && document.body.contains(activeRoot)) {
+        window.requestAnimationFrame(tick);
+      }
+    };
+    window.requestAnimationFrame(tick);
+  };
+
+  const scheduleIntroFallback = () => {
+    if (introFallbackTimer) window.clearTimeout(introFallbackTimer);
+    const duration = Number.isFinite(video.duration) && video.duration > 0 ? video.duration * 1000 + 260 : 5600;
+    introFallbackTimer = window.setTimeout(onIntroEnd, duration);
+  };
+
+  const watchIntroFallback = (time) => {
+    if (disposed || introEnded) return;
+    if (time - introStartTime >= 5600) {
+      onIntroEnd();
+      return;
+    }
+    introWatchRaf = window.requestAnimationFrame(watchIntroFallback);
+  };
+
+  const firstIntroStart = window.__reballHeroTransitionStartAt || Date.now();
+  window.__reballHeroTransitionStartAt = firstIntroStart;
+  const remainingIntroDelay = Math.max(0, 5600 - (Date.now() - firstIntroStart));
+  introFallbackTimer = window.setTimeout(onIntroEnd, remainingIntroDelay);
+  window.setTimeout(forceCurrentRootSequence, remainingIntroDelay);
+  introWatchRaf = window.requestAnimationFrame(watchIntroFallback);
+  root.dataset.heroFallbackScheduled = "true";
+  video.addEventListener("ended", onIntroEnd);
+  if (video.readyState >= 1) {
+    scheduleIntroFallback();
+  } else {
+    video.addEventListener("loadedmetadata", scheduleIntroFallback, { once: true });
+  }
+  window.addEventListener("scroll", requestUpdate, { passive: true });
+  window.addEventListener("resize", requestUpdate);
+  video.play?.().catch(() => {
+    root.classList.add("is-intro-paused");
+  });
+  update();
+
+  state.heroTransitionCleanup = () => {
+    disposed = true;
+    video.removeEventListener("ended", onIntroEnd);
+    window.removeEventListener("scroll", requestUpdate);
+    window.removeEventListener("resize", requestUpdate);
+    if (autoRaf) window.cancelAnimationFrame(autoRaf);
+    if (scrollRaf) window.cancelAnimationFrame(scrollRaf);
+    if (introWatchRaf) window.cancelAnimationFrame(introWatchRaf);
+    if (introFallbackTimer) window.clearTimeout(introFallbackTimer);
+  };
+}
+
 function bindPageEvents() {
+  initHeroTransition();
   document.querySelectorAll("[data-banner-index]").forEach((node) => {
     node.addEventListener("click", () => {
       state.activeBanner = Number(node.dataset.bannerIndex);
@@ -6116,6 +6579,14 @@ function bindPageEvents() {
   document.querySelector("[data-auth-form]")?.addEventListener("submit", async (event) => {
     event.preventDefault();
     await handleAuthFormSubmit(event.currentTarget);
+  });
+  document.querySelector("[data-auth-assist-form]")?.addEventListener("submit", async (event) => {
+    event.preventDefault();
+    await handleAuthAssistFormSubmit(event.currentTarget);
+  });
+  document.querySelector("[data-password-reset-form]")?.addEventListener("submit", async (event) => {
+    event.preventDefault();
+    await handlePasswordResetFormSubmit(event.currentTarget);
   });
   document.querySelector("[data-signup-login-id]")?.addEventListener("input", (event) => {
     const loginId = normalizeLoginId(event.currentTarget.value);
@@ -6182,12 +6653,6 @@ function bindPageEvents() {
       return;
     }
     showToast("주문 정보를 찾을 수 없습니다.");
-  });
-  document.querySelectorAll("[data-auth-assist]").forEach((node) => {
-    node.addEventListener("click", () => {
-      const label = node.dataset.authAssist === "password" ? "비밀번호 찾기" : "아이디 찾기";
-      showToast(`${label} 화면은 준비 중입니다.`);
-    });
   });
   document.querySelectorAll("[data-social-signup]").forEach((node) => {
     node.addEventListener("click", () => {
@@ -6602,15 +7067,24 @@ function renderRoute() {
   state.route = parseRoute();
   bundleRegistry.clear();
   const [base, a] = state.route.split("/").filter(Boolean);
+  const isPublicLoginSubroute = base === "login" && ["order", "find-id", "find-password", "reset-password"].includes(a);
 
   if (!base) return renderHome();
-  if ((base === "login" || base === "signup") && a !== "order" && state.authReady && isLoggedIn()) {
+  if ((base === "login" || base === "signup") && !isPublicLoginSubroute && state.authReady && isLoggedIn()) {
     routeTo("/mypage");
     return;
   }
   if (base === "product") return renderDetail(a);
   if (base === "story") return renderProductStory(a);
-  if (base === "login") return renderAuthPage(a === "order" ? "guest-order" : "login");
+  if (base === "login") {
+    const modeBySegment = {
+      order: "guest-order",
+      "find-id": "find-id",
+      "find-password": "find-password",
+      "reset-password": "reset-password",
+    };
+    return renderAuthPage(modeBySegment[a] || "login");
+  }
   if (base === "signup") return renderAuthPage(a === "form" ? "signup-form" : a === "complete" ? "signup-complete" : "signup");
   if (base === "category") return renderCategory(a);
   if (base === "cart") return renderCart();
