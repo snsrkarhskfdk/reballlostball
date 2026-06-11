@@ -27,3 +27,8 @@ assets/figma/*.png
 !assets/figma/home-*.png
 !assets/figma/inspection-criteria-guide.png
 !assets/figma/reball-logo.png
+!assets/figma/favicon-32.png
+!assets/figma/favicon-192.png
+!assets/figma/favicon-512.png
+!assets/figma/apple-touch-icon.png
+!assets/figma/og-image.png

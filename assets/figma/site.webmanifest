@@ -1,0 +1,13 @@
+{
+  "name": "리볼 로스트볼",
+  "short_name": "리볼 로스트볼",
+  "description": "S/A/B 등급 기준으로 선별한 프리미엄 로스트볼 쇼핑몰",
+  "icons": [
+    { "src": "./favicon-192.png", "sizes": "192x192", "type": "image/png" },
+    { "src": "./favicon-512.png", "sizes": "512x512", "type": "image/png" }
+  ],
+  "theme_color": "#14301F",
+  "background_color": "#F7F6F1",
+  "display": "standalone",
+  "start_url": "/"
+}

@@ -1,6 +1,6 @@
 ﻿const ASSET_PATH = "./assets/figma";
 const HERO_PATH = "/hero";
-const ASSET_VERSION = "20260611-07";
+const ASSET_VERSION = "20260611-08";
 const HERO_DROP_FRAME_COUNT = 10;
 const HERO_DROP_VIRTUAL_FRAME_COUNT = 36;
 const SUPABASE_URL = "https://qbftalhhyfcndanrcwpy.supabase.co";
@@ -1790,6 +1790,12 @@ function renderUiIcon(name, className = "ui-icon") {
   return `<img class="${className}" src="${iconAsset(name)}" alt="" />`;
 }
 
+function renderGradeChip(grade, { size = "" } = {}) {
+  const g = String(grade || "").toUpperCase();
+  const sizeClass = size === "lg" ? " lg" : "";
+  return `<span class="grade-chip grade-chip--${g}${sizeClass}" aria-hidden="true"><b>${g}</b></span>`;
+}
+
 function shopIconAsset(name) {
   return asset(`ui-icons/${shopIconFileMap[name] ?? name}.png`);
 }
@@ -2568,6 +2574,50 @@ function renderCartMovePrompt() {
   `;
 }
 
+function renderHomeHero(representativeProduct) {
+  const ctaRoute = representativeProduct?.slug
+    ? `/product/${representativeProduct.slug}`
+    : "/";
+  const grades = [
+    { grade: "S", label: "최상급 — 외관 사용감이 가장 적은 상품" },
+    { grade: "A", label: "상급 — 라운딩·연습 모두 무난한 상품" },
+    { grade: "B", label: "실속 — 스크래치·마킹이 있을 수 있는 상품" },
+  ];
+  return `
+    <section class="home-hero" aria-labelledby="home-hero-title">
+      <div class="home-hero-copy">
+        <p class="hero-eyebrow">REBALL LOSTBALL</p>
+        <h1 id="home-hero-title">홀컵까지 이어지는<br />프리미엄 로스트볼</h1>
+        <p class="hero-sub">등급 기준과 선별 검수로 믿을 수 있는 로스트볼.<br />원하는 브랜드와 구성을 합리적인 가격에 만나보세요.</p>
+        <div class="home-hero-cta">
+          <button class="primary-btn cta" type="button" data-route="${ctaRoute}">대표 상품 보기</button>
+          <button class="ghost-btn" type="button" data-route="/inspection">검수 기준 알아보기</button>
+        </div>
+        <div class="home-hero-grades" aria-label="등급 안내">
+          ${grades
+            .map(
+              ({ grade, label }) => `
+            <div class="home-hero-grade-item">
+              ${renderGradeChip(grade)}
+              <span>${escapeHtml(label)}</span>
+            </div>`
+            )
+            .join("")}
+        </div>
+      </div>
+      <div class="home-hero-photo">
+        <img
+          src="${asset("hero-poster.webp")}"
+          alt="검수를 마친 프리미엄 로스트볼"
+          width="720"
+          height="900"
+          decoding="async"
+        />
+      </div>
+    </section>
+  `;
+}
+
 function renderHome() {
   const titleist = productByBrand("titleist")[0];
   const taylormade = productByBrand("taylormade")[0];
@@ -2606,7 +2656,7 @@ function renderHome() {
     ...brandMenu.map(([slug, label]) => [label, brandProductRoute(slug)]),
   ];
   layout(`
-    ${FlightTransitionSection([titleist, taylormade, bridgestone])}
+    ${renderHomeHero(titleist)}
 
     <section class="home-filter panel-card" id="products">
       <div>
@@ -2935,7 +2985,7 @@ function renderBestSellerCard(product) {
                   <img src="${asset(product.image)}" alt="${escapeHtml(product.name)}" />
                 </button>`
           }
-          <b>${escapeHtml(product.grade ?? "A")}</b>
+          <span class="best-grade-chip">${renderGradeChip(product.grade ?? "A")}</span>
           ${isPlaceholder ? "" : renderHoverActions(product, wished)}
         </div>
         <div class="best-body">
@@ -3016,18 +3066,18 @@ function renderStoreProduct(item) {
 function renderStorePhotoTile(photo, index) {
   const isLead = index === 0;
   return `
-    <figure class="store-photo-tile store-photo-tile-${index + 1} ${isLead ? "store-photo-tile-lead" : ""}">
-      <img
-        src="${asset(photo.image)}"
-        alt="${escapeHtml(photo.title)}"
-        ${isLead ? 'loading="eager" fetchpriority="high"' : 'loading="lazy"'}
-        decoding="async"
-      />
-      <figcaption>
-        <span>${escapeHtml(photo.label)}</span>
-        <strong>${escapeHtml(photo.title)}</strong>
-        <small>${escapeHtml(photo.body)}</small>
-      </figcaption>
+    <figure class="store-photo-tile store-photo-tile-${index + 1}">
+      <span class="store-photo-frame">
+        <img
+          src="${asset(photo.image)}"
+          alt="${escapeHtml(photo.title)}"
+          width="800"
+          height="600"
+          ${isLead ? 'loading="eager" fetchpriority="high"' : 'loading="lazy"'}
+          decoding="async"
+        />
+      </span>
+      <figcaption>${escapeHtml(photo.title)}</figcaption>
     </figure>
   `;
 }
@@ -4878,11 +4928,11 @@ function renderStore() {
     <section class="store-showcase" aria-labelledby="store-title">
       <div class="store-showcase-copy">
         <p class="store-eyebrow">REBALL LOSTBALL STORE</p>
-        <h1 id="store-title">직접 보고 고르는 송내동 로스트볼 매장</h1>
+        <h1 id="store-title">직접 보고 고르는<br />송내동 로스트볼 매장</h1>
         <p>브랜드와 등급별로 진열된 재고를 확인하고, 필요한 구성은 현장에서 상담 후 구매할 수 있습니다.</p>
         <div class="store-hero-actions">
-          <button class="primary-btn" type="button" data-route="/">상품 먼저 보기</button>
-          <a class="secondary-btn store-map-link" href="${storeMapUrl}" target="_blank" rel="noreferrer">카카오맵 보기</a>
+          <button class="secondary-btn warm" type="button" data-route="/">상품 먼저 보기</button>
+          <a class="ghost-btn store-map-link" href="${storeMapUrl}" target="_blank" rel="noreferrer">카카오맵 보기</a>
         </div>
         <dl class="store-quick-facts" aria-label="매장 핵심 정보">
           <div><dt>방문 위치</dt><dd>${businessProfile.address}</dd></div>
@@ -4890,7 +4940,7 @@ function renderStore() {
           <div><dt>상담 문의</dt><dd>${businessProfile.supportPhone}</dd></div>
         </dl>
       </div>
-      <div class="store-photo-grid" aria-label="카카오맵 매장 사진 4장">
+      <div class="store-photo-grid" aria-label="매장 사진">
         ${storeGalleryPhotos.map(renderStorePhotoTile).join("")}
       </div>
     </section>
@@ -4942,19 +4992,66 @@ function renderStore() {
 }
 
 function renderInspection() {
+  const gradeRows = [
+    {
+      grade: "S",
+      name: "최상급",
+      appearance: "외관 사용감이 가장 적은 상품",
+      use: "라운딩·선물용",
+    },
+    {
+      grade: "A",
+      name: "상급",
+      appearance: "연습·라운딩 모두 무난한 상품",
+      use: "라운딩·연습",
+    },
+    {
+      grade: "B",
+      name: "실속",
+      appearance: "스크래치·펜마킹이 있을 수 있는 상품",
+      use: "연습·입문",
+    },
+  ];
   layout(
     `
+      <section class="inspection-grade-section panel-card" aria-labelledby="inspection-grade-title">
+        <header class="inspection-grade-head">
+          <p>INSPECTION</p>
+          <h1 id="inspection-grade-title">S · A · B 등급 기준을<br />투명하게 공개합니다</h1>
+          <span>외관 상태와 사용 목적에 맞춰 동일한 기준으로 선별합니다.</span>
+        </header>
+        <div class="grade-table" role="table" aria-label="등급 비교">
+          <div class="grade-table-row grade-table-head" role="row">
+            <span role="columnheader">등급</span>
+            <span role="columnheader">외관 기준</span>
+            <span role="columnheader">추천 용도</span>
+          </div>
+          ${gradeRows
+            .map(
+              (row) => `
+            <div class="grade-table-row" role="row">
+              <span role="cell" class="grade-table-chip">
+                ${renderGradeChip(row.grade, { size: "lg" })}
+                <b>${escapeHtml(row.name)}</b>
+              </span>
+              <span role="cell">${escapeHtml(row.appearance)}</span>
+              <span role="cell" class="grade-table-use">${escapeHtml(row.use)}</span>
+            </div>`
+            )
+            .join("")}
+        </div>
+      </section>
       <section class="inspection-page">
         <img
           class="inspection-page-image"
-          src="${asset("inspection-criteria-guide.png")}" 
-          alt="검수 기준 안내 S A B 등급 기준을 투명하게 공개합니다"
-          loading="eager"
-          decoding="sync"
+          src="${asset("inspection-criteria-guide.png")}"
+          alt="검수 기준 상세 안내 이미지"
+          loading="lazy"
+          decoding="async"
         />
       </section>
     `,
-    { mainClass: "inspection-main", noFooter: true }
+    { mainClass: "inspection-main" }
   );
 }
 
