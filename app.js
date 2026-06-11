@@ -624,9 +624,15 @@ function HoleInOneBridge(representativeProducts) {
   return `
     <div class="hole-in-one-bridge" data-hole-bridge>
       <div class="hole-in-one-copy">
-        <p>REBALL LOSTBALL</p>
-        <h1>홀컵까지 이어지는 프리미엄 로스트볼</h1>
-        <span>등급 기준과 대표 구성을 빠르게 확인하고, 가장 많이 찾는 상품으로 바로 이동하세요.</span>
+        <p class="hole-eyebrow">REBALL LOSTBALL</p>
+        <h1 class="hole-title">
+          <span class="hole-title-lead">홀컵까지 이어지는</span>
+          <span class="hole-title-strong">프리미엄 로스트볼</span>
+        </h1>
+        <span class="hole-sub">등급 기준과 대표 구성을 빠르게 확인하고,<br />가장 많이 찾는 상품으로 바로 이동하세요.</span>
+        <div class="hole-grade-row" aria-hidden="true">
+          ${renderGradeChip("S")}${renderGradeChip("A")}${renderGradeChip("B")}
+        </div>
         <button class="gold-cart-btn hole-in-one-cta" type="button" data-scroll-to="products">대표 상품 보기 ${originalCartIcon}</button>
       </div>
       <div class="hole-in-one-products" aria-label="대표 상품 바로가기">
@@ -1790,10 +1796,62 @@ function renderUiIcon(name, className = "ui-icon") {
   return `<img class="${className}" src="${iconAsset(name)}" alt="" />`;
 }
 
+function golfBallDimples() {
+  const dots = [];
+  const step = 4.4;
+  const r = 1.85;
+  let row = 0;
+  for (let y = 3.5; y <= 44.5; y += step) {
+    const off = row % 2 ? step / 2 : 0;
+    for (let x = 3.5; x <= 44.5; x += step) {
+      const cx = x + off;
+      const dx = cx - 24;
+      const dy = y - 24;
+      if (dx * dx + dy * dy <= 19.6 * 19.6) {
+        dots.push(`<circle cx="${cx.toFixed(1)}" cy="${y.toFixed(1)}" r="${r}"/>`);
+      }
+    }
+    row++;
+  }
+  return dots.join("");
+}
+
+// 전 페이지에서 1회만 주입되는 골프공 그래픽 정의(그라데이션·딤플·클립)
+function golfBallSprite() {
+  return `
+    <svg class="golfball-sprite" width="0" height="0" aria-hidden="true" focusable="false">
+      <defs>
+        <radialGradient id="gbShade" cx="37%" cy="29%" r="82%">
+          <stop offset="0%" stop-color="#ffffff" />
+          <stop offset="48%" stop-color="#f4f3ec" />
+          <stop offset="82%" stop-color="#e3e1d5" />
+          <stop offset="100%" stop-color="#c9c7ba" />
+        </radialGradient>
+        <radialGradient id="gbDimpleGrad" cx="50%" cy="38%" r="62%">
+          <stop offset="0%" stop-color="#a9a89c" stop-opacity="0.55" />
+          <stop offset="62%" stop-color="#cfcec2" stop-opacity="0.22" />
+          <stop offset="100%" stop-color="#ffffff" stop-opacity="0.6" />
+        </radialGradient>
+        <clipPath id="gbClip"><circle cx="24" cy="24" r="21.5" /></clipPath>
+        <g id="gbDimples" fill="url(#gbDimpleGrad)">${golfBallDimples()}</g>
+      </defs>
+    </svg>
+  `;
+}
+
 function renderGradeChip(grade, { size = "" } = {}) {
   const g = String(grade || "").toUpperCase();
-  const sizeClass = size === "lg" ? " lg" : "";
-  return `<span class="grade-chip grade-chip--${g}${sizeClass}" aria-hidden="true"><b>${g}</b></span>`;
+  const sizeClass = size ? ` ${size}` : "";
+  return `
+    <span class="grade-chip grade-chip--${g}${sizeClass}" role="img" aria-label="${g}등급">
+      <svg class="golf-ball" viewBox="0 0 48 48" aria-hidden="true">
+        <circle class="gb-body" cx="24" cy="24" r="21.5" />
+        <g clip-path="url(#gbClip)"><use href="#gbDimples" /></g>
+        <ellipse class="gb-shine" cx="16.5" cy="14" rx="9.5" ry="6.2" />
+        <text class="gb-letter" x="24" y="25">${g}</text>
+      </svg>
+    </span>
+  `;
 }
 
 function shopIconAsset(name) {
@@ -2073,52 +2131,51 @@ function firstAvailableVariant(product, partial = {}) {
 }
 
 function normalizeProductSelection(product, selection) {
-  const safeSelection = {
+  // 각 옵션을 독립적으로 검증만 하고, 사용자가 고른 조합을 그대로 보존한다.
+  // (가용 variant로 스냅백하지 않으므로 모델·등급·구성·색상을 자유롭게 선택 가능)
+  return {
     model: product.models?.includes(selection.model) ? selection.model : product.models?.[0],
     grade: gradeOptions.some((item) => item.id === selection.grade) ? selection.grade : "A",
     pack: packOptions.some((item) => item.id === selection.pack) ? selection.pack : "10구",
     color: product.colors?.includes(selection.color) ? selection.color : product.colors?.[0],
   };
-  const exact = productVariants(product).find(
-    (variant) =>
-      variant.available &&
-      variant.model === safeSelection.model &&
-      variant.grade === safeSelection.grade &&
-      variant.pack === safeSelection.pack &&
-      variant.color === safeSelection.color
-  );
-  const variant = exact || firstAvailableVariant(product, { model: safeSelection.model, grade: safeSelection.grade }) || firstAvailableVariant(product);
-  return {
-    model: variant.model,
-    grade: variant.grade,
-    pack: variant.pack,
-    color: variant.color,
-  };
 }
 
 function selectedVariant(product) {
   const selection = getSelection(product);
-  return (
-    productVariants(product).find(
-      (variant) =>
-        variant.model === selection.model &&
-        variant.grade === selection.grade &&
-        variant.pack === selection.pack &&
-        variant.color === selection.color
-    ) || firstAvailableVariant(product)
+  const exact = productVariants(product).find(
+    (variant) =>
+      variant.model === selection.model &&
+      variant.grade === selection.grade &&
+      variant.pack === selection.pack &&
+      variant.color === selection.color
   );
+  if (exact) return exact;
+
+  // 정확히 일치하는 variant가 없으면(예: 희소한 DB variant) 선택 기준으로 합성해
+  // 어떤 조합을 골라도 가격이 항상 선택대로 계산되도록 한다.
+  const price = priceForSelection(product, selection);
+  const compareAtPrice = compareAtForPrice(product, price);
+  return {
+    id: `${product.slug}-${productToken(selection.model)}-${selection.grade}-${productToken(selection.pack)}-${productToken(selection.color)}`,
+    sku: `RB-${productSkuToken(product.brandSlug).slice(0, 4)}-${productSkuToken(selection.model).slice(0, 5)}-${selection.grade}-${(packOptions.find((p) => p.id === selection.pack)?.qty) || ""}-${productSkuToken(selection.color).slice(0, 3) || "CLR"}`,
+    model: selection.model,
+    grade: selection.grade,
+    pack: selection.pack,
+    color: selection.color,
+    price,
+    compareAtPrice,
+    discountPercent: discountPercent(price, compareAtPrice),
+    imageUrl: productVariantImage(product, selection),
+    stock: 99,
+    available: true,
+  };
 }
 
-function isOptionSelectable(product, key, value, selection = getSelection(product)) {
-  const candidate = { ...selection, [key]: value };
-  return productVariants(product).some(
-    (variant) =>
-      variant.available &&
-      variant.model === candidate.model &&
-      variant.grade === candidate.grade &&
-      variant.pack === candidate.pack &&
-      variant.color === candidate.color
-  );
+function isOptionSelectable() {
+  // 모든 옵션을 자유롭게 선택할 수 있도록 항상 허용한다.
+  // 가격은 선택한 조합(등급·구성)에 따라 selectedVariant에서 계산된다.
+  return true;
 }
 
 function productCardMetrics(product) {
@@ -2223,6 +2280,7 @@ function normalizePosts(posts) {
 function layout(content, options = {}) {
   app.innerHTML = `
     <div class="app-shell">
+      ${golfBallSprite()}
       ${options.noHeader ? "" : renderHeader()}
       <main${options.mainClass ? ` class="${options.mainClass}"` : ""}>${content}</main>
       ${options.admin || options.noFooter ? "" : renderFooter()}
@@ -2330,9 +2388,9 @@ function renderFooter() {
   ];
   const companyLinks = [
     ["회사 소개", "/brand-story"],
-    ["이용 약관", "/customer-center"],
-    ["개인정보처리방침", "/customer-center"],
-    ["사업자 정보 확인", "/customer-center"],
+    ["이용약관", "/terms"],
+    ["개인정보처리방침", "/privacy"],
+    ["사업자 정보 확인", "/business"],
     ["관리자", "/admin"],
   ];
 
@@ -2908,8 +2966,8 @@ function renderHomeGradeGuideBody() {
         .map(
           (grade) => `
         <article class="home-grade-system-card ${escapeHtml(grade.tone)}">
-          <span class="home-grade-letter" aria-hidden="true">
-            <img src="${asset(grade.image)}" alt="" loading="eager" decoding="async" />
+          <span class="home-grade-letter">
+            ${renderGradeChip(grade.label, { size: "xl" })}
           </span>
           <div>
             <small><span>${escapeHtml(grade.label)} 등급</span><b>${escapeHtml(grade.rate)}</b></small>
@@ -4932,7 +4990,10 @@ function renderStore() {
     <section class="store-showcase" aria-labelledby="store-title">
       <div class="store-showcase-copy">
         <p class="store-eyebrow">REBALL LOSTBALL STORE</p>
-        <h1 id="store-title">직접 보고 고르는<br />송내동 로스트볼 매장</h1>
+        <h1 id="store-title">
+          <span class="store-title-lead">직접 보고 고르는</span>
+          <span class="store-title-strong">송내동 로스트볼 매장</span>
+        </h1>
         <p>브랜드와 등급별로 진열된 재고를 확인하고, 필요한 구성은 현장에서 상담 후 구매할 수 있습니다.</p>
         <div class="store-hero-actions">
           <button class="secondary-btn warm" type="button" data-route="/">상품 먼저 보기</button>
@@ -5062,16 +5123,216 @@ function renderInspection() {
 function renderBrandStory() {
   layout(`
     <section class="page-title">
-      <p>브랜드 스토리</p>
-      <h1>로스트볼을 다시 신뢰할 수 있게 만드는 기준</h1>
-      <span>상품 이미지 표준화, 공 딤플 밀도, 컴팩트한 컬러 순환 마크, 워드마크 비율을 중심으로 브랜드 경험을 정리했습니다.</span>
+      <p>회사 소개</p>
+      <h1>로스트볼을 다시<br />신뢰할 수 있게 만드는 기준</h1>
+      <span>리볼 로스트볼은 수거·세척·선별 과정을 표준화해, 합리적인 가격에 믿을 수 있는 로스트볼을 제공합니다.</span>
     </section>
-    <section class="story-panel">
-      <img src="${asset("reball-logo.png")}" alt="" />
-      <div>
-        <h2>리볼 로스트볼</h2>
-        <p>동일한 크기, 명도, 채도, 조명 방향의 누끼 이미지를 기준으로 상품 상세와 카드 이미지를 관리합니다.</p>
+    <section class="legal-page">
+      <article class="legal-card">
+        <h2>우리가 하는 일</h2>
+        <p>리볼 로스트볼은 전국에서 수거된 로스트볼을 세척하고, 외관 상태와 사용 목적에 따라 S·A·B 등급으로 선별해 판매합니다. 부천 소사구 송내동 매장에서 직접 운영하며, 온라인 주문과 매장 방문 구매를 같은 기준으로 준비합니다.</p>
+      </article>
+      <article class="legal-card">
+        <h2>등급 선별 기준</h2>
+        <p>모든 상품은 동일한 조명·기준으로 검수합니다. 사용에 지장이 있는 공은 선별 과정에서 제외하며, 등급별 외관 차이는 검수기준 페이지에서 투명하게 공개합니다.</p>
+        <div class="legal-grade-row" aria-label="등급 요약">
+          <span class="legal-grade-item">${renderGradeChip("S")}<b>최상급</b></span>
+          <span class="legal-grade-item">${renderGradeChip("A")}<b>상급</b></span>
+          <span class="legal-grade-item">${renderGradeChip("B")}<b>실속</b></span>
+        </div>
+      </article>
+      <article class="legal-card">
+        <h2>약속</h2>
+        <p>정직한 품질 표기와 합리적인 가격, 빠른 출고와 성실한 문의 응대를 약속합니다. 본 상품은 정품 브랜드와 무관한 재판매·선별 상품이며, 브랜드 로고·상표는 각 권리자의 자산입니다.</p>
+      </article>
+      <div class="legal-cta-row">
+        <button class="secondary-btn" type="button" data-route="/inspection">검수 기준 보기</button>
+        <button class="secondary-btn" type="button" data-route="/business">사업자 정보 확인</button>
       </div>
+    </section>
+  `);
+}
+
+function renderLegalPage({ eyebrow, title, intro, sections, updated }) {
+  layout(`
+    <section class="page-title">
+      <p>${escapeHtml(eyebrow)}</p>
+      <h1>${title}</h1>
+      ${intro ? `<span>${escapeHtml(intro)}</span>` : ""}
+    </section>
+    <section class="legal-page">
+      ${sections
+        .map(
+          (sec) => `
+        <article class="legal-card">
+          ${sec.heading ? `<h2>${escapeHtml(sec.heading)}</h2>` : ""}
+          ${(sec.paragraphs || []).map((p) => `<p>${p}</p>`).join("")}
+          ${
+            sec.list
+              ? `<ul class="legal-list">${sec.list.map((li) => `<li>${li}</li>`).join("")}</ul>`
+              : ""
+          }
+        </article>`
+        )
+        .join("")}
+      ${updated ? `<p class="legal-updated">시행일 · ${escapeHtml(updated)}</p>` : ""}
+    </section>
+  `);
+}
+
+function renderTerms() {
+  renderLegalPage({
+    eyebrow: "이용약관",
+    title: "이용약관",
+    intro: "리볼 로스트볼 온라인 쇼핑몰 이용에 관한 기본 약관입니다.",
+    updated: "2025.07.01",
+    sections: [
+      {
+        heading: "제1조 (목적)",
+        paragraphs: [
+          "본 약관은 리볼 로스트볼(이하 '회사')이 운영하는 온라인 쇼핑몰에서 제공하는 서비스의 이용 조건과 절차, 회사와 이용자의 권리·의무 및 책임사항을 규정함을 목적으로 합니다.",
+        ],
+      },
+      {
+        heading: "제2조 (정의)",
+        list: [
+          "‘로스트볼’이란 수거·세척·선별 과정을 거친 중고 골프공을 말합니다.",
+          "‘등급’이란 외관 상태와 사용 목적에 따라 분류한 S·A·B 기준을 말합니다.",
+          "‘이용자’란 회원 및 비회원으로서 본 서비스를 이용하는 자를 말합니다.",
+        ],
+      },
+      {
+        heading: "제3조 (약관의 효력 및 변경)",
+        paragraphs: [
+          "본 약관은 서비스 화면에 게시함으로써 효력이 발생합니다. 회사는 관련 법령을 위반하지 않는 범위에서 약관을 변경할 수 있으며, 변경 시 적용일자와 사유를 명시해 사전 공지합니다.",
+        ],
+      },
+      {
+        heading: "제4조 (상품의 특성)",
+        paragraphs: [
+          "본 쇼핑몰에서 판매하는 상품은 로스트볼(중고 골프공)로, 로스트볼 특성상 미세 스크래치, 펜마킹, 로고, 변색 등이 일부 존재할 수 있습니다. 등급 기준에 따라 선별하여 판매하며, 사용에 지장이 있는 공은 출고 전 제외합니다.",
+          "모델·번호·로고·색상 구성은 재고 상황에 따라 달라질 수 있습니다. 본 상품은 정품 브랜드와 무관한 재판매·선별 상품이며, 각 브랜드의 상표·로고는 해당 권리자의 자산입니다.",
+        ],
+      },
+      {
+        heading: "제5조 (주문 및 계약 성립)",
+        paragraphs: [
+          "이용자는 회원 또는 비회원으로 상품을 주문할 수 있으며, 회사가 주문 내역을 확인하고 결제가 완료된 시점에 구매계약이 성립합니다. 재고 부족·오기재 등의 사유가 있는 경우 회사는 주문을 취소하거나 대체 상품을 안내할 수 있습니다.",
+        ],
+      },
+      {
+        heading: "제6조 (청약철회·교환·반품)",
+        paragraphs: [
+          "이용자는 관련 법령에 따라 상품 수령 후 7일 이내 단순변심에 의한 청약철회를 할 수 있으며, 이 경우 왕복 배송비는 구매자가 부담합니다. 상품에 하자가 있거나 표시·광고와 다른 경우에는 수령 후 30일 이내 교환·환불이 가능하며 배송비는 회사가 부담합니다.",
+          "로스트볼의 등급 기준 범위 내 외관 상태(미세 스크래치·마킹·변색 등)는 하자에 해당하지 않습니다.",
+        ],
+      },
+      {
+        heading: "제7조 (회사의 의무)",
+        paragraphs: [
+          "회사는 관련 법령과 본 약관을 준수하며, 상품의 품질 표기와 가격, 배송 정보를 정직하게 제공하기 위해 노력합니다. 이용자의 개인정보는 개인정보처리방침에 따라 보호합니다.",
+        ],
+      },
+      {
+        heading: "제8조 (책임의 제한)",
+        paragraphs: [
+          "회사는 천재지변, 택배사 사정 등 회사의 통제를 벗어난 사유로 인한 배송 지연에 대해 책임을 부담하지 않습니다. 기타 본 약관에 명시되지 않은 사항은 전자상거래 등에서의 소비자보호에 관한 법률 등 관련 법령과 상관례에 따릅니다.",
+        ],
+      },
+    ],
+  });
+}
+
+function renderPrivacy() {
+  renderLegalPage({
+    eyebrow: "개인정보처리방침",
+    title: "개인정보처리방침",
+    intro: "리볼 로스트볼은 이용자의 개인정보를 소중히 다루며 관련 법령을 준수합니다.",
+    updated: "2025.07.01",
+    sections: [
+      {
+        heading: "1. 수집하는 개인정보 항목",
+        list: [
+          "회원가입·로그인: 로그인 아이디, 이메일, 소셜 로그인 식별자(카카오·네이버) 및 닉네임",
+          "주문·배송: 주문자명, 휴대전화번호, 배송지 주소, 배송 요청사항",
+          "결제: 결제수단 정보(카드·계좌이체·가상계좌·간편결제), 결제 승인 내역",
+          "자동 수집: 접속 로그, 쿠키, 서비스 이용 기록",
+        ],
+      },
+      {
+        heading: "2. 개인정보의 수집 및 이용 목적",
+        list: [
+          "상품 주문·결제·배송 및 본인 확인",
+          "회원 관리, 비회원 주문 조회, 고객 문의 응대",
+          "서비스 개선 및 부정 이용 방지",
+        ],
+      },
+      {
+        heading: "3. 개인정보의 보유 및 이용 기간",
+        paragraphs: [
+          "회사는 수집 목적이 달성되면 지체 없이 개인정보를 파기합니다. 다만 관련 법령에 따라 일정 기간 보존이 필요한 경우 해당 기간 동안 보관합니다.",
+        ],
+        list: [
+          "계약·청약철회 등에 관한 기록: 5년 (전자상거래법)",
+          "대금결제 및 재화 공급에 관한 기록: 5년 (전자상거래법)",
+          "소비자 불만·분쟁 처리에 관한 기록: 3년 (전자상거래법)",
+        ],
+      },
+      {
+        heading: "4. 개인정보의 제3자 제공 및 처리위탁",
+        paragraphs: [
+          "회사는 이용자의 동의 없이 개인정보를 외부에 제공하지 않습니다. 다만 원활한 서비스 제공을 위해 결제대행사, 택배사, 호스팅·인증 서비스 등에 업무를 위탁할 수 있으며, 위탁 시 관련 법령에 따라 안전하게 관리합니다.",
+        ],
+      },
+      {
+        heading: "5. 이용자의 권리",
+        paragraphs: [
+          "이용자는 언제든지 본인의 개인정보 열람·정정·삭제 및 처리정지를 요청할 수 있으며, 회원 탈퇴를 통해 개인정보 삭제를 요청할 수 있습니다.",
+        ],
+      },
+      {
+        heading: "6. 개인정보 보호책임자",
+        paragraphs: [
+          `개인정보 관련 문의는 고객센터(${businessProfile.supportPhone}) 또는 이메일(${businessProfile.supportEmail})로 연락주시기 바랍니다. 운영시간은 평일 ${businessProfile.operationHours}입니다.`,
+        ],
+      },
+    ],
+  });
+}
+
+function renderBusinessInfo() {
+  const rows = [
+    ["상호", businessProfile.name],
+    ["대표자", businessProfile.owner],
+    ["사업자등록번호", businessProfile.businessNumber],
+    ["통신판매업 신고번호", businessProfile.mailOrderNumber],
+    ["사업장 소재지", businessProfile.address],
+    ["고객센터", businessProfile.supportPhone],
+    ["이메일", businessProfile.supportEmail],
+    ["운영시간", `평일 ${businessProfile.operationHours}`],
+    ["반품 주소", businessProfile.returnAddress],
+  ];
+  layout(`
+    <section class="page-title">
+      <p>사업자 정보 확인</p>
+      <h1>사업자 정보</h1>
+      <span>리볼 로스트볼은 아래와 같이 사업자 정보를 투명하게 공개합니다.</span>
+    </section>
+    <section class="legal-page">
+      <article class="legal-card">
+        <dl class="business-info-list">
+          ${rows
+            .map(
+              ([label, value]) => `
+            <div>
+              <dt>${escapeHtml(label)}</dt>
+              <dd>${escapeHtml(value)}</dd>
+            </div>`
+            )
+            .join("")}
+        </dl>
+        <p class="legal-note">본 상품은 정품 브랜드와 무관한 재판매·선별(로스트볼) 상품이며, 브랜드 로고 및 상표는 각 권리자의 자산입니다.</p>
+      </article>
     </section>
   `);
 }
@@ -8075,6 +8336,9 @@ function renderRoute() {
   if (base === "store") return renderStore();
   if (base === "inspection") return renderInspection();
   if (base === "brand-story") return renderBrandStory();
+  if (base === "terms") return renderTerms();
+  if (base === "privacy") return renderPrivacy();
+  if (base === "business") return renderBusinessInfo();
   if (base === "customer-center") return renderCustomerCenter();
   if (base === "notice") return renderNotice();
   if (base === "faq") return renderFaq();

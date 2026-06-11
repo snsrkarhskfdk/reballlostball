@@ -1944,39 +1944,82 @@ main.inspection-main {
   -webkit-backdrop-filter: blur(20px) saturate(126%);
 }
 
-.hole-in-one-copy p {
+.hole-in-one-copy .hole-eyebrow {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
   margin: 0;
-  color: rgba(11, 61, 46, 0.8);
+  color: var(--turf);
+  font-family: var(--font-data);
   font-size: clamp(11px, 1vw, 13px);
-  font-weight: 900;
-  letter-spacing: 0.02em;
+  font-weight: 600;
+  letter-spacing: 0.18em;
   line-height: 1;
+  text-transform: uppercase;
 }
 
-.hole-in-one-copy h1 {
-  max-width: 10.8em;
-  margin: 14px 0 0;
-  color: rgba(16, 21, 18, 0.6);
-  font-size: clamp(38px, 5vw, 70px);
-  line-height: 0.98;
-  letter-spacing: -0.065em;
-  font-weight: 950;
+.hole-in-one-copy .hole-eyebrow::before {
+  content: "";
+  width: 28px;
+  height: 2px;
+  border-radius: 999px;
+  background: linear-gradient(90deg, var(--flag), var(--turf));
+}
+
+.hole-in-one-copy .hole-title {
+  margin: 16px 0 0;
+  font-weight: 800;
+  letter-spacing: -0.03em;
   word-break: keep-all;
 }
 
-.hole-in-one-copy span {
+.hole-in-one-copy .hole-title-lead {
   display: block;
-  max-width: 420px;
-  margin-top: 20px;
-  color: rgba(16, 21, 18, 0.8);
+  color: rgba(20, 48, 31, 0.62);
+  font-size: clamp(20px, 2.3vw, 30px);
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  line-height: 1.1;
+}
+
+.hole-in-one-copy .hole-title-strong {
+  display: block;
+  margin-top: 4px;
+  font-size: clamp(40px, 5.2vw, 72px);
+  line-height: 1.0;
+  letter-spacing: -0.035em;
+  font-weight: 800;
+  background: linear-gradient(120deg, var(--ink) 0%, var(--turf) 62%, #3f7a52 100%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+  color: var(--ink);
+}
+
+.hole-in-one-copy .hole-sub {
+  display: block;
+  max-width: 440px;
+  margin-top: 18px;
+  color: rgba(20, 48, 31, 0.78);
   font-size: clamp(14px, 1.18vw, 17px);
-  font-weight: 720;
-  line-height: 1.64;
+  font-weight: 500;
+  line-height: 1.62;
   word-break: keep-all;
+}
+
+.hole-grade-row {
+  display: flex;
+  gap: 12px;
+  margin-top: 22px;
+}
+
+.hole-grade-row .grade-chip {
+  width: 38px;
+  height: 38px;
 }
 
 .hole-in-one-cta {
-  margin-top: 26px;
+  margin-top: 24px;
   min-width: 176px;
 }
 
@@ -13327,7 +13370,14 @@ h1, h2, h3, h4 {
   display: block;
 }
 
-/* ── 등급 칩 시스템 (시그니처) ───────────────────────────── */
+/* ── 등급 칩 시스템 — 리얼 골프공 SVG (시그니처) ─────────── */
+.golfball-sprite {
+  position: absolute;
+  width: 0;
+  height: 0;
+  overflow: hidden;
+}
+
 .grade-chip {
   position: relative;
   display: inline-flex;
@@ -13335,54 +13385,65 @@ h1, h2, h3, h4 {
   justify-content: center;
   width: 40px;
   height: 40px;
-  border-radius: var(--radius-chip);
-  background: var(--chalk);
-  font-family: var(--font-data);
-  font-size: 15px;
-  font-weight: 700;
-  color: var(--ink);
-  overflow: hidden;
   flex-shrink: 0;
+  filter: drop-shadow(0 3px 5px rgba(20, 48, 31, 0.18));
 }
 
-/* 골프공 딤플 패턴 */
-.grade-chip::before {
-  content: "";
-  position: absolute;
-  inset: 0;
-  border-radius: inherit;
-  background-image: radial-gradient(circle, rgba(20, 48, 31, 0.15) 1px, transparent 1px);
-  background-size: 6px 6px;
-  pointer-events: none;
+.grade-chip .golf-ball {
+  display: block;
+  width: 100%;
+  height: 100%;
+  overflow: visible;
+  fill: none;
+  stroke: none;
+  stroke-width: 0;
 }
 
-.grade-chip > * {
-  position: relative;
-  z-index: 1;
+.grade-chip .gb-body {
+  fill: url(#gbShade);
+  stroke: rgba(20, 48, 31, 0.12);
+  stroke-width: 0.75;
 }
 
-.grade-chip--S {
-  border: 2px solid var(--flag);
-  color: var(--flag);
+.grade-chip .gb-shine {
+  fill: #ffffff;
+  opacity: 0.55;
+  stroke: none;
 }
 
-.grade-chip--A {
-  border: 2px solid var(--turf);
-  color: var(--turf);
+.grade-chip .gb-letter {
+  font-family: var(--font-data);
+  font-weight: 700;
+  font-size: 19px;
+  text-anchor: middle;
+  dominant-baseline: central;
+  stroke: none;
+  paint-order: stroke;
 }
 
-.grade-chip--B {
-  border: 2px solid var(--sand);
-  color: var(--ink);
-}
+/* 등급별 색상 — 골프공에 프린트된 컬러 등급 표기 + 컬러 림(스펙 §2) */
+.grade-chip--S .gb-body { stroke: var(--flag); stroke-width: 2; }
+.grade-chip--S .gb-letter { fill: var(--flag); }
+.grade-chip--A .gb-body { stroke: var(--turf); stroke-width: 2; }
+.grade-chip--A .gb-letter { fill: var(--turf); }
+.grade-chip--B .gb-body { stroke: #c9bd9a; stroke-width: 2; }
+.grade-chip--B .gb-letter { fill: var(--ink); }
 
 .grade-chip.lg {
-  width: 48px;
-  height: 48px;
-  font-size: 18px;
+  width: 52px;
+  height: 52px;
 }
 
-/* 베스트셀러 카드 위 등급 칩 위치 */
+.grade-chip.lg .gb-letter { font-size: 18px; }
+
+.grade-chip.xl {
+  width: 84px;
+  height: 84px;
+}
+
+.grade-chip.xl .gb-letter { font-size: 17px; }
+
+/* 베스트셀러 카드 위 등급 칩 위치 (중앙 정렬된 골프공) */
 .best-grade-chip {
   position: absolute;
   z-index: 2;
@@ -13391,11 +13452,11 @@ h1, h2, h3, h4 {
 }
 
 .best-grade-chip .grade-chip {
-  width: 34px;
-  height: 34px;
-  font-size: 13px;
-  box-shadow: 0 1px 2px rgba(20, 48, 31, 0.12);
+  width: 38px;
+  height: 38px;
 }
+
+.best-grade-chip .grade-chip .gb-letter { font-size: 20px; }
 
 /* ── 섹션 수직 패딩 ──────────────────────────────────────── */
 .home-section,
@@ -13609,9 +13670,35 @@ hr,
 }
 
 .store-showcase-copy {
+  position: relative;
+  isolation: isolate;
   background: var(--ink) !important;
   border-radius: var(--radius-card) !important;
   color: var(--chalk);
+  overflow: hidden;
+}
+
+/* 골프 매장 사진을 배경에 은은하게 + 다크 그라데이션 오버레이 */
+.store-showcase-copy::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: -2;
+  background-image: url("./assets/figma/store/reball-store-02.webp");
+  background-size: cover;
+  background-position: center;
+  opacity: 0.22;
+  filter: saturate(0.85);
+}
+
+.store-showcase-copy::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  background:
+    radial-gradient(120% 90% at 0% 0%, rgba(46, 92, 63, 0.55), transparent 55%),
+    linear-gradient(160deg, rgba(20, 48, 31, 0.86) 0%, rgba(20, 48, 31, 0.92) 55%, rgba(13, 33, 22, 0.96) 100%);
 }
 
 .store-eyebrow,
@@ -13619,9 +13706,49 @@ hr,
   color: var(--sand) !important;
 }
 
+.store-showcase-copy .store-eyebrow {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  font-family: var(--font-data);
+  font-weight: 600;
+  letter-spacing: 0.16em;
+}
+
+.store-showcase-copy .store-eyebrow::before {
+  content: "";
+  width: 28px;
+  height: 2px;
+  border-radius: 999px;
+  background: linear-gradient(90deg, var(--flag), var(--sand));
+}
+
 .store-showcase-copy h1 {
   font-weight: 800;
   letter-spacing: -0.02em;
+}
+
+.store-showcase-copy .store-title-lead {
+  display: block;
+  color: rgba(255, 255, 255, 0.66);
+  font-size: clamp(20px, 2.4vw, 32px);
+  font-weight: 500;
+  letter-spacing: -0.01em;
+  line-height: 1.1;
+}
+
+.store-showcase-copy .store-title-strong {
+  display: block;
+  margin-top: 6px;
+  font-size: clamp(34px, 4vw, 60px);
+  font-weight: 800;
+  letter-spacing: -0.03em;
+  line-height: 1.04;
+  background: linear-gradient(118deg, #ffffff 0%, #eef6ef 40%, #cfe6d4 100%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+  color: #ffffff;
 }
 
 .store-showcase-copy > p:not(.store-eyebrow) {
@@ -13937,5 +14064,147 @@ hr,
 
   .grade-table-head {
     display: none;
+  }
+}
+
+/* ── 법무·정보 페이지 (이용약관/개인정보/사업자정보/회사소개) ── */
+.legal-page {
+  width: min(880px, calc(100% - 48px));
+  margin: 0 auto;
+  padding-bottom: 96px;
+  display: grid;
+  gap: 16px;
+}
+
+.legal-card {
+  background: var(--chalk);
+  border-radius: var(--radius-card);
+  box-shadow: var(--shadow-card);
+  padding: clamp(24px, 4vw, 40px);
+}
+
+.legal-card h2 {
+  margin: 0 0 14px;
+  font-size: 1.125rem;
+  font-weight: 800;
+  letter-spacing: -0.01em;
+  color: var(--ink);
+}
+
+.legal-card p {
+  margin: 0 0 12px;
+  color: rgba(20, 48, 31, 0.78);
+  line-height: 1.75;
+}
+
+.legal-card p:last-child {
+  margin-bottom: 0;
+}
+
+.legal-list {
+  margin: 8px 0 0;
+  padding-left: 0;
+  list-style: none;
+  display: grid;
+  gap: 10px;
+}
+
+.legal-list li {
+  position: relative;
+  padding-left: 18px;
+  color: rgba(20, 48, 31, 0.78);
+  line-height: 1.7;
+}
+
+.legal-list li::before {
+  content: "";
+  position: absolute;
+  left: 2px;
+  top: 11px;
+  width: 6px;
+  height: 6px;
+  border-radius: 999px;
+  background: var(--turf);
+}
+
+.legal-updated {
+  margin: 4px 4px 0;
+  font-family: var(--font-data);
+  font-size: var(--text-caption);
+  color: rgba(20, 48, 31, 0.5);
+}
+
+.legal-grade-row {
+  display: flex;
+  gap: 24px;
+  margin-top: 18px;
+  flex-wrap: wrap;
+}
+
+.legal-grade-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.legal-grade-item b {
+  font-weight: 700;
+  color: var(--ink);
+}
+
+.legal-cta-row {
+  display: flex;
+  gap: 12px;
+  flex-wrap: wrap;
+  margin-top: 4px;
+}
+
+/* 사업자 정보 정의 목록 */
+.business-info-list {
+  margin: 0;
+  display: grid;
+  gap: 0;
+}
+
+.business-info-list > div {
+  display: grid;
+  grid-template-columns: 160px 1fr;
+  gap: 16px;
+  padding: 16px 4px;
+  border-bottom: 1px solid var(--sand);
+}
+
+.business-info-list > div:last-child {
+  border-bottom: none;
+}
+
+.business-info-list dt {
+  margin: 0;
+  font-size: var(--text-caption);
+  font-weight: 700;
+  color: rgba(20, 48, 31, 0.55);
+}
+
+.business-info-list dd {
+  margin: 0;
+  font-family: var(--font-data);
+  font-weight: 600;
+  color: var(--ink);
+  line-height: 1.5;
+}
+
+.legal-note {
+  margin: 20px 0 0;
+  padding-top: 16px;
+  border-top: 1px solid var(--sand);
+  font-size: var(--text-caption);
+  color: rgba(20, 48, 31, 0.55);
+  line-height: 1.6;
+}
+
+@media (max-width: 560px) {
+  .business-info-list > div {
+    grid-template-columns: 1fr;
+    gap: 4px;
   }
 }
