@@ -1,6 +1,6 @@
 ﻿const ASSET_PATH = "./assets/figma";
 const HERO_PATH = "/hero";
-const ASSET_VERSION = "20260611-08";
+const ASSET_VERSION = "20260612-01";
 const HERO_DROP_FRAME_COUNT = 10;
 const HERO_DROP_VIRTUAL_FRAME_COUNT = 36;
 const SUPABASE_URL = "https://qbftalhhyfcndanrcwpy.supabase.co";
@@ -1796,60 +1796,14 @@ function renderUiIcon(name, className = "ui-icon") {
   return `<img class="${className}" src="${iconAsset(name)}" alt="" />`;
 }
 
-function golfBallDimples() {
-  const dots = [];
-  const step = 4.4;
-  const r = 1.85;
-  let row = 0;
-  for (let y = 3.5; y <= 44.5; y += step) {
-    const off = row % 2 ? step / 2 : 0;
-    for (let x = 3.5; x <= 44.5; x += step) {
-      const cx = x + off;
-      const dx = cx - 24;
-      const dy = y - 24;
-      if (dx * dx + dy * dy <= 19.6 * 19.6) {
-        dots.push(`<circle cx="${cx.toFixed(1)}" cy="${y.toFixed(1)}" r="${r}"/>`);
-      }
-    }
-    row++;
-  }
-  return dots.join("");
-}
-
-// 전 페이지에서 1회만 주입되는 골프공 그래픽 정의(그라데이션·딤플·클립)
-function golfBallSprite() {
-  return `
-    <svg class="golfball-sprite" width="0" height="0" aria-hidden="true" focusable="false">
-      <defs>
-        <radialGradient id="gbShade" cx="37%" cy="29%" r="82%">
-          <stop offset="0%" stop-color="#ffffff" />
-          <stop offset="48%" stop-color="#f4f3ec" />
-          <stop offset="82%" stop-color="#e3e1d5" />
-          <stop offset="100%" stop-color="#c9c7ba" />
-        </radialGradient>
-        <radialGradient id="gbDimpleGrad" cx="50%" cy="38%" r="62%">
-          <stop offset="0%" stop-color="#a9a89c" stop-opacity="0.55" />
-          <stop offset="62%" stop-color="#cfcec2" stop-opacity="0.22" />
-          <stop offset="100%" stop-color="#ffffff" stop-opacity="0.6" />
-        </radialGradient>
-        <clipPath id="gbClip"><circle cx="24" cy="24" r="21.5" /></clipPath>
-        <g id="gbDimples" fill="url(#gbDimpleGrad)">${golfBallDimples()}</g>
-      </defs>
-    </svg>
-  `;
-}
-
+// 브랜드 로고에서 추출한 실사 골프공 + 등급 글자를 "프린트"처럼 올린 칩
 function renderGradeChip(grade, { size = "" } = {}) {
   const g = String(grade || "").toUpperCase();
   const sizeClass = size ? ` ${size}` : "";
   return `
     <span class="grade-chip grade-chip--${g}${sizeClass}" role="img" aria-label="${g}등급">
-      <svg class="golf-ball" viewBox="0 0 48 48" aria-hidden="true">
-        <circle class="gb-body" cx="24" cy="24" r="21.5" />
-        <g clip-path="url(#gbClip)"><use href="#gbDimples" /></g>
-        <ellipse class="gb-shine" cx="16.5" cy="14" rx="9.5" ry="6.2" />
-        <text class="gb-letter" x="24" y="25">${g}</text>
-      </svg>
+      <img class="grade-chip-ball" src="${asset("grade-ball.png")}" alt="" loading="lazy" decoding="async" />
+      <b class="grade-chip-letter">${g}</b>
     </span>
   `;
 }
@@ -2280,7 +2234,6 @@ function normalizePosts(posts) {
 function layout(content, options = {}) {
   app.innerHTML = `
     <div class="app-shell">
-      ${golfBallSprite()}
       ${options.noHeader ? "" : renderHeader()}
       <main${options.mainClass ? ` class="${options.mainClass}"` : ""}>${content}</main>
       ${options.admin || options.noFooter ? "" : renderFooter()}
@@ -3317,12 +3270,11 @@ function productGalleryItems(product, variant = selectedVariant(product)) {
 }
 
 function renderGalleryStage(product, modalInitialImage) {
-  const variant = selectedVariant(product);
-  const showsVariantImage = variant.imageUrl && variant.imageUrl !== product.image;
-  if (product.galleryVideo && !showsVariantImage) {
+  // 회전 영상이 있으면 항상 재생되도록 메인 스테이지에 노출한다(옵션 이미지와 무관).
+  if (product.galleryVideo) {
     return `
       <div class="gallery-stage has-video">
-        <video src="${asset(product.galleryVideo)}" poster="${asset(product.image)}" autoplay muted loop playsinline preload="metadata" aria-label="${escapeHtml(product.name)} 회전 영상"></video>
+        <video class="gallery-spin-video" src="${asset(product.galleryVideo)}" poster="${asset(product.image)}" autoplay muted loop playsinline preload="auto" aria-label="${escapeHtml(product.name)} 회전 영상" data-spin-video></video>
         <button class="gallery-more-btn" type="button" data-open-gallery data-gallery-src="${escapeHtml(modalInitialImage.image)}" data-gallery-label="${escapeHtml(modalInitialImage.label)}">더 많은 이미지 보기</button>
       </div>
     `;
@@ -8286,6 +8238,19 @@ function bindPageEvents() {
     });
   });
   document.querySelectorAll("[data-close-modal]").forEach((node) => node.addEventListener("click", () => modal?.classList.remove("is-open")));
+
+  // 상품 상세 회전 영상: 일부 브라우저에서 autoplay 속성만으로 재생이 멈추는 경우가 있어 명시적으로 재생을 강제한다.
+  document.querySelectorAll("[data-spin-video]").forEach((video) => {
+    video.muted = true;
+    video.defaultMuted = true;
+    const tryPlay = () => {
+      const p = video.play();
+      if (p && typeof p.catch === "function") p.catch(() => {});
+    };
+    tryPlay();
+    video.addEventListener("loadeddata", tryPlay, { once: true });
+    video.addEventListener("canplay", tryPlay, { once: true });
+  });
 }
 
 async function hydrateFromSupabase() {

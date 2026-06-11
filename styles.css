@@ -13135,7 +13135,7 @@ h1, h2, h3, h4 {
   overflow-wrap: break-word;
 }
 
-/* ── 헤더 재정의 (글래스 제거 → 흰 배경 + 하단 보더) ──────── */
+/* ── 헤더 재정의 (글라스모피즘 부활 — 토큰 팔레트로 재구성) ── */
 .site-header {
   position: sticky;
   top: 0;
@@ -13148,12 +13148,19 @@ h1, h2, h3, h4 {
   margin: 0;
   padding: 0 clamp(16px, 3vw, 48px);
   border: none;
-  border-bottom: 1px solid var(--sand);
+  border-bottom: 1px solid rgba(232, 226, 210, 0.6);
   border-radius: 0;
-  background: var(--chalk);
-  backdrop-filter: none;
-  -webkit-backdrop-filter: none;
-  box-shadow: none;
+  background: linear-gradient(180deg, rgba(247, 246, 241, 0.82) 0%, rgba(247, 246, 241, 0.62) 100%);
+  backdrop-filter: blur(14px) saturate(1.4);
+  -webkit-backdrop-filter: blur(14px) saturate(1.4);
+  box-shadow: 0 1px 0 rgba(255, 255, 255, 0.6) inset, 0 6px 20px -16px rgba(20, 48, 31, 0.4);
+}
+
+/* 글라스 헤더 위에서도 또렷하게 보이도록 */
+@supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
+  .site-header {
+    background: var(--chalk);
+  }
 }
 
 /* 네비 활성 언더라인 */
@@ -13370,78 +13377,73 @@ h1, h2, h3, h4 {
   display: block;
 }
 
-/* ── 등급 칩 시스템 — 리얼 골프공 SVG (시그니처) ─────────── */
-.golfball-sprite {
-  position: absolute;
-  width: 0;
-  height: 0;
-  overflow: hidden;
-}
-
+/* ── 등급 칩 시스템 — 브랜드 로고의 실사 골프공 (시그니처) ── */
 .grade-chip {
   position: relative;
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 40px;
-  height: 40px;
+  width: 44px;
+  height: 44px;
   flex-shrink: 0;
-  filter: drop-shadow(0 3px 5px rgba(20, 48, 31, 0.18));
+  border-radius: 999px;
+  filter: drop-shadow(0 4px 7px rgba(20, 48, 31, 0.22));
 }
 
-.grade-chip .golf-ball {
-  display: block;
+.grade-chip .grade-chip-ball {
+  position: absolute;
+  inset: 0;
   width: 100%;
   height: 100%;
-  overflow: visible;
-  fill: none;
-  stroke: none;
-  stroke-width: 0;
+  object-fit: contain;
+  border-radius: 999px;
 }
 
-.grade-chip .gb-body {
-  fill: url(#gbShade);
-  stroke: rgba(20, 48, 31, 0.12);
-  stroke-width: 0.75;
+/* 등급별 컬러 림 (스펙 §2) — 실사 공 위에 가는 컬러 링 */
+.grade-chip::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: 999px;
+  border: 2px solid transparent;
+  pointer-events: none;
 }
 
-.grade-chip .gb-shine {
-  fill: #ffffff;
-  opacity: 0.55;
-  stroke: none;
-}
+.grade-chip--S::after { border-color: var(--flag); }
+.grade-chip--A::after { border-color: var(--turf); }
+.grade-chip--B::after { border-color: #cdbf9b; }
 
-.grade-chip .gb-letter {
+/* 공에 "프린트"된 등급 글자 */
+.grade-chip-letter {
+  position: relative;
+  z-index: 1;
   font-family: var(--font-data);
   font-weight: 700;
-  font-size: 19px;
-  text-anchor: middle;
-  dominant-baseline: central;
-  stroke: none;
-  paint-order: stroke;
+  font-size: 17px;
+  line-height: 1;
+  letter-spacing: -0.01em;
+  text-shadow:
+    0 1px 1px rgba(255, 255, 255, 0.85),
+    0 0 2px rgba(255, 255, 255, 0.7);
 }
 
-/* 등급별 색상 — 골프공에 프린트된 컬러 등급 표기 + 컬러 림(스펙 §2) */
-.grade-chip--S .gb-body { stroke: var(--flag); stroke-width: 2; }
-.grade-chip--S .gb-letter { fill: var(--flag); }
-.grade-chip--A .gb-body { stroke: var(--turf); stroke-width: 2; }
-.grade-chip--A .gb-letter { fill: var(--turf); }
-.grade-chip--B .gb-body { stroke: #c9bd9a; stroke-width: 2; }
-.grade-chip--B .gb-letter { fill: var(--ink); }
+.grade-chip--S .grade-chip-letter { color: var(--flag); }
+.grade-chip--A .grade-chip-letter { color: var(--turf); }
+.grade-chip--B .grade-chip-letter { color: #6b5e3a; }
 
 .grade-chip.lg {
-  width: 52px;
-  height: 52px;
+  width: 56px;
+  height: 56px;
 }
 
-.grade-chip.lg .gb-letter { font-size: 18px; }
+.grade-chip.lg .grade-chip-letter { font-size: 21px; }
 
 .grade-chip.xl {
-  width: 84px;
-  height: 84px;
+  width: 88px;
+  height: 88px;
 }
 
-.grade-chip.xl .gb-letter { font-size: 17px; }
+.grade-chip.xl .grade-chip-letter { font-size: 32px; }
 
 /* 베스트셀러 카드 위 등급 칩 위치 (중앙 정렬된 골프공) */
 .best-grade-chip {
@@ -13452,11 +13454,11 @@ h1, h2, h3, h4 {
 }
 
 .best-grade-chip .grade-chip {
-  width: 38px;
-  height: 38px;
+  width: 40px;
+  height: 40px;
 }
 
-.best-grade-chip .grade-chip .gb-letter { font-size: 20px; }
+.best-grade-chip .grade-chip .grade-chip-letter { font-size: 16px; }
 
 /* ── 섹션 수직 패딩 ──────────────────────────────────────── */
 .home-section,
@@ -13927,13 +13929,11 @@ hr,
   }
 }
 
-/* ── 전역 글래스/금색 장식 제거 (스펙 §0.4, §4.3) ────────── */
-.site-header,
+/* ── 전역 글래스 제거 (헤더는 글라스 유지 — 사용자 요청) ──── */
 .product-menu,
 .mini-cart,
 .floating-consult,
 .consult-panel,
-[class*="glass"],
 [class*="-card"],
 .panel-card,
 .toast {
