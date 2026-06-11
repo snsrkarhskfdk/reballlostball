@@ -16,7 +16,7 @@ BALL_DELTA_SCALE = 3.4
 
 
 def output_root() -> Path:
-    root = os.environ.get("REBALL_HERO_OUT", "assets/hero-transition")
+    root = os.environ.get("REBALL_HERO_OUT", "artifacts/hero-source/drop-sequence")
     path = Path(root)
     path.mkdir(parents=True, exist_ok=True)
     (path / "frames").mkdir(parents=True, exist_ok=True)

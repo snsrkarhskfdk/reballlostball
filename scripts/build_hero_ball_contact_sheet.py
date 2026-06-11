@@ -21,7 +21,7 @@ def checkerboard(size: tuple[int, int], cell: int = 24) -> Image.Image:
 
 
 def main() -> None:
-    root = Path(sys.argv[1]) if len(sys.argv) > 1 else Path("assets/hero-transition")
+    root = Path(sys.argv[1]) if len(sys.argv) > 1 else Path("artifacts/hero-source/drop-sequence")
     out = Path(sys.argv[2]) if len(sys.argv) > 2 else Path("artifacts/hero-ball-drop-contact-sheet.png")
     out.parent.mkdir(parents=True, exist_ok=True)
 

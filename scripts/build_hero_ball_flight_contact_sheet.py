@@ -7,7 +7,7 @@ from PIL import Image, ImageDraw
 
 
 FRAMES = [0, 15, 30, 45, 52, 59]
-DEFAULT_ROOT = Path(r"C:\리볼_로스트볼\blender\asset\hero-flight")
+DEFAULT_ROOT = Path("artifacts/hero-source/flight")
 
 
 def checkerboard(size: tuple[int, int], cell: int = 24) -> Image.Image:

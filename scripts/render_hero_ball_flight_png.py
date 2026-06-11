@@ -15,7 +15,7 @@ HEIGHT = 1080
 BALL_OBJECT = "Foreground_Reball_Mesh_0"
 CAMERA_OBJECT = "HeroBallFlightCamera"
 TRAIL_OBJECT = "HeroBallSubtleTrail"
-OUTPUT_ROOT = Path(r"C:\리볼_로스트볼\blender\asset\hero-flight")
+OUTPUT_ROOT = Path("artifacts/hero-source/flight")
 FRAMES_DIR = OUTPUT_ROOT / "frames"
 ENABLE_TRAIL = False
 
