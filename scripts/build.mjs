@@ -19,5 +19,8 @@ for (const optionalFile of ["CNAME", ".nojekyll"]) {
 }
 
 await cp("assets", `${outputDir}/assets`, { recursive: true });
+if (existsSync("hero")) {
+  await cp("hero", `${outputDir}/hero`, { recursive: true });
+}
 
 process.stdout.write(`Static output prepared in ${outputDir}\n`);

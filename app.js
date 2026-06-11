@@ -1,6 +1,8 @@
 ﻿const ASSET_PATH = "./assets/figma";
-const HERO_TRANSITION_PATH = "./assets/hero-transition";
-const ASSET_VERSION = "20260610-12";
+const HERO_PATH = "/hero";
+const ASSET_VERSION = "20260611-07";
+const HERO_DROP_FRAME_COUNT = 10;
+const HERO_DROP_VIRTUAL_FRAME_COUNT = 36;
 const SUPABASE_URL = "https://qbftalhhyfcndanrcwpy.supabase.co";
 const SUPABASE_KEY = "sb_publishable_K876i166RCGtBxdp3xRQZw_yJxPaKwL";
 const ADMIN_MEMBERS_FUNCTION_URL = `${SUPABASE_URL}/functions/v1/admin-members`;
@@ -12,6 +14,9 @@ const PENDING_SIGNUP_EMAIL_KEY = "reball.pendingSignupEmail";
 const PENDING_SIGNUP_LOGIN_ID_KEY = "reball.pendingSignupLoginId";
 const SIGNUP_LOGIN_ID_REGISTRY_KEY = "reball.signupLoginIds";
 const LOGIN_ID_PATTERN = /^[a-z0-9][a-z0-9._-]{3,19}$/;
+const ADMIN_CATALOG_ROLES = new Set(["inventory_manager", "owner_admin"]);
+const UI_GRADE_TO_DB_GRADE = { S: "A_PLUS", A: "A", B: "B" };
+const DB_GRADE_TO_UI_GRADE = { A_PLUS: "S", A: "A", B: "B" };
 
 const { createClient } = await import("https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/+esm");
 
@@ -27,7 +32,7 @@ const supabase = createClient(SUPABASE_URL, SUPABASE_KEY, {
 const money = new Intl.NumberFormat("ko-KR");
 const app = document.querySelector("#app");
 const inlineIcon = (name) => `<img class="inline-action-icon" src="${ASSET_PATH}/ui-icons/${name}.png?v=${ASSET_VERSION}" alt="" />`;
-const heroTransitionAsset = (name) => `${HERO_TRANSITION_PATH}/${name}?v=${ASSET_VERSION}`;
+const heroAsset = (name) => `${HERO_PATH}/${name}?v=${ASSET_VERSION}`;
 const svgUiIconNames = new Set(["order-fast", "safe-pack"]);
 const shopIconFileMap = {
   cart: "shop-cart",
@@ -542,6 +547,8 @@ const state = {
   authBusy: false,
   authRedirect: AUTH_REDIRECT_DEFAULT,
   accountLoading: false,
+  authRoles: [],
+  authRolesLoaded: false,
   addresses: [],
   paymentMethods: [],
   notifications: normalizeNotifications(load("reball.notifications", defaultNotifications)),
@@ -558,6 +565,7 @@ const state = {
   adminTab: "dashboard",
   adminUser: load("reball.adminUser", null),
   adminCredentials: load("reball.adminCredentials", defaultAdminCredentials()),
+  adminSessionPassword: "",
   adminProfile: load("reball.adminProfile", defaultAdminProfile()),
   adminBanners: load("reball.adminBanners", defaultAdminBanners()),
   adminCustomers: load("reball.adminCustomers", []),
@@ -566,57 +574,92 @@ const state = {
   adminMembersLoaded: false,
   adminMembersError: "",
   adminProducts: load("reball.adminProducts", []),
+  remoteProducts: load("reball.remoteProducts", []),
   adminModal: null,
   adminModalContext: null,
   adminSearch: "",
   adminLoginError: "",
   menuOpen: false,
   cartPromptOpen: false,
+  consultOpen: false,
+  consultMessages: [],
+  heroIntroHasPlayed: false,
 };
 
 const bundleRegistry = new Map();
 
 function heroFrameAsset(index) {
-  return heroTransitionAsset(`frames/reball_ball_drop_${String(index).padStart(4, "0")}.webp`);
+  return heroAsset(`drop/${String(index + 1).padStart(2, "0")}.webp`);
 }
 
-function renderHeroTransitionSection(representativeProducts) {
+function HeroIntro() {
   return `
-    <section class="hero-transition" data-hero-transition aria-label="리볼 로스트볼 인트로 전환">
-      <div class="hero-transition-stage">
-        <video
-          class="hero-transition-video"
-          data-hero-intro-video
-          src="${heroTransitionAsset("reball-intro-1.mp4")}"
-          poster="${asset("hero-poster.webp")}"
-          muted
-          playsinline
-          autoplay
-          preload="auto"
-        ></video>
-        <div class="hero-transition-sky" aria-hidden="true"></div>
-        <img class="hero-transition-ball" data-hero-ball-frame src="${heroFrameAsset(0)}" alt="" loading="eager" decoding="sync" />
-        <div class="hero-transition-field" aria-hidden="true">
-          <span class="hero-transition-hole"></span>
-        </div>
-        <div class="hero-transition-copy">
-          <p>REBALL LOSTBALL</p>
-          <h1>검수된 로스트볼이 대표 상품으로 이어집니다</h1>
-          <span>인트로 후 공이 내려오며 아래 상품 영역으로 자연스럽게 연결됩니다.</span>
-        </div>
-        <div class="hero-transition-products" aria-label="대표 상품 바로가기">
-          ${representativeProducts
-            .map(
-              (product) => `
-                <button class="hero-transition-product" type="button" data-route="/product/${product.slug}">
-                  <span class="hero-transition-product-media"><img src="${asset(product.image)}" alt="" loading="eager" decoding="async" /></span>
-                  <span>
-                    <b>${escapeHtml(product.brandName)}</b>
-                    <small>${escapeHtml(product.line.split("/")[0].trim())}</small>
-                  </span>
-                </button>`
-            )
-            .join("")}
+    <video
+      class="hero-intro-video"
+      data-hero-intro-video
+      src="${heroAsset("intro/reball_intro_1.mp4")}"
+      poster="${asset("hero-poster.webp")}"
+      muted
+      playsinline
+      autoplay
+      preload="auto"
+    ></video>
+  `;
+}
+
+function FrameSequenceCanvas() {
+  return `
+      <canvas
+        class="frame-sequence-canvas"
+        data-frame-sequence-canvas
+        data-frame-count="${HERO_DROP_FRAME_COUNT}"
+        data-virtual-frame-count="${HERO_DROP_VIRTUAL_FRAME_COUNT}"
+        data-frame-src-template="${heroAsset("drop/{frame}.webp")}"
+        aria-hidden="true"
+      ></canvas>
+  `;
+}
+
+function HoleInOneBridge(representativeProducts) {
+  return `
+    <div class="hole-in-one-bridge" data-hole-bridge>
+      <div class="hole-in-one-copy">
+        <p>REBALL LOSTBALL</p>
+        <h1>홀컵까지 이어지는 프리미엄 로스트볼</h1>
+        <span>등급 기준과 대표 구성을 빠르게 확인하고, 가장 많이 찾는 상품으로 바로 이동하세요.</span>
+        <button class="gold-cart-btn hole-in-one-cta" type="button" data-scroll-to="products">대표 상품 보기 ${originalCartIcon}</button>
+      </div>
+      <div class="hole-in-one-products" aria-label="대표 상품 바로가기">
+        <p>대표 상품</p>
+        ${representativeProducts
+          .map(
+            (product) => `
+              <button class="hole-in-one-product" type="button" data-route="/product/${product.slug}">
+                <span class="hole-in-one-product-media"><img src="${asset(product.image)}" alt="" loading="eager" decoding="async" /></span>
+                <span>
+                  <b>${escapeHtml(product.brandName)}</b>
+                  <small>${escapeHtml(product.line.split("/")[0].trim())}</small>
+                </span>
+              </button>`
+          )
+          .join("")}
+      </div>
+    </div>
+  `;
+}
+
+function FlightTransitionSection(representativeProducts) {
+  return `
+    <section class="flight-transition-section" data-flight-transition aria-label="리볼 로스트볼 인트로 전환">
+      <div class="flight-transition-stage">
+        <img class="flight-plate flight-plate-intro" src="${heroAsset("flight/plates/intro_end_plate.webp")}" alt="" aria-hidden="true" loading="eager" decoding="async" />
+        <img class="flight-plate flight-plate-grass" src="${heroAsset("flight/plates/grass_landing_plate.webp")}" alt="" aria-hidden="true" loading="eager" decoding="async" />
+        ${HeroIntro()}
+        ${FrameSequenceCanvas()}
+        ${HoleInOneBridge(representativeProducts)}
+        <div class="flight-scroll-cue" aria-hidden="true">
+          <span></span>
+          <b>scroll</b>
         </div>
       </div>
     </section>
@@ -1295,6 +1338,68 @@ async function handleLogout(redirect = "/") {
   }
 }
 
+async function loadCurrentAuthRoles(options = {}) {
+  const { force = false } = options;
+  if (!state.authUser?.id) {
+    state.authRoles = [];
+    state.authRolesLoaded = true;
+    return [];
+  }
+  if (state.authRolesLoaded && !force) return state.authRoles;
+
+  const { data, error } = await supabase.from("user_roles").select("role").eq("user_id", state.authUser.id);
+  if (error) throw error;
+
+  state.authRoles = [...new Set((data || []).map((row) => stringOrEmpty(row.role).trim()).filter(Boolean))];
+  state.authRolesLoaded = true;
+  return state.authRoles;
+}
+
+function hasAdminCatalogRole(roles = []) {
+  return roles.some((role) => ADMIN_CATALOG_ROLES.has(role));
+}
+
+async function ensureAdminCatalogSession(password = "", emailOverride = "") {
+  if (!state.authReady) {
+    throw new Error("로그인 상태를 확인 중입니다. 잠시 후 다시 시도해 주세요.");
+  }
+
+  const adminEmail = stringOrEmpty(emailOverride || state.adminProfile?.email).trim();
+  let roles = [];
+  if (state.authSession?.access_token) {
+    roles = await loadCurrentAuthRoles({ force: true });
+    if (hasAdminCatalogRole(roles)) return roles;
+  }
+
+  if (!adminEmail || !password) {
+    throw new Error("실제 상품 등록은 Supabase 관리자 계정으로 먼저 로그인해야 합니다.");
+  }
+
+  const { data, error } = await supabase.auth.signInWithPassword({
+    email: adminEmail,
+    password,
+  });
+  if (error) throw error;
+  await syncSessionState(data.session, { silent: true });
+
+  roles = await loadCurrentAuthRoles({ force: true });
+  if (!hasAdminCatalogRole(roles)) {
+    throw new Error("상품 등록 권한이 있는 관리자 계정으로 로그인해 주세요.");
+  }
+  return roles;
+}
+
+async function syncAdminSupabaseSession(password = "", emailOverride = "") {
+  if (!password) return false;
+  try {
+    await ensureAdminCatalogSession(password, emailOverride);
+    return true;
+  } catch (error) {
+    showToast(normalizeAuthError(error, "관리자 Supabase 세션을 연결하지 못했습니다."));
+    return false;
+  }
+}
+
 async function loadAdminMembers(options = {}) {
   const { force = false, silent = true } = options;
   if (!state.adminUser || state.adminMembersLoading) return;
@@ -1312,6 +1417,8 @@ async function loadAdminMembers(options = {}) {
   state.adminMembersError = "";
   if (!silent && parseRoute().startsWith("/admin")) renderAdmin();
 
+  const controller = new AbortController();
+  const timeoutId = window.setTimeout(() => controller.abort(new Error("회원 목록 조회가 지연되고 있습니다.")), 10000);
   try {
     const response = await fetch(ADMIN_MEMBERS_FUNCTION_URL, {
       method: "GET",
@@ -1319,6 +1426,7 @@ async function loadAdminMembers(options = {}) {
         apikey: SUPABASE_KEY,
         Authorization: `Bearer ${state.authSession.access_token}`,
       },
+      signal: controller.signal,
     });
     const payload = await response.json().catch(() => ({}));
     if (!response.ok) throw new Error(payload?.message || "회원 목록을 불러오지 못했습니다.");
@@ -1328,6 +1436,7 @@ async function loadAdminMembers(options = {}) {
     state.adminMembersLoaded = true;
     state.adminMembersError = normalizeAuthError(error, "회원 목록을 불러오지 못했습니다.");
   } finally {
+    window.clearTimeout(timeoutId);
     state.adminMembersLoading = false;
     if (parseRoute().startsWith("/admin")) renderAdmin();
   }
@@ -1548,6 +1657,8 @@ function normalizeAuthError(error, fallback = "요청을 처리하지 못했습�
   if (message.includes("Login id already exists")) return "이미 사용 중인 아이디입니다.";
   if (message.includes("Admin access denied")) return "관리자 권한이 있는 계정으로 로그인해 주세요.";
   if (message.includes("Admin session required")) return "관리자 회원 목록을 보려면 관리자 권한 계정으로 로그인해 주세요.";
+  if (message.includes("row-level security")) return "Supabase 상품 등록 권한이 있는 관리자 계정으로 로그인해 주세요.";
+  if (message.includes("permission denied")) return "Supabase 상품 등록 권한이 있는 관리자 계정으로 로그인해 주세요.";
   if (message.includes("Database error saving new user")) return "이미 사용 중인 아이디이거나 회원 정보를 저장하지 못했습니다.";
   if (message.includes("Password should be at least")) return "비밀번호는 6자 이상으로 입력해 주세요.";
   return message;
@@ -1557,6 +1668,8 @@ function emptyAuthData() {
   state.viewer = null;
   state.authSession = null;
   state.authUser = null;
+  state.authRoles = [];
+  state.authRolesLoaded = false;
   state.orders = [];
   state.addresses = [];
   state.paymentMethods = [];
@@ -1602,7 +1715,7 @@ function mapAddressRecord(row) {
 
 function guessProductFromOrderItem(item) {
   const name = stringOrEmpty(item?.product_name);
-  return state.products.find((product) => name.includes(product.brandName) || name.includes(product.name.replace(" 로스트볼", ""))) ?? null;
+  return catalogProducts().find((product) => name.includes(product.brandName) || name.includes(product.name.replace(" 로스트볼", ""))) ?? null;
 }
 
 function mapOrderRecord(row, items = []) {
@@ -1662,7 +1775,11 @@ function flushPendingScroll() {
 }
 
 function asset(name) {
-  return `${ASSET_PATH}/${name}?v=${ASSET_VERSION}`;
+  const value = stringOrEmpty(name).trim();
+  if (!value) return `${ASSET_PATH}/?v=${ASSET_VERSION}`;
+  if (/^(?:https?:)?\/\//i.test(value) || value.startsWith("data:")) return value;
+  if (value.startsWith("/")) return value;
+  return `${ASSET_PATH}/${value}?v=${ASSET_VERSION}`;
 }
 
 function iconAsset(name) {
@@ -1689,12 +1806,114 @@ function productByBrand(brandSlug) {
   return catalogProducts().filter((product) => product.brandSlug === brandSlug);
 }
 
+function brandSortIndex(brandSlug) {
+  const index = brandMenu.findIndex(([slug]) => slug === brandSlug);
+  return index === -1 ? brandMenu.length + 10 : index;
+}
+
+function compareCatalogProductOrder(left, right) {
+  return (
+    brandSortIndex(left.brandSlug) - brandSortIndex(right.brandSlug) ||
+    String(left.brandName || "").localeCompare(String(right.brandName || ""), "ko") ||
+    String(left.name || "").localeCompare(String(right.name || ""), "ko")
+  );
+}
+
+function adminRegisteredProductCount() {
+  return new Set(
+    [...(Array.isArray(state.remoteProducts) ? state.remoteProducts : []), ...(Array.isArray(state.adminProducts) ? state.adminProducts : [])]
+      .filter((product) => product?.adminRegistered)
+      .map((product) => product.slug)
+  ).size;
+}
+
+function normalizeCatalogAssetName(value, fallback = "") {
+  const raw = stringOrEmpty(value).trim();
+  if (!raw) return fallback;
+  if (/^(?:https?:)?\/\//i.test(raw) || raw.startsWith("data:")) return raw;
+  if (raw.startsWith("/products/")) return fallback;
+  if (raw.startsWith("/")) return raw.split("/").filter(Boolean).pop() || fallback;
+  return raw;
+}
+
+function uniqueTextValues(values) {
+  return [...new Set(values.map((value) => stringOrEmpty(value).trim()).filter(Boolean))];
+}
+
+function packSizeToLabel(value) {
+  const numeric = Number(value);
+  return packOptions.find((item) => item.qty === numeric)?.id || `${numeric || 10}구`;
+}
+
+function mapSupabaseVariantToLocalVariant(row, product, imageFallback) {
+  const imageUrl = normalizeCatalogAssetName(row.thumbnail_url, imageFallback);
+  const grade = DB_GRADE_TO_UI_GRADE[stringOrEmpty(row.grade).trim()] || "A";
+  const pack = packSizeToLabel(row.pack_size);
+  const price = Number(row.price_krw) || 0;
+  const compareAtPrice = compareAtForPrice(product, price);
+  return {
+    id: stringOrEmpty(row.id) || `${product.slug}-${stringOrEmpty(row.sku)}`,
+    sku:
+      stringOrEmpty(row.sku) ||
+      `RB-${productSkuToken(product.brandSlug).slice(0, 4)}-${productSkuToken(row.option_model).slice(0, 5)}-${grade}-${Number(row.pack_size) || 10}-${productSkuToken(row.option_color).slice(0, 3) || "CLR"}`,
+    model: stringOrEmpty(row.option_model) || product.models?.[0] || product.line || product.name,
+    grade,
+    pack,
+    color: stringOrEmpty(row.option_color) || product.colors?.[0] || "화이트",
+    price,
+    compareAtPrice,
+    discountPercent: discountPercent(price, compareAtPrice),
+    imageUrl,
+    stock: Math.max(0, Number(row.stock_qty) || 0),
+    available: Boolean(row.active) && Math.max(0, Number(row.stock_qty) || 0) > 0,
+  };
+}
+
+function mapSupabaseProductToCatalogProduct(row) {
+  const brandSlug = stringOrEmpty(row.brands?.slug).trim() || adminBrandSlugFromName(row.brands?.name || row.slug || row.name);
+  const template =
+    products.find((product) => product.slug === row.slug) ||
+    products.find((product) => product.brandSlug === brandSlug) ||
+    products[0];
+  const variantRows = Array.isArray(row.product_variants) ? row.product_variants.filter((variant) => variant?.active !== false) : [];
+  const models = uniqueTextValues(variantRows.map((variant) => variant.option_model));
+  const colors = uniqueTextValues(variantRows.map((variant) => variant.option_color));
+  const totalStock = variantRows.reduce((sum, variant) => sum + Math.max(0, Number(variant.stock_qty) || 0), 0);
+  const image = normalizeCatalogAssetName(
+    variantRows.find((variant) => stringOrEmpty(variant.thumbnail_url).trim())?.thumbnail_url,
+    template.image
+  );
+  const nextProduct = {
+    ...template,
+    brandSlug,
+    brandName: stringOrEmpty(row.brands?.name).trim() || template.brandName || brandLabel(brandSlug),
+    slug: stringOrEmpty(row.slug).trim() || template.slug,
+    name: stringOrEmpty(row.name).trim() || template.name,
+    line: stringOrEmpty(row.subtitle).trim() || template.line,
+    copy: stringOrEmpty(row.summary).trim() || template.copy || `${stringOrEmpty(row.subtitle).trim() || template.line} 기준으로 등록한 관리자 상품입니다.`,
+    price: Number(row.base_price_krw) || template.price,
+    colors: colors.length ? colors : template.colors || ["화이트"],
+    models: models.length ? models : template.models || [template.line || template.name],
+    image,
+    detailImage: normalizeCatalogAssetName(row.detail_image_url, template.detailImage || ""),
+    stock: totalStock || Number(template.stock) || 0,
+    adminRegistered: !products.some((product) => product.slug === row.slug),
+    adminOverride: products.some((product) => product.slug === row.slug),
+    remoteRegistered: true,
+    updatedAt: stringOrEmpty(row.updated_at).trim() || todayIso(),
+  };
+  nextProduct.dbVariants = variantRows.map((variant) => mapSupabaseVariantToLocalVariant(variant, nextProduct, image));
+  return nextProduct;
+}
+
 function catalogProducts() {
   const adminProducts = Array.isArray(state.adminProducts) ? state.adminProducts : [];
+  const remoteProducts = Array.isArray(state.remoteProducts) ? state.remoteProducts : [];
   const baseSlugs = new Set(products.map((product) => product.slug));
-  const overrides = new Map(adminProducts.filter((product) => baseSlugs.has(product.slug)).map((product) => [product.slug, product]));
+  const overlayProducts = [...remoteProducts, ...adminProducts];
+  const overrides = new Map(overlayProducts.filter((product) => baseSlugs.has(product.slug)).map((product) => [product.slug, product]));
   const mergedBase = products.map((product) => (overrides.has(product.slug) ? { ...product, ...overrides.get(product.slug), adminOverride: true } : product));
-  const additions = adminProducts.filter((product) => !baseSlugs.has(product.slug));
+  const additions = [...new Map(overlayProducts.filter((product) => !baseSlugs.has(product.slug)).map((product) => [product.slug, product])).values()].sort(compareCatalogProductOrder);
   return [...additions, ...mergedBase];
 }
 
@@ -1788,7 +2007,7 @@ function isUnavailableVariant(product, selection) {
   return false;
 }
 
-function productVariants(product) {
+function generatedProductVariants(product) {
   const models = product.models?.length ? product.models : [product.line || product.name];
   const colors = product.colors?.length ? product.colors : ["화이트"];
   const baseStock = Math.max(0, Number(product.stock) || 0);
@@ -1803,7 +2022,7 @@ function productVariants(product) {
           const compareAtPrice = compareAtForPrice(product, price);
           return {
             id: `${product.slug}-${productToken(model)}-${grade.id}-${productToken(pack.id)}-${productToken(color)}`,
-            sku: `RB-${productSkuToken(product.brandSlug).slice(0, 4)}-${productSkuToken(model).slice(0, 5)}-${grade.id}-${pack.qty}`,
+            sku: `RB-${productSkuToken(product.brandSlug).slice(0, 4)}-${productSkuToken(model).slice(0, 5)}-${grade.id}-${pack.qty}-${productSkuToken(color).slice(0, 3) || "CLR"}`,
             model,
             grade: grade.id,
             pack: pack.id,
@@ -1819,6 +2038,19 @@ function productVariants(product) {
       )
     )
   );
+}
+
+function productVariants(product) {
+  if (Array.isArray(product.dbVariants) && product.dbVariants.length) {
+    return [...product.dbVariants].sort(
+      (left, right) =>
+        product.models.indexOf(left.model) - product.models.indexOf(right.model) ||
+        gradeOptions.findIndex((item) => item.id === left.grade) - gradeOptions.findIndex((item) => item.id === right.grade) ||
+        packOptions.findIndex((item) => item.id === left.pack) - packOptions.findIndex((item) => item.id === right.pack) ||
+        product.colors.indexOf(left.color) - product.colors.indexOf(right.color)
+    );
+  }
+  return generatedProductVariants(product);
 }
 
 function firstAvailableVariant(product, partial = {}) {
@@ -1988,6 +2220,7 @@ function layout(content, options = {}) {
       ${options.noHeader ? "" : renderHeader()}
       <main${options.mainClass ? ` class="${options.mainClass}"` : ""}>${content}</main>
       ${options.admin || options.noFooter ? "" : renderFooter()}
+      ${options.admin || options.noHeader ? "" : renderFloatingConsult()}
       ${renderToast()}
     </div>
   `;
@@ -2140,6 +2373,178 @@ function renderFooterColumn(title, items) {
   `;
 }
 
+function consultQuickQuestions() {
+  return [
+    "상품 가격 알려줘",
+    "배송 언제 출고돼?",
+    "S A B 등급 차이",
+    "교환/반품 기준",
+    "비회원 주문조회",
+    "브랜드별 재고",
+    "신규회원 쿠폰",
+    "고객센터 연결",
+  ];
+}
+
+function consultProductSummary(product) {
+  const metrics = productCardMetrics(product);
+  return `${product.brandName} ${money.format(metrics.price)}원부터 · 현재 재고 ${product.stock}세트 · ${product.line}`;
+}
+
+function findConsultProduct(query) {
+  const normalized = stringOrEmpty(query).toLowerCase().replace(/\s+/g, "");
+  if (!normalized) return null;
+  return (
+    catalogProducts().find((product) => {
+      const haystack = [
+        product.brandSlug,
+        product.brandName,
+        product.name,
+        product.line,
+        ...(product.models || []),
+        ...(product.colors || []),
+      ]
+        .join(" ")
+        .toLowerCase()
+        .replace(/\s+/g, "");
+      return haystack.includes(normalized) || normalized.includes(product.brandName.toLowerCase().replace(/\s+/g, "")) || normalized.includes(product.brandSlug);
+    }) ?? null
+  );
+}
+
+function consultFaqMatch(query) {
+  const normalized = stringOrEmpty(query).toLowerCase();
+  return faqItems.find((item) => {
+    const haystack = `${item.category} ${item.question} ${item.answer}`.toLowerCase();
+    return normalized
+      .split(/\s+/)
+      .filter((token) => token.length >= 2)
+      .some((token) => haystack.includes(token));
+  });
+}
+
+function buildConsultAnswer(query) {
+  const question = stringOrEmpty(query).trim();
+  const normalized = question.toLowerCase();
+  const product = findConsultProduct(question);
+  const productRows = catalogProducts().slice(0, 8);
+  const priceList = productRows.map((item) => `- ${consultProductSummary(item)}`).join("\n");
+
+  if (!question) return "질문을 입력하거나 아래 빠른 질문을 선택해 주세요.";
+
+  if (product) {
+    const metrics = productCardMetrics(product);
+    return [
+      `${product.name} 안내입니다.`,
+      `가격은 ${money.format(metrics.price)}원부터 시작하고, 선택 등급/구성에 따라 달라집니다.`,
+      `현재 표시 재고는 ${product.stock}세트입니다.`,
+      `옵션: ${(product.models || []).join(" / ")}`,
+      `색상: ${(product.colors || []).join(" / ")}`,
+      `바로 보려면 상품 목록에서 ${product.brandName} 카드를 선택해 주세요.`,
+    ].join("\n");
+  }
+
+  if (/가격|금액|얼마|상품|브랜드|추천|재고|품절|라인/.test(normalized)) {
+    return `현재 판매 상품과 시작 가격입니다.\n${priceList}\n\n정확한 최종 금액은 상품 상세에서 등급(S/A/B), 구성(10구/30구), 색상 옵션을 선택하면 계산됩니다.`;
+  }
+
+  if (/배송|출고|택배|도착|언제|배달/.test(normalized)) {
+    return `배송 안내입니다.\n- ${shippingPolicy.cutoffTime} 이전 주문은 당일 출고 준비 기준입니다.\n- 평균 배송 기간은 ${shippingPolicy.averageLeadTime}입니다.\n- 기본 배송비는 ${money.format(shippingPolicy.baseFee)}원, ${money.format(shippingPolicy.freeThreshold)}원 이상 구매 시 무료배송입니다.\n- 도서산간 지역은 ${money.format(shippingPolicy.islandExtra)}원이 추가될 수 있습니다.`;
+  }
+
+  if (/등급|상태|s|a|b|스크래치|마킹|로고|품질/.test(normalized)) {
+    return `등급 안내입니다.\n${gradeOptions.map((grade) => `- ${grade.label}: ${grade.text}`).join("\n")}\n\n로스트볼 특성상 번호, 로고, 펜마킹, 미세 스크래치는 재고 구성에 따라 다를 수 있고, 사용에 지장이 있는 공은 제외 후 출고됩니다.`;
+  }
+
+  if (/교환|반품|환불|취소|불량|변심/.test(normalized)) {
+    return `교환/반품 안내입니다.\n- 단순변심: ${shippingPolicy.simpleReturnText}\n- 제품 문제: ${shippingPolicy.defectReturnText}\n- 단순변심 반품 배송비 기준은 왕복 ${money.format(shippingPolicy.simpleReturnFee)}원입니다.\n- 접수는 마이페이지 문의 또는 고객센터 ${businessProfile.supportPhone}로 가능합니다.`;
+  }
+
+  if (/주문조회|비회원|주문번호|주문 상태|주문상태|조회/.test(normalized)) {
+    return "비회원 주문은 주문조회 화면에서 주문자명, 휴대폰 번호, 주문번호 또는 비회원 주문 비밀번호를 입력하면 확인할 수 있습니다. 회원 주문은 마이페이지 주문내역에서 배송 단계까지 확인할 수 있습니다.";
+  }
+
+  if (/쿠폰|회원가입|가입|혜택|할인/.test(normalized)) {
+    const coupon = state.coupons?.[0] || defaultCoupons[0];
+    return `회원 혜택 안내입니다.\n신규 리볼회원 가입 시 ${coupon.title}이 제공되며, 현재 기본 혜택은 ${coupon.benefit}입니다. 쿠폰은 주문 단계 또는 마이페이지 쿠폰함에서 확인할 수 있습니다.`;
+  }
+
+  if (/고객센터|상담|전화|문의|연락|메일|이메일|운영시간/.test(normalized)) {
+    return `고객센터 안내입니다.\n- 전화: ${businessProfile.supportPhone}\n- 이메일: ${businessProfile.supportEmail}\n- 운영시간: 평일 ${businessProfile.operationHours}\n- 매장/반품 주소: ${businessProfile.returnAddress}`;
+  }
+
+  if (/매장|방문|위치|주소|지도/.test(normalized)) {
+    return `매장 안내입니다.\n주소는 ${businessProfile.address}입니다. 방문 전 재고 문의를 권장하며, 고객센터 ${businessProfile.supportPhone}로 연락하면 재고와 방문 가능 시간을 확인할 수 있습니다.`;
+  }
+
+  const faq = consultFaqMatch(question);
+  if (faq) return `${faq.question}\n${faq.answer}`;
+
+  return `현재 상담 가능한 항목은 상품 가격, 브랜드별 재고, 등급 차이, 배송, 교환/반품, 주문조회, 쿠폰, 고객센터입니다.\n아래 빠른 질문을 선택하거나 브랜드명(예: 타이틀리스트, 테일러메이드)을 입력해 주세요.`;
+}
+
+function renderConsultMessages() {
+  const messages = state.consultMessages.length
+    ? state.consultMessages
+    : [
+        {
+          role: "assistant",
+          body: `안녕하세요. 리볼 AI 상담입니다.\n상품 가격, 배송, 등급, 반품, 주문조회 정보를 바로 안내할 수 있습니다.`,
+        },
+      ];
+
+  return messages
+    .map(
+      (message) => `
+        <article class="consult-message consult-message--${escapeHtml(message.role)}">
+          <p>${renderMultilineText(message.body)}</p>
+        </article>
+      `
+    )
+    .join("");
+}
+
+function renderConsultPanel() {
+  if (!state.consultOpen) return "";
+  return `
+    <section class="consult-panel" id="reball-ai-consult" role="dialog" aria-labelledby="consult-title">
+      <header class="consult-panel-head">
+        <div>
+          <span>REBALL AI</span>
+          <strong id="consult-title">AI 상담</strong>
+        </div>
+        <button type="button" data-consult-close aria-label="상담창 닫기">${icons.close}</button>
+      </header>
+      <div class="consult-thread" data-consult-thread>${renderConsultMessages()}</div>
+      <div class="consult-chip-row" aria-label="빠른 질문">
+        ${consultQuickQuestions().map((question) => `<button type="button" data-consult-question="${escapeHtml(question)}">${escapeHtml(question)}</button>`).join("")}
+      </div>
+      <form class="consult-form" data-consult-form>
+        <input name="consultQuery" autocomplete="off" placeholder="가격, 배송, 등급, 반품을 물어보세요" />
+        <button type="submit" aria-label="질문 보내기">${icons.chevron}</button>
+      </form>
+      <footer class="consult-contact-row">
+        <a href="tel:${businessProfile.supportPhone.replaceAll("-", "")}">전화 연결</a>
+        <a href="mailto:${businessProfile.supportEmail}">메일 문의</a>
+      </footer>
+    </section>
+  `;
+}
+
+function renderFloatingConsult() {
+  return `
+    <aside class="floating-consult ${state.consultOpen ? "is-open" : ""}" aria-label="AI 상담">
+      ${renderConsultPanel()}
+      <button class="floating-consult-btn" type="button" data-consult-toggle aria-label="AI 상담 열기" aria-expanded="${state.consultOpen ? "true" : "false"}" aria-controls="reball-ai-consult">
+        <svg viewBox="0 0 64 64" aria-hidden="true">
+          <path class="floating-consult-bubble" d="M19.5 25.2c0-5.2 4.4-9.2 10-9.2h8.9c5.7 0 10.1 4 10.1 9.2v7.6c0 5.2-4.4 9.2-10.1 9.2h-4.9l-8.1 6.2v-6.4c-3.5-1.2-5.9-4.5-5.9-8.8v-7.8Z" />
+          <path class="floating-consult-line" d="M27 28h12M27 34h9" />
+        </svg>
+      </button>
+    </aside>
+  `;
+}
+
 function renderToast() {
   return `
     <div class="toast" data-toast aria-live="polite"></div>
@@ -2201,21 +2606,7 @@ function renderHome() {
     ...brandMenu.map(([slug, label]) => [label, brandProductRoute(slug)]),
   ];
   layout(`
-    ${renderHeroTransitionSection([titleist, taylormade, bridgestone])}
-
-    <section class="hero-carousel" aria-label="프로모션 배너">
-      <div class="hero-track" style="transform: translateX(-${state.activeBanner * 100}%);">
-        ${banners.map((banner) => renderBanner(banner)).join("")}
-      </div>
-      <div class="hero-dots">
-        ${banners
-          .map(
-            (_, index) =>
-              `<button class="${state.activeBanner === index ? "is-active" : ""}" type="button" data-banner-index="${index}" aria-label="${index + 1}번 배너 보기"></button>`
-          )
-          .join("")}
-      </div>
-    </section>
+    ${FlightTransitionSection([titleist, taylormade, bridgestone])}
 
     <section class="home-filter panel-card" id="products">
       <div>
@@ -2233,6 +2624,20 @@ function renderHome() {
       <div class="home-filter-actions">
         <button class="gold-cart-btn compact" type="button" data-add-card="${titleist.slug}">장바구니 담기 ${originalCartIcon}</button>
         <button class="secondary-btn compact" type="button" data-route="/product/${titleist.slug}">전체보기</button>
+      </div>
+    </section>
+
+    <section class="hero-carousel" aria-label="프로모션 배너">
+      <div class="hero-track" style="transform: translateX(-${state.activeBanner * 100}%);">
+        ${banners.map((banner) => renderBanner(banner)).join("")}
+      </div>
+      <div class="hero-dots">
+        ${banners
+          .map(
+            (_, index) =>
+              `<button class="${state.activeBanner === index ? "is-active" : ""}" type="button" data-banner-index="${index}" aria-label="${index + 1}번 배너 보기"></button>`
+          )
+          .join("")}
       </div>
     </section>
 
@@ -3432,7 +3837,7 @@ function renderAuthPage(mode = "login", redirect = "/mypage") {
       <section class="signup-form-page">
         <header class="signup-form-title">
           <h1>회원 정보 입력</h1>
-          <p>필수 정보와 배송 받을 주소를 크게 입력하고 회원정보를 저장합니다.</p>
+          <p>필수 정보와 배송 받을 주소를 입력하고 회원정보를 저장합니다.</p>
           <span class="signup-coupon-note">리볼회원 가입 혜택 · 첫 구매 쿠폰 3,000원</span>
         </header>
         <form class="signup-detail-form panel-card" data-auth-form data-auth-mode="signup" data-auth-redirect="${escapeHtml(authRedirect)}">
@@ -4774,6 +5179,10 @@ function renderAdminLogin() {
             <input name="adminId" autocomplete="username" placeholder="${escapeHtml(profile.id)}" required />
           </label>
           <label>
+            Supabase 관리자 이메일
+            <input name="adminEmail" type="email" autocomplete="email" placeholder="${escapeHtml(profile.email || "owner_admin@example.com")}" />
+          </label>
+          <label>
             암호
             <input name="adminPassword" type="password" autocomplete="current-password" placeholder="관리자 암호" required />
           </label>
@@ -4913,11 +5322,42 @@ function renderAdminStats(tab) {
 function renderAdminTable(tab) {
   const rows = filterAdminRows(adminRowsForTab(tab));
   if (!rows.length) {
-    if (tab === "customer" && (state.adminMembersLoading || !state.adminMembersLoaded)) {
-      return `<div class="admin-empty"><strong>회원 데이터를 불러오는 중입니다.</strong><span>Supabase profiles 테이블에서 가입 회원을 확인하고 있습니다.</span></div>`;
-    }
-    if (tab === "customer" && state.adminMembersError) {
-      return `<div class="admin-empty"><strong>회원 데이터를 불러오지 못했습니다.</strong><span>${escapeHtml(state.adminMembersError)}</span></div>`;
+    if (tab === "customer") {
+      const statusTitle = state.adminMembersError
+        ? "회원 데이터를 불러오지 못했습니다."
+        : state.adminMembersLoading || !state.adminMembersLoaded
+          ? "회원 데이터를 불러오는 중입니다."
+          : "등록된 회원이 없습니다.";
+      const statusBody = state.adminMembersError
+        ? state.adminMembersError
+        : state.adminMembersLoading || !state.adminMembersLoaded
+          ? "Supabase profiles 테이블에서 가입 회원을 확인하고 있습니다."
+          : "회원이 등록되면 이곳에 목록이 표시됩니다.";
+      return `
+        <div class="admin-table-wrap">
+          <table class="admin-data-table">
+            <thead>
+              <tr>
+                <th>${escapeHtml(adminFirstColumn(tab))}</th>
+                <th>상세</th>
+                <th>상태</th>
+                <th>수치</th>
+                <th>작업</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr class="admin-empty-row">
+                <td colspan="5">
+                  <div class="admin-empty-inline">
+                    <strong>${escapeHtml(statusTitle)}</strong>
+                    <span>${escapeHtml(statusBody)}</span>
+                  </div>
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      `;
     }
     return `<div class="admin-empty"><strong>검색 결과가 없습니다.</strong><span>다른 주문번호, 고객명, 상품명으로 다시 검색하세요.</span></div>`;
   }
@@ -5437,6 +5877,7 @@ function saveAdminProfileSettings() {
       ...state.adminCredentials,
       password: nextPassword,
     };
+    state.adminSessionPassword = nextPassword;
     save("reball.adminCredentials", state.adminCredentials);
   }
 
@@ -5577,7 +6018,7 @@ function adminStatsForTab(tab) {
   const orderSummary = summarizeAdminOrders(orderRows);
   const productRows = catalogProducts();
   const stockLow = productRows.filter((product) => product.stock < 45).length;
-  const newProductCount = state.adminProducts?.length || 0;
+  const newProductCount = adminRegisteredProductCount();
   const inquiryRows = adminInquiryPosts();
   const pendingInquiries = inquiryRows.filter((post) => !post.answer?.trim()).length;
   const returnRows = adminReturns();
@@ -5663,13 +6104,11 @@ function adminStatsForTab(tab) {
 }
 
 function adminCustomerCountValue(rows = adminCustomerRows()) {
-  if (state.adminMembersLoading || !state.adminMembersLoaded) return "확인중";
   if (state.adminMembersError) return "권한 필요";
   return `${rows.length}명`;
 }
 
 function adminCustomerNewCountValue(rows = adminCustomerRows()) {
-  if (state.adminMembersLoading || !state.adminMembersLoaded) return "확인중";
   if (state.adminMembersError) return "권한 필요";
   return `${rows.filter((row) => row.subValue.includes("신규")).length}명`;
 }
@@ -6004,16 +6443,17 @@ function adminChartValues(tab) {
     product: [
       productRows.filter((product) => product.stock >= 45).length,
       productRows.filter((product) => product.stock < 45).length,
-      state.adminProducts?.length || 0,
+      adminRegisteredProductCount(),
     ],
     returns: [returnRows.filter((row) => row.status.includes("완료")).length, returnRows.filter((row) => row.status.includes("대기")).length, returnRows.length],
     coupon: [state.coupons.length, state.coupons.reduce((sum, coupon) => sum + (Number(coupon.useCount) || 0), 0), (state.adminBanners || []).length],
     pos: [adminPosRows().length, 0, 0],
     settlement: [0, 0, 0],
-    customer:
-      state.adminMembersLoading || !state.adminMembersLoaded || state.adminMembersError
-        ? [0, 0, 0]
-        : [customerRows.length, customerRows.filter((row) => row.subValue.includes("신규")).length, adminInquiryPosts().filter((post) => !post.answer?.trim()).length],
+    customer: [
+      customerRows.length,
+      customerRows.filter((row) => row.subValue.includes("신규")).length,
+      adminInquiryPosts().filter((post) => !post.answer?.trim()).length,
+    ],
     review: [reviewRows.length, reviewRows.filter((row) => row.status.includes("대기")).length, 0],
     settings: [state.adminProfile?.id ? 1 : 0, settingsRows.length, Object.keys(defaultNotifications).length],
   }[tab];
@@ -6158,6 +6598,27 @@ function showToast(message) {
   }
 }
 
+function formDataFromScope(scope) {
+  if (!scope) return new FormData();
+  if (scope.tagName === "FORM") return new FormData(scope);
+
+  const formData = new FormData();
+  scope.querySelectorAll("input, select, textarea").forEach((control) => {
+    if (!control.name || control.disabled) return;
+
+    const type = String(control.type || "").toLowerCase();
+    if ((type === "checkbox" || type === "radio") && !control.checked) return;
+
+    if (control.tagName === "SELECT" && control.multiple) {
+      Array.from(control.selectedOptions).forEach((option) => formData.append(control.name, option.value));
+      return;
+    }
+
+    formData.append(control.name, control.value);
+  });
+  return formData;
+}
+
 function handleAdminCustomerRegister() {
   const form = document.querySelector("[data-admin-customer-form]");
   if (!form) return true;
@@ -6185,7 +6646,7 @@ function handleAdminCustomerRegister() {
     return false;
   }
 
-  const formData = new FormData(form);
+  const formData = formDataFromScope(form);
   const registered = Array.isArray(state.adminCustomers) ? state.adminCustomers : [];
   const loginId = String(formData.get("email") || "").trim();
   const contactEmail = String(formData.get("contactEmail") || loginId).trim();
@@ -6214,7 +6675,123 @@ function handleAdminCustomerRegister() {
   return true;
 }
 
-function handleAdminProductRegister() {
+function replaceCatalogCacheProduct(list, nextProduct, limit = 200) {
+  return [nextProduct, ...(Array.isArray(list) ? list : []).filter((product) => product.slug !== nextProduct.slug)].slice(0, limit);
+}
+
+function distributedStockValues(totalStock, count) {
+  const safeTotal = Math.max(0, Number(totalStock) || 0);
+  if (!count) return [];
+  const base = Math.floor(safeTotal / count);
+  let remainder = safeTotal % count;
+  return Array.from({ length: count }, () => {
+    const value = base + (remainder > 0 ? 1 : 0);
+    remainder = Math.max(0, remainder - 1);
+    return value;
+  });
+}
+
+function buildAdminVariantPayloads(product, productId) {
+  const variants = generatedProductVariants({ ...product, dbVariants: [] });
+  const distributedStock = distributedStockValues(product.stock, variants.length);
+  return variants.map((variant, index) => ({
+    product_id: productId,
+    sku: variant.sku,
+    option_model: variant.model,
+    option_color: variant.color,
+    option_design: null,
+    grade: UI_GRADE_TO_DB_GRADE[variant.grade] || "A",
+    pack_size: packOptions.find((item) => item.id === variant.pack)?.qty || 10,
+    price_krw: variant.price,
+    compare_at_krw: variant.compareAtPrice > variant.price ? variant.compareAtPrice : null,
+    stock_qty: distributedStock[index] ?? 0,
+    thumbnail_url: normalizeCatalogAssetName(product.image, ""),
+    active: true,
+  }));
+}
+
+async function ensureAdminBrandRecord(brandSlug, brandName) {
+  const normalizedSlug = productToken(brandSlug || brandName || "brand");
+  const desiredSortOrder = brandSortIndex(normalizedSlug) + 1;
+  const { data: existing, error: selectError } = await supabase.from("brands").select("id, name, sort_order, active").eq("slug", normalizedSlug).maybeSingle();
+  if (selectError) throw selectError;
+
+  if (existing) {
+    const needsUpdate = existing.name !== brandName || existing.sort_order !== desiredSortOrder || existing.active !== true;
+    if (!needsUpdate) return existing.id;
+    const { data: updated, error: updateError } = await supabase
+      .from("brands")
+      .update({
+        name: brandName,
+        sort_order: desiredSortOrder,
+        active: true,
+      })
+      .eq("id", existing.id)
+      .select("id")
+      .single();
+    if (updateError) throw updateError;
+    return updated.id;
+  }
+
+  const { data: created, error: insertError } = await supabase
+    .from("brands")
+    .insert({
+      slug: normalizedSlug,
+      name: brandName,
+      sort_order: desiredSortOrder,
+      active: true,
+    })
+    .select("id")
+    .single();
+  if (insertError) throw insertError;
+  return created.id;
+}
+
+async function saveAdminProductToSupabase(product, password = "") {
+  await ensureAdminCatalogSession(password);
+
+  const brandId = await ensureAdminBrandRecord(product.brandSlug, product.brandName);
+  const productPayload = {
+    brand_id: brandId,
+    slug: product.slug,
+    name: product.name,
+    subtitle: product.line || null,
+    summary: product.copy || null,
+    sale_type: "lostball",
+    base_price_krw: product.price,
+    featured: false,
+    active: true,
+    detail_image_url: product.detailImage || null,
+    updated_at: new Date().toISOString(),
+  };
+
+  const { data: savedProduct, error: productError } = await supabase
+    .from("products")
+    .upsert(productPayload, { onConflict: "slug" })
+    .select("id")
+    .single();
+  if (productError) throw productError;
+
+  const { error: deactivateError } = await supabase.from("product_variants").update({ active: false }).eq("product_id", savedProduct.id);
+  if (deactivateError) throw deactivateError;
+
+  const variantPayloads = buildAdminVariantPayloads(product, savedProduct.id);
+  const { error: variantError } = await supabase.from("product_variants").upsert(variantPayloads, { onConflict: "sku" });
+  if (variantError) throw variantError;
+
+  const { data: row, error: reloadError } = await supabase
+    .from("products")
+    .select(
+      "slug,name,subtitle,summary,base_price_krw,detail_image_url,updated_at,brands(slug,name),product_variants(id,sku,option_model,option_color,grade,pack_size,price_krw,compare_at_krw,stock_qty,thumbnail_url,active)"
+    )
+    .eq("id", savedProduct.id)
+    .single();
+  if (reloadError) throw reloadError;
+
+  return mapSupabaseProductToCatalogProduct(row);
+}
+
+async function handleAdminProductRegister() {
   const form = document.querySelector("[data-admin-product-form]");
   if (!form) return true;
 
@@ -6226,7 +6803,7 @@ function handleAdminProductRegister() {
     return false;
   }
 
-  const formData = new FormData(form);
+  const formData = formDataFromScope(form);
   const name = String(formData.get("name") || "").trim();
   const brandName = String(formData.get("brandName") || "").trim();
   const line = String(formData.get("line") || "").trim();
@@ -6249,7 +6826,6 @@ function handleAdminProductRegister() {
   const brandSlug = adminBrandSlugFromName(brandName);
   const template = products.find((product) => product.brandSlug === brandSlug) ?? products[0];
   const slug = requestedSlug || uniqueAdminProductSlug(`${brandName}-${name}`);
-  const registered = Array.isArray(state.adminProducts) ? state.adminProducts : [];
   const models = parseOptionList(formData.get("models"), template.models || [line]);
   const colors = parseOptionList(formData.get("colors"), template.colors || ["화이트"]);
   const image = String(formData.get("image") || editingProduct?.image || template.image).trim();
@@ -6275,18 +6851,23 @@ function handleAdminProductRegister() {
     updatedAt: todayIso(),
   };
 
-  state.adminProducts = [
-    nextProduct,
-    ...registered.filter((product) => product.slug !== slug),
-  ].slice(0, 100);
-  save("reball.adminProducts", state.adminProducts);
-  return true;
+  try {
+    const persistedProduct = await saveAdminProductToSupabase(nextProduct, state.adminSessionPassword || state.adminCredentials?.password || "");
+    state.adminProducts = replaceCatalogCacheProduct(state.adminProducts, persistedProduct, 100);
+    state.remoteProducts = replaceCatalogCacheProduct(state.remoteProducts, persistedProduct, 200);
+    save("reball.adminProducts", state.adminProducts);
+    save("reball.remoteProducts", state.remoteProducts);
+    return true;
+  } catch (error) {
+    showToast(normalizeAuthError(error, "상품을 Supabase에 저장하지 못했습니다."));
+    return false;
+  }
 }
 
 function adminBrandSlugFromName(value) {
   const normalized = String(value || "").toLowerCase().replace(/\s+/g, "");
   const matched = brandMenu.find(([slug, label]) => normalized.includes(label.toLowerCase().replace(/\s+/g, "")) || normalized.includes(slug));
-  return matched?.[0] || "mix";
+  return matched?.[0] || productToken(value || "mix");
 }
 
 function uniqueAdminProductSlug(value) {
@@ -6382,9 +6963,53 @@ function saveAdminReview() {
   showToast("리뷰가 저장되었습니다.");
 }
 
+function focusConsultInput() {
+  window.requestAnimationFrame(() => {
+    const thread = document.querySelector("[data-consult-thread]");
+    if (thread) thread.scrollTop = thread.scrollHeight;
+    document.querySelector('[data-consult-form] input')?.focus();
+  });
+}
+
+function submitConsultQuestion(question) {
+  const query = stringOrEmpty(question).trim();
+  if (!query) {
+    showToast("상담 질문을 입력하세요.");
+    return;
+  }
+
+  state.consultOpen = true;
+  state.consultMessages = [
+    ...state.consultMessages,
+    { role: "user", body: query },
+    { role: "assistant", body: buildConsultAnswer(query) },
+  ].slice(-12);
+  renderRoute();
+  focusConsultInput();
+}
+
 function bindGlobalEvents() {
   document.querySelectorAll("[data-route]").forEach((node) => {
     node.addEventListener("click", () => routeTo(node.dataset.route));
+  });
+  document.querySelector("[data-consult-toggle]")?.addEventListener("click", () => {
+    state.consultOpen = !state.consultOpen;
+    renderRoute();
+    if (state.consultOpen) focusConsultInput();
+  });
+  document.querySelectorAll("[data-consult-close]").forEach((node) => {
+    node.addEventListener("click", () => {
+      state.consultOpen = false;
+      renderRoute();
+    });
+  });
+  document.querySelectorAll("[data-consult-question]").forEach((node) => {
+    node.addEventListener("click", () => submitConsultQuestion(node.dataset.consultQuestion));
+  });
+  document.querySelector("[data-consult-form]")?.addEventListener("submit", (event) => {
+    event.preventDefault();
+    const query = new FormData(event.currentTarget).get("consultQuery");
+    submitConsultQuestion(query);
   });
   document.querySelectorAll("[data-scroll-to]").forEach((node) => {
     node.addEventListener("click", () => {
@@ -6404,53 +7029,250 @@ function bindGlobalEvents() {
   });
 }
 
+let heroMotionRuntimePromise = null;
+
+function loadHeroMotionRuntime() {
+  if (!heroMotionRuntimePromise) {
+    heroMotionRuntimePromise = Promise.allSettled([
+      import("https://cdn.jsdelivr.net/npm/gsap@3.12.5/+esm"),
+      import("https://cdn.jsdelivr.net/npm/gsap@3.12.5/ScrollTrigger/+esm"),
+    ]).then(([gsapResult, scrollTriggerResult]) => {
+      const gsapModule = gsapResult.status === "fulfilled" ? gsapResult.value : {};
+      const scrollTriggerModule = scrollTriggerResult.status === "fulfilled" ? scrollTriggerResult.value : {};
+      return {
+        gsap: gsapModule.gsap ?? gsapModule.default ?? null,
+        ScrollTrigger: scrollTriggerModule.ScrollTrigger ?? scrollTriggerModule.default ?? null,
+        Lenis: null,
+      };
+    });
+  }
+  return heroMotionRuntimePromise;
+}
+
+function createFrameSequenceCanvas(canvas, frameCount, virtualFrameCount, frameSrcTemplate) {
+  const context = canvas.getContext("2d", { alpha: true });
+  const frames = Array.from({ length: frameCount }, (_, index) => {
+    const image = new Image();
+    image.decoding = "async";
+    if ("fetchPriority" in image) image.fetchPriority = "low";
+    image.src = frameSrcTemplate.replace("{frame}", String(index + 1).padStart(2, "0"));
+    return image;
+  });
+  let lastProgress = 0;
+  let currentSignature = "";
+  let canvasWidth = 0;
+  let canvasHeight = 0;
+  let deviceScale = 1;
+  let disposed = false;
+
+  const resize = () => {
+    const rect = canvas.getBoundingClientRect();
+    deviceScale = Math.min(2, window.devicePixelRatio || 1);
+    canvasWidth = Math.max(1, rect.width);
+    canvasHeight = Math.max(1, rect.height);
+    canvas.width = Math.round(canvasWidth * deviceScale);
+    canvas.height = Math.round(canvasHeight * deviceScale);
+    context.setTransform(deviceScale, 0, 0, deviceScale, 0, 0);
+    currentSignature = "";
+  };
+
+  const drawCover = (image, options = {}) => {
+    if (!image || !image.complete || image.naturalWidth === 0) return;
+    const { alpha = 1, translateY = 0, scaleBoost = 1 } = options;
+    const scale = Math.max(canvasWidth / image.naturalWidth, canvasHeight / image.naturalHeight) * scaleBoost;
+    const drawWidth = image.naturalWidth * scale;
+    const drawHeight = image.naturalHeight * scale;
+    context.globalAlpha = alpha;
+    context.drawImage(image, (canvasWidth - drawWidth) / 2, (canvasHeight - drawHeight) / 2 + translateY, drawWidth, drawHeight);
+    context.globalAlpha = 1;
+  };
+
+  const mapProgressToFrames = (progress) => {
+    const clamped = Math.min(1, Math.max(0, progress));
+    const virtualFrame = Math.min(virtualFrameCount - 1, Math.max(0, Math.floor(clamped * (virtualFrameCount - 1))));
+    const framePosition = clamped * Math.max(0, frameCount - 1);
+    const index = Math.min(frameCount - 1, Math.max(0, Math.floor(framePosition)));
+    const nextIndex = Math.min(frameCount - 1, index + 1);
+    const frameMix = Math.min(1, Math.max(0, framePosition - index));
+    return { clamped, index, nextIndex, virtualFrame, frameMix };
+  };
+
+  const draw = (progress) => {
+    if (disposed || !context) return;
+    lastProgress = progress;
+    if (!canvasWidth || !canvasHeight) resize();
+    const { clamped, index, nextIndex, virtualFrame, frameMix } = mapProgressToFrames(progress);
+    const blendFrame = nextIndex !== index && frameMix > 0.001;
+    const signature = blendFrame ? `${index}:${nextIndex}:${frameMix.toFixed(3)}:${virtualFrame}` : `${index}:${virtualFrame}`;
+    if (signature === currentSignature) return;
+    currentSignature = signature;
+    context.clearRect(0, 0, canvasWidth, canvasHeight);
+    if (blendFrame) {
+      const eased = frameMix * frameMix * (3 - 2 * frameMix);
+      drawCover(frames[index], { alpha: 1 - eased });
+      drawCover(frames[nextIndex], { alpha: eased });
+      canvas.dataset.currentFrame = `${String(index + 1).padStart(2, "0")}-${String(nextIndex + 1).padStart(2, "0")}`;
+      canvas.dataset.sceneCutMix = eased.toFixed(4);
+    } else {
+      drawCover(frames[index]);
+      canvas.dataset.currentFrame = String(index + 1).padStart(2, "0");
+      canvas.dataset.sceneCutMix = "0.0000";
+    }
+    canvas.dataset.virtualFrame = String(virtualFrame + 1).padStart(2, "0");
+    canvas.dataset.progress = clamped.toFixed(4);
+  };
+
+  resize();
+  frames.forEach((image, index) => {
+    image.addEventListener(
+      "load",
+      () => {
+        if (index === 0 || String(index + 1).padStart(2, "0") === canvas.dataset.currentFrame) {
+          currentSignature = "";
+          draw(lastProgress);
+        }
+      },
+      { once: true }
+    );
+  });
+
+  return {
+    draw,
+    resize,
+    destroy() {
+      disposed = true;
+      context?.clearRect(0, 0, canvasWidth, canvasHeight);
+    },
+  };
+}
+
 function initHeroTransition() {
   if (typeof state.heroTransitionCleanup === "function") {
     state.heroTransitionCleanup();
     state.heroTransitionCleanup = null;
   }
 
-  const root = document.querySelector("[data-hero-transition]");
+  const root = document.querySelector("[data-flight-transition]");
   const video = root?.querySelector("[data-hero-intro-video]");
-  const frameImage = root?.querySelector("[data-hero-ball-frame]");
-  if (!root || !video || !frameImage) return;
+  const canvas = root?.querySelector("[data-frame-sequence-canvas]");
+  if (!root || !video || !canvas) return;
   root.dataset.heroTransitionReady = "true";
 
-  const frameCount = 60;
-  let introEnded = video.ended;
-  let currentFrame = -1;
-  let autoProgress = introEnded ? 1 : 0;
-  let autoRaf = 0;
+  const frameCount = Number(canvas.dataset.frameCount) || HERO_DROP_FRAME_COUNT;
+  const virtualFrameCount = Number(canvas.dataset.virtualFrameCount) || HERO_DROP_VIRTUAL_FRAME_COUNT;
+  const frameSequence = createFrameSequenceCanvas(
+    canvas,
+    frameCount,
+    virtualFrameCount,
+    canvas.dataset.frameSrcTemplate ?? ""
+  );
+  const reducedMotionQuery = window.matchMedia("(prefers-reduced-motion: reduce)");
+  const isSmallScreenQuery = window.matchMedia("(max-width: 760px)");
+  const saveData = Boolean(navigator.connection?.saveData);
+  let introEnded = state.heroIntroHasPlayed || video.ended || reducedMotionQuery.matches;
+  let sequenceScrollStart = window.scrollY || window.pageYOffset || 0;
   let scrollRaf = 0;
   let introWatchRaf = 0;
+  let introWatchInterval = 0;
   let introFallbackTimer = 0;
+  let scrollTriggerInstance = null;
+  let lenis = null;
+  let lenisTicker = null;
+  let gsapRuntime = null;
   let disposed = false;
+  let lastIntroTime = 0;
   const introStartTime = performance.now();
-
-  [0, 15, 30, 45, 59].forEach((frame) => {
-    const preload = new Image();
-    preload.src = heroFrameAsset(frame);
-  });
+  const introWallStartTime = Date.now();
+  let renderedProgress = reducedMotionQuery.matches ? 1 : 0;
+  let targetProgress = renderedProgress;
+  let latestRawProgress = 0;
+  let smoothProgressRaf = 0;
 
   const clamp01 = (value) => Math.min(1, Math.max(0, value));
-  const setFrame = (progress) => {
-    const frame = Math.min(frameCount - 1, Math.max(0, Math.round(progress * (frameCount - 1))));
-    if (frame === currentFrame) return;
-    currentFrame = frame;
-    frameImage.src = heroFrameAsset(frame);
+  const mapCrossfade = (progress) => clamp01((progress - 0.35) / 0.35);
+  const unloadIntroVideo = () => {
+    state.heroIntroHasPlayed = true;
+    video.pause?.();
+    video.hidden = true;
+    video.removeAttribute("autoplay");
+    video.removeAttribute("src");
+    video.load?.();
   };
-
-  const update = () => {
-    if (disposed) return;
+  const getNativeScrollProgress = () => {
     const rect = root.getBoundingClientRect();
     const scrollDistance = Math.max(1, root.offsetHeight - window.innerHeight);
-    const scrollProgress = clamp01(-rect.top / scrollDistance);
-    const progress = introEnded ? clamp01(Math.max(scrollProgress, autoProgress)) : 0;
-    root.style.setProperty("--hero-scroll-progress", scrollProgress.toFixed(4));
-    root.style.setProperty("--hero-sequence-progress", progress.toFixed(4));
-    root.classList.toggle("is-intro-ended", introEnded);
-    root.classList.toggle("is-sequence-complete", progress > 0.96);
-    setFrame(progress);
+    return clamp01(-rect.top / scrollDistance);
+  };
+  const getSequenceDistance = () => {
+    const maxScrollableDistance = Math.max(1, root.offsetHeight - window.innerHeight);
+    return Math.max(1, Math.min(maxScrollableDistance, window.innerHeight * 0.82));
+  };
+  const getSequenceScrollProgress = () => {
+    if (reducedMotionQuery.matches) return 1;
+    if (!introEnded) return 0;
+    const currentScrollY = window.scrollY || window.pageYOffset || 0;
+    return clamp01((currentScrollY - sequenceScrollStart) / getSequenceDistance());
+  };
+  const shouldReleaseStuckIntro = (rawProgress) => {
+    if (introEnded || reducedMotionQuery.matches) return false;
+    const elapsed = Date.now() - introWallStartTime;
+    return elapsed >= getIntroWatchTimeout() || (elapsed > 900 && clamp01(rawProgress) > 0.08);
+  };
+  const releaseIntroForScrollIntent = () => {
+    if (introEnded || reducedMotionQuery.matches) return;
+    onIntroEnd({ preserveScrollProgress: true, sequenceLead: 0 });
+    window.requestAnimationFrame(() => {
+      window.requestAnimationFrame(update);
+    });
+  };
+  const releaseIntroForKeyScroll = (event) => {
+    if (!["ArrowDown", "PageDown", " ", "Spacebar", "End"].includes(event.key)) return;
+    releaseIntroForScrollIntent();
+  };
+  const applyTransition = (progress, rawProgress) => {
+    if (disposed) return;
+    const crossfade = mapCrossfade(progress);
+    root.style.setProperty("--flight-scroll-progress", clamp01(rawProgress).toFixed(4));
+    root.style.setProperty("--flight-progress", progress.toFixed(4));
+    root.style.setProperty("--flight-intro-opacity", reducedMotionQuery.matches || introEnded ? "0.0000" : "1.0000");
+    root.style.setProperty("--flight-intro-plate-opacity", progress < 0.35 ? "1.0000" : progress < 0.7 ? (1 - crossfade).toFixed(4) : "0.0000");
+    root.style.setProperty("--flight-grass-plate-opacity", progress < 0.35 ? "0.0000" : progress < 0.7 ? crossfade.toFixed(4) : "1.0000");
+    root.style.setProperty("--flight-bridge-opacity", clamp01((progress - 0.68) / 0.18).toFixed(4));
+    root.style.setProperty("--flight-intro-scale", (1 + progress * 0.16).toFixed(4));
+    root.style.setProperty("--flight-grass-scale", (1.08 - progress * 0.08).toFixed(4));
+    root.classList.toggle("is-intro-ended", introEnded || reducedMotionQuery.matches);
+    root.classList.toggle("is-flight-complete", progress > 0.96);
+    frameSequence.draw(progress);
+  };
+  const smoothProgressStep = () => {
+    smoothProgressRaf = 0;
+    if (disposed) return;
+    const delta = targetProgress - renderedProgress;
+    if (Math.abs(delta) < 0.004) {
+      renderedProgress = targetProgress;
+      applyTransition(renderedProgress, latestRawProgress);
+      return;
+    }
+    renderedProgress += delta * 0.65;
+    applyTransition(renderedProgress, latestRawProgress);
+    smoothProgressRaf = window.requestAnimationFrame(smoothProgressStep);
+  };
+  const updateTransition = (rawProgress, options = {}) => {
+    if (disposed) return;
+    if (shouldReleaseStuckIntro(rawProgress)) {
+      endIntroAtCurrentScroll();
+    }
+    latestRawProgress = rawProgress;
+    targetProgress = getSequenceScrollProgress();
+    if (smoothProgressRaf) {
+      window.cancelAnimationFrame(smoothProgressRaf);
+      smoothProgressRaf = 0;
+    }
+    renderedProgress = targetProgress;
+    applyTransition(renderedProgress, rawProgress);
+  };
+  const update = () => {
+    updateTransition(getNativeScrollProgress());
   };
 
   const requestUpdate = () => {
@@ -6461,94 +7283,138 @@ function initHeroTransition() {
     });
   };
 
-  const startAutoSequence = () => {
-    const duration = 1800;
-    let start = 0;
-    const tick = (time) => {
-      if (disposed) return;
-      if (!start) start = time;
-      autoProgress = clamp01((time - start) / duration);
-      update();
-      if (autoProgress < 1) {
-        autoRaf = window.requestAnimationFrame(tick);
-      }
-    };
-    autoRaf = window.requestAnimationFrame(tick);
-  };
-
-  const onIntroEnd = () => {
+  const onIntroEnd = (options = {}) => {
     if (introEnded) return;
+    const currentScrollY = window.scrollY || window.pageYOffset || 0;
+    const sequenceLead = Number.isFinite(options.sequenceLead) ? Math.max(0, options.sequenceLead) : 0;
     introEnded = true;
+    sequenceScrollStart = options.preserveScrollProgress
+      ? Math.max(0, currentScrollY - getSequenceDistance() * getNativeScrollProgress() + getSequenceDistance() * sequenceLead)
+      : currentScrollY + getSequenceDistance() * sequenceLead;
     root.dataset.heroIntroEnded = "true";
-    root.classList.add("is-intro-ended");
-    startAutoSequence();
+    root.classList.add("is-intro-ended", "is-intro-played");
+    unloadIntroVideo();
+    updateTransition(getNativeScrollProgress(), { immediate: true });
   };
-
-  const forceCurrentRootSequence = () => {
-    const activeRoot = document.querySelector("[data-hero-transition]");
-    const activeFrame = activeRoot?.querySelector("[data-hero-ball-frame]");
-    if (!activeRoot || !activeFrame || activeRoot.dataset.heroIntroEnded === "true") return;
-    activeRoot.dataset.heroIntroEnded = "true";
-    activeRoot.classList.add("is-intro-ended");
-    let forceStart = 0;
-    const tick = (time) => {
-      if (!forceStart) forceStart = time;
-      const progress = clamp01((time - forceStart) / 1800);
-      const frame = Math.min(frameCount - 1, Math.max(0, Math.round(progress * (frameCount - 1))));
-      activeRoot.style.setProperty("--hero-sequence-progress", progress.toFixed(4));
-      activeRoot.classList.toggle("is-sequence-complete", progress > 0.96);
-      activeFrame.src = heroFrameAsset(frame);
-      if (progress < 1 && document.body.contains(activeRoot)) {
-        window.requestAnimationFrame(tick);
-      }
-    };
-    window.requestAnimationFrame(tick);
+  const endIntroAtCurrentScroll = () => {
+    onIntroEnd({ preserveScrollProgress: getNativeScrollProgress() > 0.01, sequenceLead: 0 });
   };
 
   const scheduleIntroFallback = () => {
     if (introFallbackTimer) window.clearTimeout(introFallbackTimer);
-    const duration = Number.isFinite(video.duration) && video.duration > 0 ? video.duration * 1000 + 260 : 5600;
-    introFallbackTimer = window.setTimeout(onIntroEnd, duration);
+    const duration = Number.isFinite(video.duration) && video.duration > 0 ? Math.min(9200, Math.max(4600, video.duration * 1000 + 260)) : 5800;
+    introFallbackTimer = window.setTimeout(endIntroAtCurrentScroll, duration);
+  };
+  const getIntroWatchTimeout = () =>
+    Number.isFinite(video.duration) && video.duration > 0
+      ? Math.min(9400, Math.max(4800, video.duration * 1000 + 420))
+      : 6200;
+  const checkIntroWallClockTimeout = () => {
+    if (disposed || introEnded) return;
+    checkIntroPlaybackProgress();
+    const elapsed = Date.now() - introWallStartTime;
+    if ((elapsed > 900 && getNativeScrollProgress() > 0.08) || elapsed >= getIntroWatchTimeout()) {
+      endIntroAtCurrentScroll();
+    }
+  };
+
+  const checkIntroPlaybackProgress = () => {
+    if (disposed || introEnded) return;
+    if (!Number.isFinite(video.duration) || video.duration <= 0) return;
+    const previousTime = lastIntroTime;
+    lastIntroTime = video.currentTime || 0;
+    if (previousTime > 1 && lastIntroTime < Math.max(0.2, previousTime - 0.4)) {
+      endIntroAtCurrentScroll();
+      return;
+    }
+    if (video.currentTime >= Math.max(0.1, video.duration - 0.18)) {
+      endIntroAtCurrentScroll();
+    }
   };
 
   const watchIntroFallback = (time) => {
     if (disposed || introEnded) return;
-    if (time - introStartTime >= 5600) {
-      onIntroEnd();
+    if (time - introStartTime >= getIntroWatchTimeout()) {
+      endIntroAtCurrentScroll();
       return;
     }
     introWatchRaf = window.requestAnimationFrame(watchIntroFallback);
   };
 
-  const firstIntroStart = window.__reballHeroTransitionStartAt || Date.now();
-  window.__reballHeroTransitionStartAt = firstIntroStart;
-  const remainingIntroDelay = Math.max(0, 5600 - (Date.now() - firstIntroStart));
-  introFallbackTimer = window.setTimeout(onIntroEnd, remainingIntroDelay);
-  window.setTimeout(forceCurrentRootSequence, remainingIntroDelay);
-  introWatchRaf = window.requestAnimationFrame(watchIntroFallback);
-  root.dataset.heroFallbackScheduled = "true";
-  video.addEventListener("ended", onIntroEnd);
-  if (video.readyState >= 1) {
-    scheduleIntroFallback();
-  } else {
-    video.addEventListener("loadedmetadata", scheduleIntroFallback, { once: true });
-  }
+  const setupMotionRuntime = async () => {
+    if (reducedMotionQuery.matches) return;
+    const runtime = await loadHeroMotionRuntime();
+    if (disposed || !runtime.gsap || !runtime.ScrollTrigger) return;
+    gsapRuntime = runtime.gsap;
+    gsapRuntime.registerPlugin(runtime.ScrollTrigger);
+    scrollTriggerInstance = runtime.ScrollTrigger.create({
+      trigger: root,
+      start: "top top",
+      end: "bottom bottom",
+      scrub: true,
+      onUpdate: (self) => updateTransition(self.progress),
+    });
+    update();
+  };
+
+  video.addEventListener("ended", endIntroAtCurrentScroll);
+  video.addEventListener("timeupdate", checkIntroPlaybackProgress);
+  video.addEventListener("pause", checkIntroPlaybackProgress);
+  video.addEventListener("loadedmetadata", scheduleIntroFallback);
+  video.addEventListener("durationchange", scheduleIntroFallback);
+  video.loop = false;
+  scheduleIntroFallback();
+  introWatchInterval = window.setInterval(checkIntroWallClockTimeout, 250);
   window.addEventListener("scroll", requestUpdate, { passive: true });
+  window.addEventListener("wheel", releaseIntroForScrollIntent, { passive: true });
+  window.addEventListener("touchmove", releaseIntroForScrollIntent, { passive: true });
+  window.addEventListener("keydown", releaseIntroForKeyScroll);
   window.addEventListener("resize", requestUpdate);
-  video.play?.().catch(() => {
-    root.classList.add("is-intro-paused");
-  });
-  update();
+  window.addEventListener("resize", frameSequence.resize);
+  if (introEnded) {
+    root.dataset.heroIntroEnded = "true";
+    root.classList.add("is-intro-ended", "is-intro-played");
+    unloadIntroVideo();
+    update();
+  } else {
+    video.play?.().catch(() => {
+      root.classList.add("is-intro-paused");
+    });
+  }
+  if (reducedMotionQuery.matches) {
+    root.classList.add("is-reduced-motion", "is-intro-ended", "is-flight-complete");
+    unloadIntroVideo();
+    updateTransition(1);
+  } else if (!introEnded) {
+    introWatchRaf = window.requestAnimationFrame(watchIntroFallback);
+    update();
+    void setupMotionRuntime();
+  } else {
+    void setupMotionRuntime();
+  }
 
   state.heroTransitionCleanup = () => {
     disposed = true;
-    video.removeEventListener("ended", onIntroEnd);
+    video.removeEventListener("ended", endIntroAtCurrentScroll);
+    video.removeEventListener("timeupdate", checkIntroPlaybackProgress);
+    video.removeEventListener("pause", checkIntroPlaybackProgress);
+    video.removeEventListener("loadedmetadata", scheduleIntroFallback);
+    video.removeEventListener("durationchange", scheduleIntroFallback);
     window.removeEventListener("scroll", requestUpdate);
+    window.removeEventListener("wheel", releaseIntroForScrollIntent);
+    window.removeEventListener("touchmove", releaseIntroForScrollIntent);
+    window.removeEventListener("keydown", releaseIntroForKeyScroll);
     window.removeEventListener("resize", requestUpdate);
-    if (autoRaf) window.cancelAnimationFrame(autoRaf);
+    window.removeEventListener("resize", frameSequence.resize);
     if (scrollRaf) window.cancelAnimationFrame(scrollRaf);
     if (introWatchRaf) window.cancelAnimationFrame(introWatchRaf);
+    if (smoothProgressRaf) window.cancelAnimationFrame(smoothProgressRaf);
+    if (introWatchInterval) window.clearInterval(introWatchInterval);
     if (introFallbackTimer) window.clearTimeout(introFallbackTimer);
+    scrollTriggerInstance?.kill();
+    if (lenisTicker && gsapRuntime) gsapRuntime.ticker.remove(lenisTicker);
+    lenis?.destroy();
+    frameSequence.destroy();
   };
 }
 
@@ -6896,15 +7762,34 @@ function bindPageEvents() {
     }
     showToast("실제 회원 탈퇴는 고객센터를 통해 접수해 주세요.");
   });
-  document.querySelector("[data-admin-login-form]")?.addEventListener("submit", (event) => {
+  document.querySelector("[data-admin-login-form]")?.addEventListener("submit", async (event) => {
     event.preventDefault();
     const form = new FormData(event.currentTarget);
     const id = String(form.get("adminId") ?? "").trim();
+    const adminEmail = String(form.get("adminEmail") ?? "").trim();
     const password = String(form.get("adminPassword") ?? "").trim();
-    if (id === state.adminCredentials.id && (!state.adminCredentials.password || password === state.adminCredentials.password)) {
-      if (!state.adminCredentials.password) {
+    const localPasswordMatches = !state.adminCredentials.password || password === state.adminCredentials.password;
+    const supabaseLoginRequested = Boolean(adminEmail);
+    if (id === state.adminCredentials.id && (localPasswordMatches || supabaseLoginRequested)) {
+      if (!localPasswordMatches && supabaseLoginRequested) {
+        const connected = await syncAdminSupabaseSession(password, adminEmail);
+        if (!connected) {
+          state.adminLoginError = "Supabase 관리자 이메일 또는 비밀번호를 확인하세요.";
+          renderAdmin();
+          return;
+        }
+      }
+
+      state.adminSessionPassword = password;
+      if (!state.adminCredentials.password && !supabaseLoginRequested) {
         state.adminCredentials = { ...state.adminCredentials, password };
         save("reball.adminCredentials", state.adminCredentials);
+      }
+      if (adminEmail) {
+        state.adminProfile = { ...state.adminProfile, email: adminEmail };
+        state.adminCredentials = { ...state.adminCredentials, password: "" };
+        save("reball.adminCredentials", state.adminCredentials);
+        save("reball.adminProfile", state.adminProfile);
       }
       state.adminUser = { id, role: state.adminProfile.role, email: state.adminProfile.email };
       state.adminMembersLoaded = false;
@@ -6912,6 +7797,7 @@ function bindPageEvents() {
       state.adminLoginError = "";
       save("reball.adminUser", state.adminUser);
       renderAdmin();
+      if (localPasswordMatches) await syncAdminSupabaseSession(password, adminEmail);
       return;
     }
     state.adminLoginError = "아이디 또는 암호가 맞지 않습니다.";
@@ -6924,6 +7810,7 @@ function bindPageEvents() {
     state.adminMembers = [];
     state.adminMembersLoaded = false;
     state.adminMembersError = "";
+    state.adminSessionPassword = "";
     save("reball.adminUser", state.adminUser);
     renderAdmin();
   });
@@ -6940,7 +7827,6 @@ function bindPageEvents() {
       state.adminTab = node.dataset.adminTab;
       state.adminModal = null;
       state.adminModalContext = null;
-      if (state.adminTab === "customer") state.adminMembersLoaded = false;
       renderAdmin();
     });
   });
@@ -6969,7 +7855,7 @@ function bindPageEvents() {
     });
   });
   document.querySelectorAll("[data-admin-modal-primary]").forEach((node) => {
-    node.addEventListener("click", () => {
+    node.addEventListener("click", async () => {
       const message = node.dataset.adminModalPrimary || "저장";
       const action = node.dataset.adminModalAction;
       if (action === "downloadExport") {
@@ -7003,7 +7889,7 @@ function bindPageEvents() {
         saveAdminReview();
         return;
       }
-      if (action === "productRegister" && !handleAdminProductRegister()) return;
+      if (action === "productRegister" && !(await handleAdminProductRegister())) return;
       if (action === "addCustomer") {
         if (!handleAdminCustomerRegister()) return;
         state.adminModal = null;
@@ -7042,21 +7928,15 @@ function bindPageEvents() {
 
 async function hydrateFromSupabase() {
   try {
-    const response = await fetch(`${SUPABASE_URL}/rest/v1/products?select=slug,name,base_price_krw,product_variants(stock_qty)&active=eq.true`, {
-      headers: {
-        apikey: SUPABASE_KEY,
-        Authorization: `Bearer ${SUPABASE_KEY}`,
-      },
-    });
-    if (!response.ok) return;
-    const rows = await response.json();
-    for (const product of state.products) {
-      const row = rows.find((item) => item.slug === product.slug);
-      if (row) {
-        product.price = row.base_price_krw ?? product.price;
-        product.stock = row.product_variants?.reduce((sum, item) => sum + (item.stock_qty ?? 0), 0) || product.stock;
-      }
-    }
+    const { data: rows, error } = await supabase
+      .from("products")
+      .select(
+        "slug,name,subtitle,summary,base_price_krw,detail_image_url,updated_at,brands(slug,name),product_variants(id,sku,option_model,option_color,grade,pack_size,price_krw,compare_at_krw,stock_qty,thumbnail_url,active)"
+      )
+      .eq("active", true);
+    if (error || !Array.isArray(rows)) return;
+    state.remoteProducts = rows.map(mapSupabaseProductToCatalogProduct);
+    save("reball.remoteProducts", state.remoteProducts);
     renderRoute();
   } catch {
     // Local catalog remains the fallback for offline review.

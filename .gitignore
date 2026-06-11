@@ -1,6 +1,10 @@
 artifacts/
 dev-server.*.log
+.server-*.log
+.server-*.err.log
+.server-*.pid
 .server.pid
+.chrome-verify-*/
 .vercel/
 .env
 .env.*
@@ -9,6 +13,8 @@ node_modules/
 .next/
 dist/
 *.local
+assets/hero-transition/frames/
+hero/flight/frames/
 assets/figma/*.png
 !assets/figma/ball-*.png
 !assets/figma/bg-*.png

@@ -11,15 +11,24 @@ const mimeTypes = {
   ".html": "text/html; charset=utf-8",
   ".js": "text/javascript; charset=utf-8",
   ".json": "application/json; charset=utf-8",
+  ".mp4": "video/mp4",
   ".png": "image/png",
   ".svg": "image/svg+xml",
   ".webp": "image/webp",
+  ".woff2": "font/woff2",
 };
 
 function resolveRequestPath(url) {
   const pathname = decodeURIComponent(new URL(url, "http://localhost").pathname);
   const cleanPath = normalize(pathname).replace(/^(\.\.[/\\])+/, "");
-  const target = resolve(root, cleanPath === "/" ? "index.html" : cleanPath.slice(1));
+  const target = resolve(
+    root,
+    pathname === "/" && existsSync(join(root, "index-current.html"))
+      ? "index-current.html"
+      : pathname === "/"
+        ? "index.html"
+        : cleanPath.slice(1)
+  );
 
   if (!target.startsWith(root)) {
     return null;
@@ -47,7 +56,14 @@ function createStaticServer() {
       "Content-Type": mimeTypes[extension] ?? "application/octet-stream",
       "Cache-Control": "no-store",
     });
-    createReadStream(target).pipe(response);
+    const stream = createReadStream(target);
+    stream.on("error", () => {
+      if (!response.headersSent) {
+        response.writeHead(500, { "Content-Type": "text/plain; charset=utf-8" });
+      }
+      response.end("File read error");
+    });
+    stream.pipe(response);
   });
 }
 
