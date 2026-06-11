@@ -13184,33 +13184,36 @@ h1, h2, h3, h4 {
   background: var(--turf);
 }
 
-/* CTA(구매 유도) primary flag 변형 — 페이지당 1개 */
+/* CTA(구매 유도) 골드 버튼 (사용자 요청에 따라 골드 복원) */
 .primary-btn.cta,
 .gold-cart-btn {
-  border: none;
-  border-radius: var(--radius-btn);
-  background: var(--flag);
-  color: var(--chalk);
-  box-shadow: none;
+  border: 2px solid #e59500;
+  border-radius: 12px;
+  background: linear-gradient(90deg, #ffe9ad 0%, #f2b544 54%, #df8a00 100%);
+  color: var(--ink);
+  box-shadow:
+    inset 0 2px 0 rgba(255, 255, 255, 0.62),
+    0 12px 24px -18px rgba(214, 132, 0, 0.85);
   font-size: 15px;
   font-weight: 800;
 }
 
 .primary-btn.cta:hover:not(:disabled),
 .gold-cart-btn:hover:not(:disabled) {
-  background: #b8311f;
-  filter: none;
-  box-shadow: none;
+  filter: brightness(1.03);
+  background: linear-gradient(90deg, #ffe9ad 0%, #f2b544 54%, #df8a00 100%);
 }
 
 .gold-cart-btn {
   min-height: 52px;
 }
 
-.gold-cart-btn:disabled {
-  border: none;
-  background: var(--sand);
+.gold-cart-btn:disabled,
+.primary-btn.cta:disabled {
+  border-color: #d8c9a9;
+  background: linear-gradient(90deg, #f1ead7 0%, #e7dbc0 100%);
   color: rgba(20, 48, 31, 0.4);
+  box-shadow: none;
 }
 
 .gold-cart-btn svg,
@@ -13507,12 +13510,17 @@ hr,
 }
 
 .home-hero-cta .primary-btn {
-  background: var(--flag);
-  color: var(--chalk);
+  border: 2px solid #e59500;
+  background: linear-gradient(90deg, #ffe9ad 0%, #f2b544 54%, #df8a00 100%);
+  color: var(--ink);
+  box-shadow:
+    inset 0 2px 0 rgba(255, 255, 255, 0.62),
+    0 12px 24px -18px rgba(214, 132, 0, 0.85);
 }
 
 .home-hero-cta .primary-btn:hover:not(:disabled) {
-  background: #b8311f;
+  filter: brightness(1.03);
+  background: linear-gradient(90deg, #ffe9ad 0%, #f2b544 54%, #df8a00 100%);
 }
 
 .home-hero-cta .ghost-btn {
@@ -13580,10 +13588,7 @@ hr,
   }
 }
 
-/* 기존 flight-transition 히어로 숨김 */
-.flight-transition-section {
-  display: none !important;
-}
+/* (flight-transition 히어로 복원 — 인트로 영상 + webp 10프레임 시퀀스) */
 
 /* ── 헤더 모바일 ─────────────────────────────────────────── */
 @media (max-width: 768px) {
@@ -13674,12 +13679,12 @@ hr,
 
 .store-photo-tile {
   display: block;
-  position: static !important;
+  position: relative !important;
   margin: 0;
   border: none !important;
-  border-radius: 0 !important;
-  background: transparent !important;
-  overflow: visible !important;
+  border-radius: var(--radius-card) !important;
+  background: var(--sand) !important;
+  overflow: hidden !important;
   grid-row: auto !important;
 }
 
@@ -13711,10 +13716,38 @@ hr,
   aspect-ratio: 8 / 3;
 }
 
+/* 사진 위 설명글 오버레이 복원 (사용자 요청) */
 .store-photo-tile figcaption {
-  padding: 8px 4px 0;
-  font-size: var(--text-caption);
-  color: rgba(20, 48, 31, 0.6);
+  position: absolute;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  display: grid;
+  gap: 5px;
+  padding: 46px 20px 18px;
+  background: linear-gradient(180deg, rgba(6, 20, 14, 0) 0%, rgba(6, 20, 14, 0.82) 82%);
+  color: var(--chalk);
+  font-size: inherit;
+}
+
+.store-photo-tile figcaption span {
+  color: var(--sand);
+  font-size: 13px;
+  font-weight: 800;
+  text-transform: uppercase;
+}
+
+.store-photo-tile figcaption strong {
+  font-size: 19px;
+  font-weight: 800;
+  line-height: 1.22;
+}
+
+.store-photo-tile figcaption small {
+  color: rgba(255, 255, 255, 0.82);
+  font-size: 14px;
+  font-weight: 500;
+  line-height: 1.42;
 }
 
 /* ── 매장 버튼 정렬 ──────────────────────────────────────── */
@@ -13781,25 +13814,11 @@ hr,
   -webkit-backdrop-filter: none !important;
 }
 
-/* 금색 그라데이션 잔존 버튼 → flag 단색 */
-.gold-cart-btn,
-.home-bottom-cta-btn,
-.detail-mini-cta-btn,
-.bundle-cart-btn {
-  border: none !important;
-  background: var(--flag) !important;
-  color: var(--chalk) !important;
-  box-shadow: none !important;
-}
+/* (구매 CTA 버튼은 골드 유지 — 사용자 요청) */
 
-.gold-cart-btn:disabled {
-  background: var(--sand) !important;
-  color: rgba(20, 48, 31, 0.4) !important;
-}
-
-/* 금색 텍스트(eyebrow 등) → sand/turf */
+/* 매장 사진 오버레이 라벨 (다크 위 sand 텍스트) */
 .store-photo-tile figcaption span {
-  color: var(--turf) !important;
+  color: var(--sand) !important;
 }
 
 /* 금색 그라데이션 표면 → paper 단색 */

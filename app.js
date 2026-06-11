@@ -2656,7 +2656,7 @@ function renderHome() {
     ...brandMenu.map(([slug, label]) => [label, brandProductRoute(slug)]),
   ];
   layout(`
-    ${renderHomeHero(titleist)}
+    ${FlightTransitionSection([titleist, taylormade, bridgestone])}
 
     <section class="home-filter panel-card" id="products">
       <div>
@@ -3077,7 +3077,11 @@ function renderStorePhotoTile(photo, index) {
           decoding="async"
         />
       </span>
-      <figcaption>${escapeHtml(photo.title)}</figcaption>
+      <figcaption>
+        <span>${escapeHtml(photo.label)}</span>
+        <strong>${escapeHtml(photo.title)}</strong>
+        <small>${escapeHtml(photo.body)}</small>
+      </figcaption>
     </figure>
   `;
 }
