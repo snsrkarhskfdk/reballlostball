@@ -3219,7 +3219,7 @@ main.inspection-main {
   font-weight: 750;
 }
 
-.best-media b {
+.best-media > b {
   position: absolute;
   z-index: 2;
   top: 10px;
@@ -4247,7 +4247,7 @@ main.inspection-main {
 }
 
 .gallery-stage::before {
-  content: "";
+  content: none;
   position: absolute;
   width: min(320px, 70%);
   aspect-ratio: 1;
@@ -13390,7 +13390,9 @@ h1, h2, h3, h4 {
   flex-shrink: 0;
   border-radius: 999px;
   isolation: isolate;
-  filter: drop-shadow(0 4px 7px rgba(20, 48, 31, 0.22));
+  background: transparent;
+  box-shadow: none;
+  filter: none;
 }
 
 .grade-chip .grade-chip-ball {
@@ -13439,6 +13441,12 @@ h1, h2, h3, h4 {
 .grade-chip-letter {
   position: relative;
   z-index: 3;
+  display: inline-block;
+  min-width: 0;
+  height: auto;
+  padding: 0;
+  border-radius: 0;
+  background: transparent;
   color: var(--grade-letter);
   font-family: var(--font-data);
   font-weight: 700;
@@ -13482,6 +13490,9 @@ h1, h2, h3, h4 {
 .best-grade-chip .grade-chip {
   width: 40px;
   height: 40px;
+  background: transparent;
+  box-shadow: none;
+  filter: none;
 }
 
 .best-grade-chip .grade-chip .grade-chip-letter { font-size: 16px; }

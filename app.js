@@ -1,6 +1,6 @@
 ﻿const ASSET_PATH = "./assets/figma";
 const HERO_PATH = "/hero";
-const ASSET_VERSION = "20260612-02";
+const ASSET_VERSION = "20260612-03";
 const HERO_DROP_FRAME_COUNT = 10;
 const HERO_DROP_VIRTUAL_FRAME_COUNT = 36;
 const SUPABASE_URL = "https://qbftalhhyfcndanrcwpy.supabase.co";
@@ -424,6 +424,7 @@ const products = [
     models: ["Z-STAR", "반반볼"],
     image: "ball-srixon.png",
     detailImage: "detail-srixon.webp",
+    galleryVideo: "product-videos/reball-srixon-rotation.mp4",
     galleryImages: [
       { image: "gallery/srixon-01.png", label: "스릭슨 Z-STAR 측면" },
       { image: "gallery/srixon-02.png", label: "스릭슨 Z-STAR 후면" },

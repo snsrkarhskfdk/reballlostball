@@ -1,6 +1,6 @@
 ﻿const ASSET_PATH = "./assets/figma";
 const HERO_PATH = "/hero";
-const ASSET_VERSION = "20260612-02";
+const ASSET_VERSION = "20260612-03";
 const HERO_DROP_FRAME_COUNT = 10;
 const HERO_DROP_VIRTUAL_FRAME_COUNT = 36;
 const SUPABASE_URL = "https://qbftalhhyfcndanrcwpy.supabase.co";
@@ -424,6 +424,7 @@ const products = [
     models: ["Z-STAR", "반반볼"],
     image: "ball-srixon.png",
     detailImage: "detail-srixon.webp",
+    galleryVideo: "product-videos/reball-srixon-rotation.mp4",
     galleryImages: [
       { image: "gallery/srixon-01.png", label: "스릭슨 Z-STAR 측면" },
       { image: "gallery/srixon-02.png", label: "스릭슨 Z-STAR 후면" },
@@ -3214,12 +3215,10 @@ function productGalleryItems(product, variant = selectedVariant(product)) {
 }
 
 function renderGalleryStage(product, modalInitialImage) {
-  const variant = selectedVariant(product);
-  const showsVariantImage = variant.imageUrl && variant.imageUrl !== product.image;
-  if (product.galleryVideo && !showsVariantImage) {
+  if (product.galleryVideo) {
     return `
       <div class="gallery-stage has-video">
-        <video src="${asset(product.galleryVideo)}" poster="${asset(product.image)}" autoplay muted loop playsinline preload="metadata" aria-label="${escapeHtml(product.name)} 회전 영상"></video>
+        <video class="gallery-spin-video" src="${asset(product.galleryVideo)}" poster="${asset(product.image)}" autoplay muted loop playsinline preload="auto" aria-label="${escapeHtml(product.name)} 회전 영상" data-spin-video></video>
         <button class="gallery-more-btn" type="button" data-open-gallery data-gallery-src="${escapeHtml(modalInitialImage.image)}" data-gallery-label="${escapeHtml(modalInitialImage.label)}">더 많은 이미지 보기</button>
       </div>
     `;
@@ -7933,6 +7932,19 @@ function bindPageEvents() {
     });
   });
   document.querySelectorAll("[data-close-modal]").forEach((node) => node.addEventListener("click", () => modal?.classList.remove("is-open")));
+
+  // 상품 상세 회전 영상: 일부 브라우저에서 autoplay 속성만으로 재생이 멈추는 경우가 있어 명시적으로 재생을 강제한다.
+  document.querySelectorAll("[data-spin-video]").forEach((video) => {
+    video.muted = true;
+    video.defaultMuted = true;
+    const tryPlay = () => {
+      const p = video.play();
+      if (p && typeof p.catch === "function") p.catch(() => {});
+    };
+    tryPlay();
+    video.addEventListener("loadeddata", tryPlay, { once: true });
+    video.addEventListener("canplay", tryPlay, { once: true });
+  });
 }
 
 async function hydrateFromSupabase() {
