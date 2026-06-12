@@ -7944,9 +7944,16 @@ function bindPageEvents() {
     video.defaultMuted = true;
     video.setAttribute("muted", "");
     video.load();
+    let playbackConfirmed = Boolean(video.currentTime > 0 && !video.paused && !video.ended);
     const syncPlayButton = () => {
       if (!playButton) return;
-      playButton.hidden = !(video.paused || video.ended || Boolean(video.error));
+      playButton.hidden = !(video.paused || video.ended || Boolean(video.error) || !playbackConfirmed);
+    };
+    const confirmPlayback = () => {
+      if (video.currentTime > 0.1) {
+        playbackConfirmed = true;
+      }
+      syncPlayButton();
     };
     const tryPlay = () => {
       const p = video.play();
@@ -7960,19 +7967,28 @@ function bindPageEvents() {
       playButton.hidden = true;
       playButton.addEventListener("click", () => {
         video.play().catch(() => {});
-        playButton.hidden = true;
+        syncPlayButton();
       });
     }
     tryPlay();
-    video.addEventListener("play", () => {
-      if (playButton) playButton.hidden = true;
-    });
+    video.addEventListener("play", syncPlayButton);
+    video.addEventListener("playing", confirmPlayback);
+    video.addEventListener("timeupdate", confirmPlayback);
+    video.addEventListener("loadedmetadata", syncPlayButton);
+    video.addEventListener("loadeddata", syncPlayButton);
+    video.addEventListener("canplay", syncPlayButton);
+    video.addEventListener("stalled", syncPlayButton);
+    video.addEventListener("waiting", syncPlayButton);
     video.addEventListener("pause", syncPlayButton);
     video.addEventListener("ended", syncPlayButton);
     video.addEventListener("error", syncPlayButton);
+    window.setTimeout(() => {
+      if (!playbackConfirmed) {
+        syncPlayButton();
+      }
+    }, 1200);
     video.addEventListener("loadeddata", tryPlay, { once: true });
     video.addEventListener("canplay", tryPlay, { once: true });
-    window.setTimeout(syncPlayButton, 1200);
   });
 }
 
