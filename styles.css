@@ -4271,6 +4271,12 @@ main.inspection-main {
   background: #FFFFFF;
 }
 
+.gallery-stage .gallery-spin-animation {
+  width: min(560px, 96%);
+  max-height: 410px;
+  object-fit: contain;
+}
+
 .gallery-stage.has-video {
   background: #FFFFFF;
   backdrop-filter: none;

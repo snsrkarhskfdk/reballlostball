@@ -1,6 +1,6 @@
 ﻿const ASSET_PATH = "./assets/figma";
 const HERO_PATH = "/hero";
-const ASSET_VERSION = "20260612-05";
+const ASSET_VERSION = "20260612-06";
 const HERO_DROP_FRAME_COUNT = 10;
 const HERO_DROP_VIRTUAL_FRAME_COUNT = 36;
 const SUPABASE_URL = "https://qbftalhhyfcndanrcwpy.supabase.co";
@@ -333,6 +333,7 @@ const products = [
     image: "ball-taylormade.png",
     detailImage: "detail-taylormade.webp",
     galleryVideo: "product-videos/reball-taylormade-rotation.mp4",
+    galleryAnimation: "product-videos/reball-taylormade-rotation.webp",
     galleryImages: [
       { image: "gallery/taylormade-01.png", label: "테일러메이드 TP5 정렬선" },
       { image: "gallery/taylormade-02.png", label: "테일러메이드 로고 정면" },
@@ -3272,6 +3273,14 @@ function productGalleryItems(product, variant = selectedVariant(product)) {
 
 function renderGalleryStage(product, modalInitialImage) {
   // 회전 영상이 있으면 항상 재생되도록 메인 스테이지에 노출한다(옵션 이미지와 무관).
+  if (product.galleryAnimation) {
+    return `
+      <div class="gallery-stage has-video">
+        <img class="gallery-spin-animation" src="${asset(product.galleryAnimation)}" alt="${escapeHtml(product.name)} 회전 이미지" loading="eager" fetchpriority="high" decoding="async" />
+        <button class="gallery-more-btn" type="button" data-open-gallery data-gallery-src="${escapeHtml(modalInitialImage.image)}" data-gallery-label="${escapeHtml(modalInitialImage.label)}">더 많은 이미지 보기</button>
+      </div>
+    `;
+  }
   if (product.galleryVideo) {
     return `
       <div class="gallery-stage has-video">
