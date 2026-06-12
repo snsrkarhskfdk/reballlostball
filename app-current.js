@@ -1,6 +1,6 @@
 ﻿const ASSET_PATH = "./assets/figma";
 const HERO_PATH = "/hero";
-const ASSET_VERSION = "20260611-07";
+const ASSET_VERSION = "20260612-02";
 const HERO_DROP_FRAME_COUNT = 10;
 const HERO_DROP_VIRTUAL_FRAME_COUNT = 36;
 const SUPABASE_URL = "https://qbftalhhyfcndanrcwpy.supabase.co";
@@ -1790,6 +1790,18 @@ function renderUiIcon(name, className = "ui-icon") {
   return `<img class="${className}" src="${iconAsset(name)}" alt="" />`;
 }
 
+function renderGradeChip(grade, { size = "" } = {}) {
+  const g = String(grade || "").toUpperCase();
+  const safeGrade = ["S", "A", "B"].includes(g) ? g : "A";
+  const sizeClass = size ? ` ${size}` : "";
+  return `
+    <span class="grade-chip grade-chip--${safeGrade}${sizeClass}" data-grade="${safeGrade}" role="img" aria-label="${safeGrade}등급">
+      <img class="grade-chip-ball" src="${asset("grade-ball.png")}" alt="" loading="lazy" decoding="async" />
+      <b class="grade-chip-letter">${safeGrade}</b>
+    </span>
+  `;
+}
+
 function shopIconAsset(name) {
   return asset(`ui-icons/${shopIconFileMap[name] ?? name}.png`);
 }
@@ -2829,7 +2841,6 @@ function renderHomeGradeGuideBody() {
   const gradeCards = [
     {
       tone: "strong",
-      image: "hero-grade-s.png",
       label: "S",
       title: "새 볼에 가까운 최상급",
       body: "스크래치와 변색이 매우 적어 선물용과 실전 라운드에 적합합니다.",
@@ -2837,7 +2848,6 @@ function renderHomeGradeGuideBody() {
     },
     {
       tone: "soft",
-      image: "hero-grade-a.png",
       label: "A",
       title: "실전 라운드용 우수급",
       body: "미세한 사용감은 있으나 실전 라운드용으로 안정적인 표준 등급입니다.",
@@ -2845,7 +2855,6 @@ function renderHomeGradeGuideBody() {
     },
     {
       tone: "warm",
-      image: "hero-grade-b.png",
       label: "B",
       title: "연습과 가성비 중심 실속급",
       body: "연습과 부담 없는 구매에 적합한 실속형 구성입니다.",
@@ -2858,8 +2867,8 @@ function renderHomeGradeGuideBody() {
         .map(
           (grade) => `
         <article class="home-grade-system-card ${escapeHtml(grade.tone)}">
-          <span class="home-grade-letter" aria-hidden="true">
-            <img src="${asset(grade.image)}" alt="" loading="eager" decoding="async" />
+          <span class="home-grade-letter">
+            ${renderGradeChip(grade.label, { size: "xl" })}
           </span>
           <div>
             <small><span>${escapeHtml(grade.label)} 등급</span><b>${escapeHtml(grade.rate)}</b></small>
@@ -2935,7 +2944,7 @@ function renderBestSellerCard(product) {
                   <img src="${asset(product.image)}" alt="${escapeHtml(product.name)}" />
                 </button>`
           }
-          <b>${escapeHtml(product.grade ?? "A")}</b>
+          <span class="best-grade-chip">${renderGradeChip(product.grade ?? "A")}</span>
           ${isPlaceholder ? "" : renderHoverActions(product, wished)}
         </div>
         <div class="best-body">

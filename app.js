@@ -1,6 +1,6 @@
 ﻿const ASSET_PATH = "./assets/figma";
 const HERO_PATH = "/hero";
-const ASSET_VERSION = "20260612-01";
+const ASSET_VERSION = "20260612-02";
 const HERO_DROP_FRAME_COUNT = 10;
 const HERO_DROP_VIRTUAL_FRAME_COUNT = 36;
 const SUPABASE_URL = "https://qbftalhhyfcndanrcwpy.supabase.co";
@@ -1799,11 +1799,12 @@ function renderUiIcon(name, className = "ui-icon") {
 // 브랜드 로고에서 추출한 실사 골프공 + 등급 글자를 "프린트"처럼 올린 칩
 function renderGradeChip(grade, { size = "" } = {}) {
   const g = String(grade || "").toUpperCase();
+  const safeGrade = ["S", "A", "B"].includes(g) ? g : "A";
   const sizeClass = size ? ` ${size}` : "";
   return `
-    <span class="grade-chip grade-chip--${g}${sizeClass}" role="img" aria-label="${g}등급">
+    <span class="grade-chip grade-chip--${safeGrade}${sizeClass}" data-grade="${safeGrade}" role="img" aria-label="${safeGrade}등급">
       <img class="grade-chip-ball" src="${asset("grade-ball.png")}" alt="" loading="lazy" decoding="async" />
-      <b class="grade-chip-letter">${g}</b>
+      <b class="grade-chip-letter">${safeGrade}</b>
     </span>
   `;
 }
@@ -2890,7 +2891,6 @@ function renderHomeGradeGuideBody() {
   const gradeCards = [
     {
       tone: "strong",
-      image: "hero-grade-s.png",
       label: "S",
       title: "새 볼에 가까운 최상급",
       body: "스크래치와 변색이 매우 적어 선물용과 실전 라운드에 적합합니다.",
@@ -2898,7 +2898,6 @@ function renderHomeGradeGuideBody() {
     },
     {
       tone: "soft",
-      image: "hero-grade-a.png",
       label: "A",
       title: "실전 라운드용 우수급",
       body: "미세한 사용감은 있으나 실전 라운드용으로 안정적인 표준 등급입니다.",
@@ -2906,7 +2905,6 @@ function renderHomeGradeGuideBody() {
     },
     {
       tone: "warm",
-      image: "hero-grade-b.png",
       label: "B",
       title: "연습과 가성비 중심 실속급",
       body: "연습과 부담 없는 구매에 적합한 실속형 구성입니다.",
