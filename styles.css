@@ -4282,6 +4282,32 @@ main.inspection-main {
   content: none;
 }
 
+.gallery-video-play-btn {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  z-index: 2;
+  min-height: 46px;
+  border: 1px solid rgba(223, 138, 0, 0.5);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.92);
+  padding: 0 20px;
+  color: var(--deep);
+  font-size: 13px;
+  font-weight: 900;
+  letter-spacing: -0.01em;
+  box-shadow: 0 14px 28px -20px rgba(0, 0, 0, 0.38);
+  transform: translate(-50%, -50%);
+}
+
+.gallery-video-play-btn:hover {
+  background: var(--gradient-gold);
+}
+
+.gallery-video-play-btn[hidden] {
+  display: none;
+}
+
 .gallery-stage.has-video .gallery-more-btn {
   top: auto;
   bottom: 22px;

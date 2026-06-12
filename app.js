@@ -1,6 +1,6 @@
 ﻿const ASSET_PATH = "./assets/figma";
 const HERO_PATH = "/hero";
-const ASSET_VERSION = "20260612-04";
+const ASSET_VERSION = "20260612-05";
 const HERO_DROP_FRAME_COUNT = 10;
 const HERO_DROP_VIRTUAL_FRAME_COUNT = 36;
 const SUPABASE_URL = "https://qbftalhhyfcndanrcwpy.supabase.co";
@@ -3276,6 +3276,7 @@ function renderGalleryStage(product, modalInitialImage) {
     return `
       <div class="gallery-stage has-video">
         <video class="gallery-spin-video" src="${asset(product.galleryVideo)}" poster="${asset(product.image)}" autoplay muted loop playsinline preload="auto" aria-label="${escapeHtml(product.name)} 회전 영상" data-spin-video></video>
+        <button class="gallery-video-play-btn" type="button" data-spin-video-play hidden>동영상 재생</button>
         <button class="gallery-more-btn" type="button" data-open-gallery data-gallery-src="${escapeHtml(modalInitialImage.image)}" data-gallery-label="${escapeHtml(modalInitialImage.label)}">더 많은 이미지 보기</button>
       </div>
     `;
@@ -8242,15 +8243,41 @@ function bindPageEvents() {
 
   // 상품 상세 회전 영상: 일부 브라우저에서 autoplay 속성만으로 재생이 멈추는 경우가 있어 명시적으로 재생을 강제한다.
   document.querySelectorAll("[data-spin-video]").forEach((video) => {
+    const stage = video.closest(".gallery-stage");
+    const playButton = stage?.querySelector("[data-spin-video-play]");
     video.muted = true;
     video.defaultMuted = true;
+    video.setAttribute("muted", "");
+    video.load();
+    const syncPlayButton = () => {
+      if (!playButton) return;
+      playButton.hidden = !(video.paused || video.ended || Boolean(video.error));
+    };
     const tryPlay = () => {
       const p = video.play();
-      if (p && typeof p.catch === "function") p.catch(() => {});
+      if (p && typeof p.catch === "function") {
+        p.catch(() => {
+          syncPlayButton();
+        });
+      }
     };
+    if (playButton) {
+      playButton.hidden = true;
+      playButton.addEventListener("click", () => {
+        video.play().catch(() => {});
+        playButton.hidden = true;
+      });
+    }
     tryPlay();
+    video.addEventListener("play", () => {
+      if (playButton) playButton.hidden = true;
+    });
+    video.addEventListener("pause", syncPlayButton);
+    video.addEventListener("ended", syncPlayButton);
+    video.addEventListener("error", syncPlayButton);
     video.addEventListener("loadeddata", tryPlay, { once: true });
     video.addEventListener("canplay", tryPlay, { once: true });
+    window.setTimeout(syncPlayButton, 1200);
   });
 }
 
