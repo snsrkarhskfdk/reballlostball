@@ -1,6 +1,6 @@
 ﻿const ASSET_PATH = "./assets/figma";
 const HERO_PATH = "/hero";
-const ASSET_VERSION = "20260612-03";
+const ASSET_VERSION = "20260612-04";
 const HERO_DROP_FRAME_COUNT = 10;
 const HERO_DROP_VIRTUAL_FRAME_COUNT = 36;
 const SUPABASE_URL = "https://qbftalhhyfcndanrcwpy.supabase.co";
@@ -447,12 +447,11 @@ const products = [
     image: "ball-volvik.png",
     detailImage: "detail-volvik.webp",
     galleryImages: [
-      { image: "ball-volvik.png", label: "브랜드혼합 대표 화이트 볼" },
-      { image: "gallery/mix-02-bridgestone.png", label: "브랜드혼합 예시 브리지스톤 TOUR B X" },
-      { image: "gallery/mix-03-taylormade.png", label: "브랜드혼합 예시 테일러메이드 TP5" },
-      { image: "gallery/mix-04-saintnine.png", label: "브랜드혼합 예시 세인트나인 캐릭터 볼" },
-      { image: "gallery/mix-05-callaway.png", label: "브랜드혼합 예시 캘러웨이 CHROME TOUR" },
-      { image: "gallery/mix-06-srixon.png", label: "브랜드혼합 예시 스릭슨 Z-STAR" },
+      { image: "gallery/mix-01.jpg", label: "브랜드혼합 혼합볼 이미지 1" },
+      { image: "gallery/mix-02.jpg", label: "브랜드혼합 혼합볼 이미지 2" },
+      { image: "gallery/mix-03.jpg", label: "브랜드혼합 혼합볼 이미지 3" },
+      { image: "gallery/mix-05.jpg", label: "브랜드혼합 혼합볼 이미지 4" },
+      { image: "gallery/mix-04.jpg", label: "브랜드혼합 혼합볼 이미지 5" },
     ],
     accent: "#113A2A",
     stock: 70,
@@ -3257,6 +3256,9 @@ function renderProductStory(slug) {
 }
 
 function productGalleryItems(product, variant = selectedVariant(product)) {
+  if (product.brandSlug === "mix" && Array.isArray(product.galleryImages) && product.galleryImages.length) {
+    return product.galleryImages;
+  }
   const baseItems = Array.isArray(product.galleryImages) && product.galleryImages.length
     ? product.galleryImages
     : Array.from({ length: 6 }, (_, index) => ({
