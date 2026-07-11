@@ -8,10 +8,13 @@ dev-server.*.log
 .vercel/
 .env
 .env.*
+!.env.example
 meodai-skill-color-expert-https-github/
 node_modules/
 .next/
 dist/
+test-results/
+playwright-report/
 *.local
 assets/hero-transition/frames/
 hero/flight/frames/

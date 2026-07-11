@@ -1,9 +1,52 @@
 import { existsSync, readFileSync } from "node:fs";
+import { dirname, isAbsolute, relative, resolve } from "node:path";
 
 const app = readFileSync("app.js", "utf8");
-const css = readFileSync("styles.css", "utf8");
 const index = readFileSync("index.html", "utf8");
 const errors = [];
+const projectRoot = resolve(".");
+const cssFiles = [];
+const visitedCss = new Set();
+
+function projectFile(importer, reference) {
+  const path = resolve(dirname(importer), reference.split(/[?#]/, 1)[0]);
+  const pathFromRoot = relative(projectRoot, path);
+  if (pathFromRoot.startsWith("..") || isAbsolute(pathFromRoot)) return null;
+  return path;
+}
+
+function collectCss(file) {
+  const absolutePath = resolve(file);
+  if (visitedCss.has(absolutePath)) return;
+  visitedCss.add(absolutePath);
+  if (!existsSync(absolutePath)) {
+    errors.push(`Missing CSS module: ${relative(projectRoot, absolutePath)}`);
+    return;
+  }
+  const source = readFileSync(absolutePath, "utf8");
+  cssFiles.push({ path: absolutePath, source });
+  for (const match of source.matchAll(/@import\s+(?:url\(\s*)?["']([^"']+)["']\s*\)?\s*;/gi)) {
+    if (/^(?:https?:|data:|\/\/)/i.test(match[1])) continue;
+    const dependency = projectFile(absolutePath, match[1]);
+    if (!dependency) errors.push(`CSS import escapes the project root: ${match[1]}`);
+    else collectCss(dependency);
+  }
+}
+
+collectCss("styles.css");
+const css = cssFiles.map(({ source }) => source).join("\n");
+const cssForChecks = css.replace(/\/\*[\s\S]*?\*\//g, "");
+
+for (const { path, source } of cssFiles) {
+  for (const match of source.matchAll(/url\(\s*["']?([^"')]+)["']?\s*\)/gi)) {
+    const reference = match[1].trim();
+    if (/^(?:https?:|data:|\/\/|#)/i.test(reference)) continue;
+    const assetPath = projectFile(path, reference);
+    if (!assetPath || !existsSync(assetPath)) {
+      errors.push(`Missing CSS asset from ${relative(projectRoot, path)}: ${reference}`);
+    }
+  }
+}
 
 const requiredAssets = [
   "assets/figma/reball-logo.webp",
@@ -43,7 +86,7 @@ for (const selector of [
   ".store-hero",
   ".product-menu",
 ]) {
-  if (!css.includes(selector)) {
+  if (!cssForChecks.includes(selector)) {
     errors.push(`Missing CSS selector: ${selector}`);
   }
 }
@@ -52,7 +95,7 @@ if (!/<script\s+type="module"\s+src="\.\/app\.js(?:\?[^"]*)?"><\/script>/.test(i
   errors.push("index.html must load app.js as an ES module");
 }
 
-if (!css.includes("@media (max-width: 720px)") && !css.includes("@media (max-width: 560px)")) {
+if (!cssForChecks.includes("@media (max-width: 720px)") && !cssForChecks.includes("@media (max-width: 560px)")) {
   errors.push("Missing mobile responsive breakpoint");
 }
 

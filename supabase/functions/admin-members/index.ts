@@ -1,159 +1,109 @@
-import "jsr:@supabase/functions-js/edge-runtime.d.ts";
+import { HttpError } from "../_shared/core.ts";
+import {
+  assertAllowedOrigin,
+  jsonResponse,
+  optionsResponse,
+  publicErrorResponse,
+  safeLog,
+} from "../_shared/http.ts";
+import { enforceRateLimit } from "../_shared/security.ts";
+import { serviceSelect, sessionUser } from "../_shared/supabase.ts";
 
-const ALLOWED_ORIGINS = new Set([
-  "https://reballlostball.com",
-  "https://www.reballlostball.com",
-  "http://localhost:3000",
-  "http://127.0.0.1:3000",
-  "http://127.0.0.1:3001",
-]);
+type ProfileRow = {
+  id: string;
+  login_id?: string | null;
+  email?: string | null;
+  auth_email?: string | null;
+  name?: string | null;
+  phone?: string | null;
+  marketing_email?: boolean | null;
+  marketing_sms?: boolean | null;
+  created_at?: string | null;
+};
 
-function isAllowedOrigin(origin: string): boolean {
-  if (ALLOWED_ORIGINS.has(origin)) return true;
-  try {
-    const host = new URL(origin).hostname;
-    return host.endsWith(".vercel.app") && host.includes("reballlostball");
-  } catch {
-    return false;
-  }
-}
+type OrderSummaryRow = {
+  profile_id?: string | null;
+  total_krw?: number | null;
+};
 
-function corsHeaders(req: Request): HeadersInit {
-  const origin = req.headers.get("origin") || "";
-  return {
-    "Access-Control-Allow-Origin": isAllowedOrigin(origin) ? origin : "https://reballlostball.com",
-    "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
-    "Access-Control-Allow-Methods": "GET, OPTIONS",
-    "Content-Type": "application/json",
-    "Connection": "keep-alive",
-  };
-}
-
-function jsonResponse(req: Request, body: unknown, status = 200): Response {
-  return new Response(JSON.stringify(body), {
-    status,
-    headers: corsHeaders(req),
-  });
-}
-
-function parseJsonKey(envName: string): string {
-  const raw = Deno.env.get(envName);
-  if (!raw) return "";
-  try {
-    const parsed = JSON.parse(raw);
-    const firstValue = Object.values(parsed)[0];
-    return typeof parsed.default === "string" ? parsed.default : typeof firstValue === "string" ? firstValue : "";
-  } catch {
-    return "";
-  }
-}
-
-function publishableKey(): string {
-  return parseJsonKey("SUPABASE_PUBLISHABLE_KEYS") || Deno.env.get("SUPABASE_ANON_KEY") || "";
-}
-
-function secretKey(): string {
-  return parseJsonKey("SUPABASE_SECRET_KEYS") || Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") || "";
-}
-
-function publishableHeaders(key: string, token?: string): HeadersInit {
-  const headers: Record<string, string> = { apikey: key };
-  if (token) headers.Authorization = `Bearer ${token}`;
-  return headers;
-}
-
-function serviceHeaders(key: string): HeadersInit {
-  return {
-    apikey: key,
-    Authorization: `Bearer ${key}`,
-  };
-}
-
-async function getSessionUser(req: Request): Promise<{ id: string } | null> {
-  const token = req.headers.get("authorization")?.replace(/^Bearer\s+/i, "").trim();
-  if (!token) return null;
-
-  const key = publishableKey();
-  if (!key) throw new Error("Missing Supabase publishable key");
-
-  const response = await fetch(`${Deno.env.get("SUPABASE_URL")}/auth/v1/user`, {
-    headers: publishableHeaders(key, token),
-  });
-  if (!response.ok) return null;
-  const user = await response.json().catch(() => null);
-  return user?.id ? { id: user.id } : null;
-}
-
-async function isOwnerAdmin(userId: string): Promise<boolean> {
-  const key = secretKey();
-  if (!key) throw new Error("Missing Supabase secret key");
-
+async function canReadMemberData(userId: string): Promise<boolean> {
   const params = new URLSearchParams({
     select: "role",
     user_id: `eq.${userId}`,
-    role: "eq.owner_admin",
-    limit: "1",
+    role: "in.(owner_admin,cs_manager)",
+    limit: "2",
   });
-  const response = await fetch(`${Deno.env.get("SUPABASE_URL")}/rest/v1/user_roles?${params}`, {
-    headers: serviceHeaders(key),
-  });
-  if (!response.ok) throw new Error("Role lookup failed");
-  const rows = await response.json().catch(() => []);
-  return rows.length > 0;
+  const rows = await serviceSelect<Array<{ role?: string }>>(
+    `/rest/v1/user_roles?${params}`,
+  );
+  return rows.some((row) =>
+    row.role === "owner_admin" || row.role === "cs_manager"
+  );
 }
 
-async function fetchProfiles(): Promise<any[]> {
-  const key = secretKey();
-  if (!key) throw new Error("Missing Supabase secret key");
-
+function fetchProfiles(): Promise<ProfileRow[]> {
   const params = new URLSearchParams({
-    select: "id,login_id,email,auth_email,name,phone,marketing_email,marketing_sms,created_at",
+    select:
+      "id,login_id,email,auth_email,name,phone,marketing_email,marketing_sms,created_at",
     order: "created_at.desc",
     limit: "200",
   });
-  const response = await fetch(`${Deno.env.get("SUPABASE_URL")}/rest/v1/profiles?${params}`, {
-    headers: serviceHeaders(key),
-  });
-  if (!response.ok) throw new Error("Profile lookup failed");
-  return response.json();
+  return serviceSelect<ProfileRow[]>(`/rest/v1/profiles?${params}`);
 }
 
-async function fetchOrders(): Promise<any[]> {
-  const key = secretKey();
-  if (!key) throw new Error("Missing Supabase secret key");
-
+async function fetchOrders(): Promise<OrderSummaryRow[]> {
   const params = new URLSearchParams({
     select: "profile_id,total_krw",
     limit: "1000",
   });
-  const response = await fetch(`${Deno.env.get("SUPABASE_URL")}/rest/v1/orders?${params}`, {
-    headers: serviceHeaders(key),
-  });
-  if (!response.ok) return [];
-  return response.json();
+  try {
+    return await serviceSelect<OrderSummaryRow[]>(`/rest/v1/orders?${params}`);
+  } catch {
+    return [];
+  }
 }
 
 Deno.serve(async (req: Request) => {
   if (req.method === "OPTIONS") {
-    return new Response(null, { status: 204, headers: corsHeaders(req) });
-  }
-
-  if (req.method !== "GET") {
-    return jsonResponse(req, { message: "Method not allowed" }, 405);
+    try {
+      return optionsResponse(req);
+    } catch (error) {
+      return publicErrorResponse(req, error);
+    }
   }
 
   try {
-    const user = await getSessionUser(req);
-    if (!user) return jsonResponse(req, { message: "Admin session required" }, 401);
+    assertAllowedOrigin(req);
+    if (req.method !== "GET") {
+      throw new HttpError(
+        405,
+        "METHOD_NOT_ALLOWED",
+        "지원하지 않는 요청입니다.",
+      );
+    }
 
-    const allowed = await isOwnerAdmin(user.id);
-    if (!allowed) return jsonResponse(req, { message: "Admin access denied" }, 403);
+    const user = await sessionUser(req);
+    if (!user) {
+      throw new HttpError(401, "AUTH_REQUIRED", "관리자 로그인이 필요합니다.");
+    }
+    await enforceRateLimit(req, "admin_members", user.id, 20, 300, 300);
+    if (!(await canReadMemberData(user.id))) {
+      throw new HttpError(
+        403,
+        "ADMIN_ACCESS_DENIED",
+        "회원 정보를 조회할 권한이 없습니다.",
+      );
+    }
 
-    const [profiles, orders] = await Promise.all([fetchProfiles(), fetchOrders()]);
+    const [profiles, orders] = await Promise.all([
+      fetchProfiles(),
+      fetchOrders(),
+    ]);
     const orderTotals = new Map<string, { count: number; totalKrw: number }>();
     for (const order of orders) {
       if (!order.profile_id) continue;
-      const current = orderTotals.get(order.profile_id) || { count: 0, totalKrw: 0 };
+      const current = orderTotals.get(order.profile_id) ||
+        { count: 0, totalKrw: 0 };
       current.count += 1;
       current.totalKrw += Number(order.total_krw) || 0;
       orderTotals.set(order.profile_id, current);
@@ -179,7 +129,9 @@ Deno.serve(async (req: Request) => {
 
     return jsonResponse(req, { members });
   } catch (error) {
-    console.error("admin-members failed", error);
-    return jsonResponse(req, { message: "Admin member lookup failed" }, 500);
+    if (!(error instanceof HttpError)) {
+      safeLog("admin-members", req, "UNEXPECTED_ERROR");
+    }
+    return publicErrorResponse(req, error, "회원 정보를 불러오지 못했습니다.");
   }
 });

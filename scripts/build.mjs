@@ -1,5 +1,7 @@
-import { cp, copyFile, mkdir, rm } from "node:fs/promises";
+import "dotenv/config";
+import { cp, copyFile, mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { existsSync } from "node:fs";
+import { injectPublicConfig } from "./public-config.mjs";
 
 await import("./build-check.mjs");
 
@@ -22,9 +24,11 @@ function shouldCopyAsset(sourcePath) {
 await rm(outputDir, { recursive: true, force: true });
 await mkdir(outputDir, { recursive: true });
 
-for (const file of ["index.html", "app.js", "styles.css"]) {
+for (const file of ["app.js", "styles.css"]) {
   await copyFile(file, `${outputDir}/${file}`);
 }
+const indexHtml = await readFile("index.html", "utf8");
+await writeFile(`${outputDir}/index.html`, injectPublicConfig(indexHtml), "utf8");
 
 for (const optionalFile of ["CNAME", ".nojekyll"]) {
   if (existsSync(optionalFile)) {
@@ -33,6 +37,10 @@ for (const optionalFile of ["CNAME", ".nojekyll"]) {
 }
 
 await cp("assets", `${outputDir}/assets`, { recursive: true, filter: shouldCopyAsset });
+await cp("src/frontend", `${outputDir}/src/frontend`, { recursive: true });
+if (existsSync("public")) {
+  await cp("public", `${outputDir}/public`, { recursive: true });
+}
 if (existsSync("hero")) {
   await cp("hero", `${outputDir}/hero`, { recursive: true, filter: shouldCopyAsset });
 }

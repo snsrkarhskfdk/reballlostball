@@ -1,157 +1,70 @@
-import "jsr:@supabase/functions-js/edge-runtime.d.ts";
-
-const ALLOWED_ORIGINS = new Set([
-  "https://reballlostball.com",
-  "https://www.reballlostball.com",
-  "http://localhost:3000",
-  "http://127.0.0.1:3000",
-  "http://127.0.0.1:3001",
-]);
+import {
+  HttpError,
+  cleanString,
+  isEmailLike,
+  normalizeEmail,
+  normalizeLoginId,
+  sha256Hex,
+} from "../_shared/core.ts";
+import {
+  assertAllowedOrigin,
+  jsonResponse,
+  optionsResponse,
+  publicErrorResponse,
+  readJson,
+  safeLog,
+} from "../_shared/http.ts";
+import { enforceRateLimit, resetRateLimit, verifyCaptcha } from "../_shared/security.ts";
+import { authPublic, rpc } from "../_shared/supabase.ts";
 
 const LOGIN_ID_PATTERN = /^[a-z0-9][a-z0-9._-]{3,19}$/;
-const INVALID_CREDENTIALS_MESSAGE = "Invalid login credentials";
-
-function isAllowedOrigin(origin: string): boolean {
-  if (ALLOWED_ORIGINS.has(origin)) return true;
-  try {
-    const host = new URL(origin).hostname;
-    return host.endsWith(".vercel.app") && host.includes("reballlostball");
-  } catch {
-    return false;
-  }
-}
-
-function corsHeaders(req: Request): HeadersInit {
-  const origin = req.headers.get("origin") || "";
-  return {
-    "Access-Control-Allow-Origin": isAllowedOrigin(origin) ? origin : "https://reballlostball.com",
-    "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
-    "Access-Control-Allow-Methods": "POST, OPTIONS",
-    "Content-Type": "application/json",
-    "Connection": "keep-alive",
-  };
-}
-
-function jsonResponse(req: Request, body: unknown, status = 200): Response {
-  return new Response(JSON.stringify(body), {
-    status,
-    headers: corsHeaders(req),
-  });
-}
-
-function parseJsonKey(envName: string): string {
-  const raw = Deno.env.get(envName);
-  if (!raw) return "";
-  try {
-    const parsed = JSON.parse(raw);
-    const firstValue = Object.values(parsed)[0];
-    return typeof parsed.default === "string" ? parsed.default : typeof firstValue === "string" ? firstValue : "";
-  } catch {
-    return "";
-  }
-}
-
-function publishableKey(): string {
-  return parseJsonKey("SUPABASE_PUBLISHABLE_KEYS") || Deno.env.get("SUPABASE_ANON_KEY") || "";
-}
-
-function secretKey(): string {
-  return parseJsonKey("SUPABASE_SECRET_KEYS") || Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") || "";
-}
-
-function publishableHeaders(key: string): HeadersInit {
-  return { apikey: key };
-}
-
-function serviceHeaders(key: string): HeadersInit {
-  return {
-    apikey: key,
-    Authorization: `Bearer ${key}`,
-  };
-}
-
-function isEmailLike(value: string): boolean {
-  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value);
-}
-
-function normalizeIdentifier(value: unknown): string {
-  return String(value || "").trim().toLowerCase();
-}
-
-async function resolveAuthEmail(identifier: string): Promise<string | null> {
-  if (isEmailLike(identifier)) return identifier;
-  if (!LOGIN_ID_PATTERN.test(identifier)) return null;
-
-  const key = secretKey();
-  if (!key) throw new Error("Missing Supabase secret key");
-
-  const params = new URLSearchParams({
-    select: "auth_email",
-    login_id: `eq.${identifier}`,
-    limit: "1",
-  });
-
-  const response = await fetch(`${Deno.env.get("SUPABASE_URL")}/rest/v1/profiles?${params}`, {
-    headers: serviceHeaders(key),
-  });
-
-  if (!response.ok) {
-    const detail = await response.text().catch(() => "");
-    console.error("login profile lookup failed", response.status, detail);
-    throw new Error("Profile lookup failed");
-  }
-
-  const rows = await response.json().catch(() => []);
-  return rows?.[0]?.auth_email || null;
-}
-
-async function passwordGrant(email: string, password: string): Promise<Response> {
-  const key = publishableKey();
-  if (!key) throw new Error("Missing Supabase publishable key");
-
-  return fetch(`${Deno.env.get("SUPABASE_URL")}/auth/v1/token?grant_type=password`, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      ...publishableHeaders(key),
-    },
-    body: JSON.stringify({ email, password }),
-  });
-}
+const INVALID_CREDENTIALS = "아이디 또는 비밀번호를 확인해 주세요.";
 
 Deno.serve(async (req: Request) => {
   if (req.method === "OPTIONS") {
-    return new Response(null, { status: 204, headers: corsHeaders(req) });
+    try { return optionsResponse(req); } catch (error) { return publicErrorResponse(req, error); }
   }
-
-  if (req.method !== "POST") {
-    return jsonResponse(req, { message: "Method not allowed" }, 405);
-  }
-
   try {
-    const body = await req.json().catch(() => ({}));
-    const identifier = normalizeIdentifier(body.identifier);
+    assertAllowedOrigin(req);
+    if (req.method !== "POST") throw new HttpError(405, "METHOD_NOT_ALLOWED", "지원하지 않는 요청입니다.");
+    const body = await readJson(req);
+    const identifier = normalizeEmail(body.identifier);
     const password = String(body.password || "");
+    await enforceRateLimit(req, "auth_login_request", identifier || "empty", 30, 900, 900);
+    await verifyCaptcha(req, body.captchaToken);
 
-    if (!identifier || !password) {
-      return jsonResponse(req, { message: INVALID_CREDENTIALS_MESSAGE }, 400);
+    if (!identifier || !password || password.length > 200
+        || (!isEmailLike(identifier) && !LOGIN_ID_PATTERN.test(normalizeLoginId(identifier)))) {
+      throw new HttpError(401, "INVALID_CREDENTIALS", INVALID_CREDENTIALS);
     }
 
-    const email = await resolveAuthEmail(identifier);
+    let email = isEmailLike(identifier)
+      ? identifier
+      : await rpc<string | null>("resolve_login_email_v1", { p_login_id: normalizeLoginId(identifier) });
     if (!email) {
-      return jsonResponse(req, { message: INVALID_CREDENTIALS_MESSAGE }, 400);
+      const digest = await sha256Hex(identifier);
+      email = `${digest.slice(0, 32)}@invalid.reball.local`;
     }
 
-    const authResponse = await passwordGrant(email, password);
-    const authPayload = await authResponse.json().catch(() => ({}));
-
-    if (!authResponse.ok) {
-      return jsonResponse(req, { message: INVALID_CREDENTIALS_MESSAGE }, 400);
+    const auth = await authPublic("/auth/v1/token?grant_type=password", {
+      method: "POST",
+      body: JSON.stringify({ email, password }),
+    });
+    const user = auth.payload.user && typeof auth.payload.user === "object"
+      ? auth.payload.user as Record<string, unknown>
+      : null;
+    const emailConfirmed = Boolean(user?.email_confirmed_at || user?.confirmed_at);
+    if (!auth.response.ok || !emailConfirmed
+        || typeof auth.payload.access_token !== "string"
+        || typeof auth.payload.refresh_token !== "string") {
+      await enforceRateLimit(req, "auth_login_failure", identifier, 5, 900, 900);
+      throw new HttpError(401, "INVALID_CREDENTIALS", INVALID_CREDENTIALS);
     }
 
-    return jsonResponse(req, authPayload);
+    await resetRateLimit(req, "auth_login_failure", identifier).catch(() => undefined);
+    return jsonResponse(req, auth.payload);
   } catch (error) {
-    console.error("login-with-identifier failed", error);
-    return jsonResponse(req, { message: "Login failed" }, 500);
+    if (!(error instanceof HttpError)) safeLog("login-with-identifier", req, "UNEXPECTED_ERROR");
+    return publicErrorResponse(req, error, INVALID_CREDENTIALS);
   }
 });
