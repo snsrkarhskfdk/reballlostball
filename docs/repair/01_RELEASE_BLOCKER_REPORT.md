@@ -4,7 +4,7 @@
 
 `WAVE 1 — REVIEW`
 
-운영 차단 원인이었던 가상 variant, 브라우저 주문 원본, 로컬 관리자 신뢰, 인증 endpoint 무방비 상태는 코드에서 제거하거나 실패 폐쇄(fail-closed) 구조로 바꿨다. 관련 로컬 단위·브라우저 검사는 통과했다. 운영 Supabase 대상은 프로젝트 ref `qbftalhhyfcndanrcwpy`, 프로젝트명 `Reballlostball`로 확인했지만, timestamp migration과 신규 Edge Function은 아직 그 프로젝트에 적용·배포하지 않았다. 운영 SMTP·CAPTCHA·RLS도 실환경에서 검증하지 않았으므로 `PASS` 또는 운영 완료로 판정하지 않는다.
+운영 차단 원인이었던 가상 variant, 브라우저 주문 원본, 로컬 관리자 신뢰, 인증 endpoint 무방비 상태는 코드에서 제거하거나 실패 폐쇄(fail-closed) 구조로 바꿨다. 운영 Supabase 프로젝트 `qbftalhhyfcndanrcwpy`(`Reballlostball`)에는 `20260711055444_production_commerce_security`와 `20260711055557_commerce_foreign_key_indexes` migration을 적용했고, 핵심 RPC/table 존재를 확인했다. 12개 Edge Function도 모두 `ACTIVE`, `verify_jwt=false` 상태이며 OPTIONS/CORS와 설정 누락 실패 폐쇄 smoke가 통과했다. 다만 Toss·CAPTCHA 및 일부 내부 secret이 아직 없어 실제 로그인·결제 실연동은 완료되지 않았으므로 `PASS` 또는 운영 완료로 판정하지 않는다.
 
 ## 구현 결과
 
@@ -36,7 +36,8 @@
 - `supabase/functions/create-order/index.ts`
 - `supabase/functions/get-order/index.ts`
 - `supabase/functions/guest-order-lookup/index.ts`
-- `supabase/migrations/20260710173448_production_commerce_security.sql`
+- `supabase/migrations/20260711055444_production_commerce_security.sql`
+- `supabase/migrations/20260711055557_commerce_foreign_key_indexes.sql`
 
 ### 3. 관리자 접근과 최소 권한
 
@@ -64,7 +65,20 @@
 
 회원가입의 이름·휴대폰·주소는 `auth.users.raw_user_meta_data`에 넣지 않고 RLS 보호 `profiles`/`customer_addresses`에 서비스 RPC로 기록한다. migration에는 과거 auth metadata의 PII key를 제거하는 정리 구문도 포함되어 있다.
 
-## 실제 검증 결과
+## 원격 Supabase 적용·smoke 결과
+
+| 검사 | 결과 | 해석 |
+|---|---|---|
+| migration history | PASS | `20260711055444`, `20260711055557` 적용 성공 |
+| 핵심 RPC/table 점검 | PASS | production commerce RPC와 신규 운영 table 존재 `true` |
+| Edge Functions | PASS, 12/12 | 모두 `ACTIVE`, `verify_jwt=false` |
+| OPTIONS/CORS smoke | PASS | 허용 origin preflight와 응답 header 정상 |
+| 로그인 fail-closed smoke | EXPECTED 503 `SECURITY_CONFIG_MISSING` | 필수 내부 보안 secret 미설정 상태에서 인증 진행 차단 |
+| reconciliation fail-closed smoke | EXPECTED 503 `RECONCILE_NOT_CONFIGURED` | scheduler secret 미설정 상태에서 작업 실행 차단 |
+
+Database advisors에서 지적된 신규 foreign key 미인덱스 3개는 두 번째 migration으로 해소했다. 남은 Security Advisor WARN은 leaked password protection 비활성화이며 Auth 운영 설정에서 활성화가 필요하다. `private.edge_rate_limits`의 RLS policy 부재 INFO는 비공개 `private` schema와 service-role 전용 RPC로만 접근시키는 의도된 구조다.
+
+## 실제 로컬 QA 결과
 
 2026-07-11 최종 결제·취소·reconciliation 보강을 모두 반영한 작업트리에서 다시 실행한 결과다.
 
@@ -73,29 +87,29 @@
 | `npm run qa` | PASS, exit 0 | lint, build, Edge check, unit, contract, E2E, a11y 전체 순차 실행 |
 | lint / build | PASS / PASS | 정적 검사와 배포 산출물 생성 |
 | Edge Function Deno check | PASS, 12/12 | 배포 대상 Edge 함수 check |
-| frontend unit | PASS, 35/35 | exact variant, 수량 제한, storage 최소화, 관리자 역할, CAPTCHA 클라이언트, 주문 payload, 소스 회귀 |
+| frontend unit | PASS, 36/36 | exact variant, 수량 제한, storage 최소화, 관리자 역할, CAPTCHA 클라이언트, 주문 payload, 소스 회귀 |
 | backend Node | PASS, 25/25 | migration·Edge 불변조건, 권한 redaction, key header, 상태 단조성, 취소 경쟁과 fail-closed 구성 |
 | Deno provider/실제 handler 사례 | PASS, 14/14 | mock, 상태 분류, retry, 민감정보 보호, 신형/legacy Supabase key header, Auth·주문 권한 handler |
 | contract 전체 | PASS, 20/20 | frontend/backend 정적 계약 |
-| E2E | PASS, 24/24 (34.6초) | 위조 local admin 차단, legacy 저장값 삭제, exact variant 제한을 포함한 브라우저 흐름 |
-| a11y | PASS, 10/10 (20.5초) | 지정 핵심 경로의 serious/critical 검사 |
-| SQL parser | PASS, 159 statements | timestamp migration과 redacted payment operation helper parse |
+| E2E | PASS, 24/24 (40.1초) | 위조 local admin 차단, legacy 저장값 삭제, exact variant 제한을 포함한 브라우저 흐름 |
+| a11y | PASS, 10/10 (19.9초) | 지정 핵심 경로의 serious/critical 검사 |
+| SQL parser | PASS, 162 statements / 2 files | production commerce와 FK index migration parse |
 | `npm audit` | 취약점 0 | 설치 의존성 audit |
 | secret scan | 검출 0 | 저장소 대상 credential pattern 검사 |
 | `git diff --check` | PASS | whitespace/error marker 검사 |
 
-이 결과는 로컬 코드·정적 계약·mock·브라우저 동작 검증이다. `qbftalhhyfcndanrcwpy`에는 migration 또는 신규 함수가 아직 배포되지 않았고, 실제 Postgres에서의 RLS 우회 시도, rate-limit 경쟁, 이메일 확인, CAPTCHA 공급자 응답도 실행하지 않았다.
+이 결과는 로컬 전체 QA와 원격 schema/function 배포 및 실패 폐쇄 smoke 증거다. 실제 Postgres 동시성/RLS 공격 matrix, 정상 이메일 로그인, CAPTCHA 공급자 응답, Toss 결제는 아직 실행하지 않았다.
 
 ## 남은 위험과 HUMAN_GATE
 
-1. 프로젝트 `qbftalhhyfcndanrcwpy`(`Reballlostball`)에 `20260710173448_production_commerce_security.sql`을 적용하기 전 DB 백업과 migration review가 필요하다.
-2. Edge Function secret, SMTP/redirect URL, Supabase Auth의 이메일 확인 설정을 staging에서 맞춰야 한다.
+1. 적용된 두 migration의 백업/PITR 및 rollback 기준을 유지하고 실제 RLS·동시성 시나리오를 검증해야 한다.
+2. Edge Function 내부 secret, SMTP/redirect URL, Supabase Auth의 이메일 확인 설정을 맞춰야 한다.
 3. Turnstile 또는 hCaptcha 공급자를 선택하고 site/secret key, 허용 hostname을 입력한 뒤 성공·실패·우회 검사를 해야 한다.
-4. 기존 사용자 auth metadata 정리 후 세션의 오래된 metadata가 남지 않도록 세션 refresh/revoke 정책을 결정해야 한다.
+4. leaked password protection을 활성화하고 기존 사용자 auth metadata 정리 후 세션 refresh/revoke 정책을 결정해야 한다.
 5. 실제 DB에서 일반 회원, 네 관리자 역할, 비회원 토큰 변조를 각각 검증해야 한다.
 
-상세 승인 항목은 `docs/repair/HUMAN_GATES.md`의 HG-01~HG-04를 따른다.
+HG-01 migration과 HG-02 함수 배포의 실행 증거는 확보했다. 남은 인증 운영 설정은 `docs/repair/HUMAN_GATES.md`의 HG-03~HG-04를 따른다.
 
 ## 결론
 
-기준선의 P0 release blocker는 로컬 코드에서 차단됐고 회귀 테스트도 추가됐다. 그러나 외부 설정과 실제 Supabase 정책 검증이 남아 있으므로 Wave 1 판정은 `REVIEW`다.
+기준선의 P0 release blocker는 코드와 원격 배포 경계에서 차단됐고 회귀·smoke 증거도 추가됐다. 그러나 누락 secret, leaked password protection, 실제 인증/CAPTCHA와 RLS matrix 검증이 남아 있으므로 Wave 1 판정은 `REVIEW`다.

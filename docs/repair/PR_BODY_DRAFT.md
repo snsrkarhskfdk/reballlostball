@@ -1,15 +1,16 @@
 # PR: REBALL production-readiness repair
 
-> 초안입니다. GitHub commit/push와 Supabase/Vercel 배포는 사용자가 승인했으며 현재 실행 준비·진행 중입니다. 실제 commit, push, PR 및 배포 성공은 아직 기록하지 않았습니다.
+> Draft PR #3이 생성됐습니다. Supabase 원격 migration/Functions와 첫 Vercel Preview까지 실행했지만, public config 수정의 재push·재배포 및 Production 배포는 아직 완료하지 않았습니다.
 
 ## External execution status
 
-- Commit SHA: `<PENDING_ROOT_FILL_AFTER_SUCCESS>`
-- Remote branch/ref: `<PENDING_ROOT_FILL_AFTER_PUSH>`
-- PR URL/number: `<PENDING_ROOT_FILL_IF_CREATED>`
-- Supabase project ref: `<PENDING_ROOT_FILL_AFTER_ACCOUNT_VERIFICATION>`
-- Supabase migration/Functions result: `<PENDING_ROOT_FILL_AFTER_REMOTE_VERIFICATION>`
-- Vercel staged deployment URL: `<PENDING_ROOT_FILL_AFTER_DEPLOY>`
+- Commit SHA: `74b24a611d0af14043613ad41d21a0f277c34a58`
+- Remote branch/ref: `origin/fix/reball-production-readiness`
+- PR URL/number: `https://github.com/snsrkarhskfdk/reballlostball/pull/3` (Draft)
+- Supabase project ref: `qbftalhhyfcndanrcwpy`
+- Supabase migration/Functions result: versions `20260711055444`, `20260711055557` 성공; 12개 Functions `ACTIVE`/smoke 성공
+- Vercel staged deployment: `dpl_AmmYY6SU8AkRfss6AceuaQ25PRPT` (`READY`)
+- Vercel staged URL: `https://reballlostball-muyv3j83q-thechangcnds-projects.vercel.app` — UI smoke clean, public config 누락 수정 후 재배포 대기
 - Vercel production URL/alias: `<PENDING_ROOT_FILL_AFTER_PROMOTE_AND_SMOKE>`
 
 `승인됨 / 실행 중`은 성공 또는 운영 완료를 의미하지 않는다. 위 항목은 원격 증거를 확인한 뒤에만 실제 값으로 교체한다.
@@ -37,7 +38,8 @@
 
 - 기준 작업 폴더 전체 안전 복사 및 SHA-256 manifest 완료
 - 로컬 전용 약 4GB 자산 보존; 대량 untracked 파일이 있으므로 `git add -A` 금지
-- GitHub commit/push 및 Supabase/Vercel 배포는 승인되어 실행 중이나 성공 미확정
+- GitHub commit/push·Draft PR과 Supabase migration/Functions 배포는 원격 성공 확인
+- Vercel 첫 Preview는 READY이나 public config 수정 재push·재배포와 Production 배포는 미완료
 - 실제 Toss 결제·live key 사용·webhook 등록·운영 DNS 변경은 미실행
 - `app-current.js`, `index-current.html` 등 삭제 후보는 물리 삭제하지 않음
 - 로컬 Supabase는 Docker engine pipe 부재로 실행하지 못했으며, 실제 DB 통합 검증은 원격 사후 증거가 기록될 때까지 미완료
@@ -49,16 +51,16 @@
 - lint PASS
 - build PASS
 - Edge Function check 12/12
-- frontend 35/35
+- frontend 36/36
 - backend 25/25
 - Deno provider 14/14
 - contracts 20/20
-- E2E 24/24
-- a11y 10/10
+- E2E 24/24, 40.1초
+- a11y 10/10, 19.9초
 
 추가 무결성 검사도 통과했다.
 
-- SQL parser 159 statements
+- SQL parser 162 statements across 2 migrations
 - `npm audit` 취약점 0
 - secret scan 검출 0
 - `git diff --check` PASS
@@ -90,18 +92,18 @@
 - 홈 6단계 위계와 모바일/키보드 회귀
 - `app.js`와 `styles.css`의 잔여 monolith 및 비활성 mutation 범위
 
-## Approved and in progress
+## External execution results
 
-- HG-01: Supabase migration 배포 승인됨 / 실행 중 — 실제 적용·검증 결과 대기
-- HG-02: Edge Functions 배포 승인됨 / 실행 중 — 운영 secret·원격 목록·smoke 결과 대기
-- HG-10: GitHub commit/push 승인됨 / 실행 중 — commit SHA와 원격 ref 대기
-- HG-11: Vercel 운영 배포 승인됨 / 실행 중 — team/project 연결, staged URL, promote 결과 대기
+- HG-01: Supabase migration versions `20260711055444`, `20260711055557` 적용 성공
+- HG-02: 12개 Edge Functions `ACTIVE`, smoke 성공; 내부 Edge secret 입력은 남음
+- HG-10: commit/push 성공, Draft PR #3 생성
+- HG-11: Preview `READY`; public config 수정 재배포와 Production은 `PENDING`
 
 ## Remaining external gates
 
 ### 운영 secret 및 Toss test key
 
-- Supabase/Vercel 공개 설정과 Edge server secret 분리
+- Supabase/Vercel 공개 설정과 아직 비어 있는 내부 Edge server secret 분리·입력
 - Toss test client/secret key·MID의 매칭 및 안전한 입력
 - `PAYMENT_RECONCILE_SECRET`, `PAYMENT_REFUND_DATA_KEY` 수명주기·rotation 정책
 
@@ -120,5 +122,5 @@
 ### CAPTCHA·Auth 및 운영 도메인
 
 - Turnstile/hCaptcha provider, site/secret key, 허용 hostname 활성화
-- SMTP, redirect URL, Confirm email 및 세션 정책 검증
+- SMTP, redirect URL, Confirm email, Auth Leaked Password Protection 및 세션 정책 검증
 - 운영 DNS와 확정 사업자·배송·환불 문구는 별도 승인 후 변경

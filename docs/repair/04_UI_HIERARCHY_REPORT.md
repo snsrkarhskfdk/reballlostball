@@ -60,17 +60,26 @@ hover, `:focus-visible`, active, disabled/`aria-disabled`, `.is-loading`/`aria-b
 
 | 포함 검사 | 결과 | 확인 내용 |
 |---|---|---|
-| frontend unit | PASS, 35/35 | 홈 구조 marker, 버튼 token/상태, 주문번호 escaping 경계, Toss SDK 로드 재시도 회귀 포함 |
+| frontend unit | PASS, 36/36 | 홈 구조 marker, 버튼 token/상태, 주문번호 escaping 경계, Toss SDK 로드 재시도, Vercel 공개 설정 회귀 포함 |
 | E2E | PASS, 24/24 | production entry, 실제 공개 설정이 주입된 CDN 실패·지연 복원, 체크아웃 우편번호, Toss 승인 성공·실패 URL scrub, 8개 경로 단일 h1, 홈 6단계, admin 위조 차단, storage 정리, exact variant, 키보드 CTA |
 | viewport 검사 | PASS, 360/390/768/1024/1440 | document-level 가로 overflow 없음 |
-| E2E 실행 시간 | 34.6초 | 24개 시나리오 전체 완료 |
-| a11y | PASS, 10/10 (20.5초) | desktop/mobile 홈·상품상세·장바구니·로그인·관리자, axe serious/critical 위반 0, `color-contrast` 제외 0 |
+| E2E 실행 시간 | 40.1초 | 24개 시나리오 전체 완료 |
+| a11y | PASS, 10/10 (19.9초) | desktop/mobile 홈·상품상세·장바구니·로그인·관리자, axe serious/critical 위반 0, `color-contrast` 제외 0 |
 | lint / build / Edge | PASS / PASS / PASS 12/12 | 전체 QA 선행 단계 |
 | backend / Deno / contract | PASS 25/25 / PASS 14/14 / PASS 20/20 | UI와 함께 실행된 전체 코드 회귀 |
 
-별도 검사는 SQL parser 159 statements, `npm audit` 취약점 0, secret scan 검출 0, `git diff --check` PASS다.
+별도 검사는 2개 timestamp migration의 SQL parser 162 statements, `npm audit` 취약점 0, secret scan 검출 0, `git diff --check` PASS다.
 
 접근성 검사에서 `color-contrast` 규칙을 제외하지 않았다. 다만 자동 규칙 통과는 실제 보조기기와 모든 운영 상태의 수동 검수를 대체하지 않는다.
+
+## Vercel Preview 검수 현황
+
+- Preview deployment `dpl_AmmYY6SU8AkRfss6AceuaQ25PRPT`가 `READY` 상태로 생성됐다.
+- Preview URL은 `https://reballlostball-muyv3j83q-thechangcnds-projects.vercel.app`이다.
+- 배포된 Preview의 5개 route에서 각각 page-level `h1=1`, document overflow 0, broken image 0, console error 0, network error 0을 확인했다.
+- 첫 Preview의 HTML meta에 공개 Supabase URL/publishable key가 비어 있어, 정적 UI 이외의 온라인 계정·상품·거래 연결은 해당 배포로 검증할 수 없었다.
+- 로컬 소스의 `scripts/public-config.mjs`는 Vercel에서만 공개 Supabase URL·publishable key 기본값을 사용하고, 명시적 환경변수가 있으면 그 값을 우선하도록 보정됐다. 로컬 기본값과 Toss/CAPTCHA 공개 값은 여전히 비워 둔다.
+- 이 보정을 포함한 재배포는 아직 수행하지 않았다. 따라서 위 `READY` 결과는 최초 Preview artifact의 정적 UI 검수 결과이지, 공개 Supabase 설정 보정의 배포 성공 증거가 아니다.
 
 ## 남은 REVIEW 항목
 
@@ -82,7 +91,8 @@ hover, `:focus-visible`, active, disabled/`aria-disabled`, `.is-loading`/`aria-b
 
 ## HUMAN_GATE
 
-- 외부 Vercel Preview와 운영 배포는 만들지 않았다. 실제 도메인·CDN·폰트·영상 조건의 검수는 HG-11 배포 승인 뒤에 수행한다.
+- HG-11 승인 범위에서 Vercel Preview는 생성했지만 보정 build의 재배포와 운영 production 도메인 확정은 아직 남아 있다.
+- 공개 Supabase 설정이 포함된 재배포 후 5개 route 검사와 온라인 계정·상품 조회 초기화를 반드시 다시 확인한다.
 - 확정 사업자, 배송, 교환·환불 문구와 브랜드 방향은 변경하지 않았다. 변경이 필요하면 HG-12 별도 승인을 받는다.
 - 위의 스크린리더·확대/긴 텍스트 수동 검수는 배포 승인과 별개로 로컬에서 먼저 완료할 수 있으며, HUMAN_GATE로 미루지 않는다.
 
@@ -95,4 +105,4 @@ hover, `:focus-visible`, active, disabled/`aria-disabled`, `.is-loading`/`aria-b
 
 ## 결론
 
-홈 hierarchy와 핵심 접근성·반응형 회귀, 색상 대비를 포함한 axe 자동 규칙은 로컬에서 통과했다. 실제 보조기기·최종 시각 QA와 CSS 구조 정리, 외부 운영 배포 검증이 남아 있어 Wave 4 판정은 `REVIEW`다.
+홈 hierarchy와 핵심 접근성·반응형 회귀, 색상 대비를 포함한 axe 자동 규칙은 로컬에서 통과했고 첫 Vercel Preview의 5개 정적 route도 기본 문서·자산 검사를 통과했다. 그러나 Preview에서 공개 Supabase 설정 누락을 발견한 뒤 코드를 보정했으며, 보정 build는 아직 재배포하지 않았다. 실제 보조기기·최종 시각 QA와 CSS 구조 정리, 온라인 연결 재검증이 남아 있어 Wave 4 판정은 `REVIEW`다.

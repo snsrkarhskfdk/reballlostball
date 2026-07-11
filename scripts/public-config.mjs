@@ -6,6 +6,13 @@ const META_ENV = Object.freeze({
   "reball-captcha-site-key": ["AUTH_CAPTCHA_SITE_KEY", "CAPTCHA_SITE_KEY"],
 });
 
+// These values are browser-public project metadata. Authorization remains enforced
+// by Supabase Auth, RLS, and the Edge Function trust boundary.
+const VERCEL_PUBLIC_DEFAULTS = Object.freeze({
+  "reball-supabase-url": "https://qbftalhhyfcndanrcwpy.supabase.co",
+  "reball-supabase-publishable-key": "sb_publishable_K876i166RCGtBxdp3xRQZw_yJxPaKwL",
+});
+
 function firstValue(env, names) {
   return names.map((name) => String(env[name] || "").trim()).find(Boolean) || "";
 }
@@ -37,8 +44,12 @@ function validate(values, requireComplete) {
 }
 
 export function injectPublicConfig(html, env = process.env) {
+  const isVercelBuild = Boolean(env.VERCEL || env.VERCEL_ENV || env.VERCEL_URL);
   const values = Object.fromEntries(
-    Object.entries(META_ENV).map(([metaName, envNames]) => [metaName, firstValue(env, envNames)])
+    Object.entries(META_ENV).map(([metaName, envNames]) => [
+      metaName,
+      firstValue(env, envNames) || (isVercelBuild ? VERCEL_PUBLIC_DEFAULTS[metaName] || "" : ""),
+    ])
   );
   validate(values, String(env.PUBLIC_CONFIG_REQUIRED || "").toLowerCase() === "true");
   let output = String(html);

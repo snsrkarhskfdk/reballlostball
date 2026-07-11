@@ -4,7 +4,7 @@
 
 `WAVE 3 — REVIEW`
 
-Toss Payments 테스트 연동을 위한 브라우저/서버 adapter, 승인·취소·웹훅·가상계좌·reconciliation·멱등화 코드를 구현했고 mock provider 검사는 통과했다. 성공 URL만으로 `paid`가 되지 않으며 금액과 주문번호를 서버에서 다시 확인한다. 운영 Supabase 프로젝트는 `qbftalhhyfcndanrcwpy`(`Reballlostball`)로 확인했지만 migration과 신규 결제 함수는 아직 배포하지 않았다. 실제 테스트 key, MID, 외부 HTTPS webhook, staging DB를 사용한 공급자 실연동도 수행하지 않았으므로 결제 연동 완료로 판정하지 않는다.
+Toss Payments 테스트 연동을 위한 브라우저/서버 adapter, 승인·취소·웹훅·가상계좌·reconciliation·멱등화 코드를 구현했고 mock provider 검사는 통과했다. 운영 Supabase 프로젝트 `qbftalhhyfcndanrcwpy`(`Reballlostball`)에는 두 migration과 12개 Edge Function을 배포했고, 함수는 모두 `ACTIVE`, `verify_jwt=false` 상태다. OPTIONS/CORS와 설정 누락 실패 폐쇄 smoke도 통과했다. 다만 Toss/CAPTCHA 및 일부 내부 secret이 없어 실제 테스트 결제·웹훅·정상 인증은 수행하지 않았으므로 결제 연동 완료로 판정하지 않는다.
 
 ## 공식 문서 기준
 
@@ -89,7 +89,22 @@ Supabase server 호출은 신형 `sb_secret_*` key를 `apikey` header로만 보�
 - provider safe payload는 `refundReceiveAccount`, `accountNumber`, `holderName` 등 민감 필드를 재귀적으로 redaction해 event, response, 로그에 평문 계좌가 남지 않게 한다.
 - key 재생성/rotation은 열린 `unknown`·`manual_review` 취소를 복호화 불가능하게 만들 수 있으므로 HG-08의 백업·권한·rotation 절차가 필요하다.
 
-## 실제 검증 결과
+## 원격 배포·smoke 결과
+
+| 검사 | 결과 |
+|---|---|
+| Supabase migrations | `20260711055444`, `20260711055557` 적용 성공 |
+| 결제 RPC/table | 핵심 객체 존재 확인 `true` |
+| Edge Functions | 12/12 `ACTIVE`, 모두 `verify_jwt=false` |
+| OPTIONS/CORS | PASS |
+| 로그인 설정 누락 | EXPECTED 503 `SECURITY_CONFIG_MISSING` |
+| reconciliation 설정 누락 | EXPECTED 503 `RECONCILE_NOT_CONFIGURED` |
+
+이는 배포 구조와 실패 폐쇄 경계를 확인한 smoke다. Toss secret/client key/MID, CAPTCHA key, reconcile secret을 사용한 정상 provider 호출 증거는 아니다.
+
+Database advisors의 신규 foreign key 미인덱스 3개는 후속 migration `20260711055557`로 해소했다. 남은 Security WARN은 leaked password protection 비활성화이며, `private.edge_rate_limits` no-policy INFO는 비공개 schema/service-role 전용 설계에 따른 의도된 결과다.
+
+## 실제 로컬 QA 결과
 
 최종 결제 경쟁조건 보강까지 포함한 작업트리에서 전체 QA를 다시 실행했다.
 
@@ -98,17 +113,17 @@ Supabase server 호출은 신형 `sb_secret_*` key를 `apikey` header로만 보�
 | `npm run qa` | PASS, exit 0 | lint, build, Edge, unit, 전체 contract, E2E, a11y 순차 실행 |
 | lint / build | PASS / PASS | 최신 소스 정적 검사와 배포 산출물 생성 |
 | Edge Function Deno check | PASS, 12/12 | 결제 포함 전체 Edge 함수 check |
-| frontend unit | PASS, 35/35 | prepare/confirm 클라이언트와 주문 mapper 포함 |
+| frontend unit | PASS, 36/36 | prepare/confirm 클라이언트와 주문 mapper 포함 |
 | backend Node | PASS, 25/25 | 승인/취소/webhook 경합, 상태 단조성, webhook-first full cancel, 권한 redaction, fail-closed 구성 |
 | Deno provider/handler 사례 | PASS, 14/14 | mock·상태 disposition·retry·AES-GCM/HMAC/redaction, 신형/legacy Supabase key와 실제 handler 경계 |
 | contract 전체 | PASS, 20/20 | frontend/backend 결제 준비·승인, webhook 검증·dedupe, env schema 계약 |
-| E2E | PASS, 24/24 (34.6초) | 결제 success query의 server confirm과 URL 정리 포함 |
-| a11y | PASS, 10/10 (20.5초) | 지정 핵심 경로 자동 접근성 검사 |
-| SQL parser | PASS, 159 statements | 결제·취소·webhook·reconciliation RPC와 redacted helper migration parse |
+| E2E | PASS, 24/24 (40.1초) | 결제 success query의 server confirm과 URL 정리 포함 |
+| a11y | PASS, 10/10 (19.9초) | 지정 핵심 경로 자동 접근성 검사 |
+| SQL parser | PASS, 162 statements / 2 files | 결제 RPC와 FK index migration parse |
 | `npm audit` / secret scan | 취약점 0 / 검출 0 | 의존성과 credential pattern 검사 |
 | `git diff --check` | PASS | 최종 diff whitespace/error marker 검사 |
 
-모든 결제 검사는 mock 및 로컬 endpoint interception/정적 불변조건을 사용했다. `qbftalhhyfcndanrcwpy`에 migration/신규 함수를 배포하거나 Toss sandbox 서버에 요청하거나 실제 결제수단을 사용한 결과가 아니다.
+결제 동작 검사는 mock 및 로컬 endpoint interception/정적 불변조건을 사용했고, 원격에서는 함수 활성·CORS·실패 폐쇄만 확인했다. Toss sandbox 서버 요청이나 실제 결제수단을 사용한 결과가 아니다.
 
 ## 미검증/REVIEW 항목
 
@@ -125,14 +140,14 @@ Supabase server 호출은 신형 `sb_secret_*` key를 `apikey` header로만 보�
 
 ## HUMAN_GATE
 
-1. HG-02: 대상 Supabase 프로젝트, Edge Function 배포, server secret 입력을 승인한다.
+1. HG-02: 12개 함수 배포는 완료됐다. 누락된 server secret 입력과 정상 호출 검증을 완료한다.
 2. HG-05: 매칭되는 Toss 테스트 client key, secret key, MID를 승인된 server secret에 입력한다. 저장소에는 넣지 않는다.
 3. HG-06: staging 외부 HTTPS webhook, 공식 inbound IP allowlist/WAF·ACL, 이벤트 등록과 재전송 정책을 승인한다.
 4. HG-07: `PAYMENT_RECONCILE_SECRET`, scheduler 주기, 알람, `manual_review` 담당자 절차를 확정한다.
 5. HG-08: `PAYMENT_REFUND_DATA_KEY`의 생성·백업·접근권한·rotation 정책을 확정한다.
 6. HG-09: 테스트 결제·취소·가상계좌 환불도 사용자 명시 승인 후 최소 금액/test key로만 수행한다. 라이브 key와 실제 결제는 계속 금지한다.
 
-외부 설정, 함수 배포, webhook 등록, 실제 공급자 호출은 수행하지 않았다.
+함수와 DB migration 배포는 완료했지만 Toss/CAPTCHA secret 입력, webhook 등록, scheduler 정상 호출, 실제 공급자 호출은 수행하지 않았다.
 
 ## 결론
 

@@ -6,7 +6,7 @@
 
 운영 차단 결함을 담당하는 프런트엔드 로직을 기능 모듈로 분리하고, 개발·배포 엔트리를 `index.html`/`app.js`로 통일했으며, unit·contract·E2E·접근성·Edge·SQL 정적 검사를 자동화했다. 최신 결제 취소 경쟁·재시도·민감 환불정보·webhook 방어와 CDN/Toss SDK 실패 복원 보강까지 포함한 전체 로컬 QA를 2026-07-11에 통과했다.
 
-그러나 `app.js`는 현재도 8,015줄이다. CSS는 엔트리와 5개 import module로 나뉘었지만 합계 14,669줄이고, `src/frontend/ui/base.css`만 11,122줄이다. 라우터·상태·화면 렌더러의 전면 모듈화와 CSS 중복/cascade 정리는 완료되지 않았다. 또한 Docker 엔진이 없어 실제 Supabase/Postgres의 migration·RLS·동시성 통합 테스트를 실행하지 못했고, Vercel·Supabase 운영 배포도 이 로컬 검증 단계에서는 수행하지 않았다. 따라서 Wave 5와 전체 결과를 `LOCAL FINAL CANDIDATE`로 올리지 않고 `REVIEW`로 남긴다.
+그러나 `app.js`는 현재도 8,015줄이다. CSS는 엔트리와 5개 import module로 나뉘었지만 합계 14,669줄이고, `src/frontend/ui/base.css`만 11,122줄이다. 라우터·상태·화면 렌더러의 전면 모듈화와 CSS 중복/cascade 정리는 완료되지 않았다. Supabase remote migration 이력과 Vercel Preview `READY` 결과는 생겼지만, 로컬 Docker 엔진이 없어 실제 Postgres의 RLS·동시성 통합 테스트를 실행하지 못했다. 또한 첫 Preview에서 공개 Supabase 설정 누락을 발견해 코드를 보정했지만 보정 build는 아직 재배포하지 않았다. 따라서 Wave 5와 전체 결과를 `LOCAL FINAL CANDIDATE`로 올리지 않고 `REVIEW`로 남긴다.
 
 ## 구조 개선 결과
 
@@ -48,7 +48,8 @@ build check는 import 그래프의 누락 CSS와 상대 asset URL을 검사한�
 
 - 개발 서버와 build가 모두 `index.html`과 `app.js`를 사용한다.
 - `app-current.js`, `index-current.html`은 더 이상 실행 엔트리로 사용하지 않지만 원본 보존 원칙에 따라 삭제하지 않았다.
-- `scripts/public-config.mjs`가 공개 Supabase/Toss/CAPTCHA 설정을 meta에 주입하고 설정 쌍·URL·키 형식을 검사한다.
+- `scripts/public-config.mjs`가 공개 Supabase/Toss/CAPTCHA 설정을 meta에 주입하고 설정 쌍·URL·키 형식을 검사한다. 첫 Vercel Preview에서 공개 Supabase meta가 비어 있음을 발견한 후, Vercel build에서만 프로젝트 Supabase URL과 publishable 공개 key 기본값을 사용하도록 보완했다.
+- 명시적 환경변수는 Vercel 공개 기본값보다 우선한다. 로컬 build의 Supabase 기본값과 Toss/CAPTCHA 공개 기본값은 빈 값으로 유지해 운영 자격증명을 임의로 주입하지 않는다.
 - `.env.example`은 공개값과 Edge Function 전용 secret을 분리하며 실제 값은 포함하지 않는다.
 - 운영에서 `PUBLIC_CONFIG_REQUIRED=true`를 적용하면 공개 설정 누락도 build 단계에서 실패 폐쇄할 수 있다.
 - `package.json`의 공식 명령을 lint, build, unit, integration, E2E, a11y, Edge 검사로 복구했다.
@@ -83,7 +84,7 @@ build check는 import 그래프의 누락 CSS와 상대 asset URL을 검사한�
 | E2E | `tests/e2e/reball.spec.mjs` | 주요 route, 360/390/768/1024/1440 viewport, 결제 복귀, storage, h1, overflow |
 | 접근성 | `tests/e2e/accessibility.spec.mjs` | desktop/mobile serious/critical axe 위반, `color-contrast` 포함, 키보드·문서 구조의 핵심 회귀 |
 | Edge 정적 검사 | `scripts/check-edge-functions.mjs` | 12개 Edge Function의 Deno type/check |
-| SQL 정적 검사 | `scripts/check-sql.mjs` | migration 159 statements parser 검증 |
+| SQL 정적 검사 | `scripts/check-sql.mjs` | 2개 timestamp migration, 합계 162 statements parser 검증 |
 | build 설정 | `scripts/build.mjs`, `scripts/build-check.mjs` | 단일 엔트리, JS/CSS import 그래프·font/asset 복사, 공개 설정 주입/검증 |
 
 ## 실제 테스트 증거
@@ -98,13 +99,13 @@ build check는 import 그래프의 누락 CSS와 상대 asset URL을 검사한�
 | lint | PASS |
 | build | PASS |
 | Edge Function Deno check | PASS, 12/12 |
-| SQL parser | PASS, 159 statements |
-| 프런트 unit | PASS, 35/35 |
+| SQL parser | PASS, 162 statements across 2 migrations |
+| 프런트 unit | PASS, 36/36 |
 | 백엔드 Node 검사 | PASS, 25/25 |
 | Deno 결제 provider 사례 | PASS, 14/14 |
 | contract | PASS, 20/20 |
-| E2E | PASS, 24/24, 34.6초 |
-| a11y | PASS, 10/10, 20.5초, `color-contrast` 제외 0 |
+| E2E | PASS, 24/24, 40.1초 |
+| a11y | PASS, 10/10, 19.9초, `color-contrast` 제외 0 |
 
 ### 추가 무결성 검사 — 2026-07-11
 
@@ -115,6 +116,30 @@ build check는 import 그래프의 누락 CSS와 상대 asset URL을 검사한�
 | `git diff --check` | PASS |
 
 위 결과는 최신 로컬 소스의 자동 회귀 증거다. 실제 Postgres 또는 Toss 실연동 통과를 의미하지 않는다.
+
+## Preview·remote 반영 현황
+
+### Supabase remote migration 이력
+
+remote migration history에서 다음 2개 timestamp migration 파일명을 확인했다.
+
+- `20260711055444_production_commerce_security.sql`
+- `20260711055557_commerce_foreign_key_indexes.sql`
+
+이 이력은 remote에 migration 버전이 반영된 증거지만, 실제 회원·비회원·관리자 JWT/RLS matrix와 동시 결제·취소·webhook 시나리오를 remote 데이터베이스에서 모두 통과했다는 의미는 아니다.
+
+### Vercel Preview
+
+| 항목 | 결과 |
+|---|---|
+| Deployment ID | `dpl_AmmYY6SU8AkRfss6AceuaQ25PRPT` |
+| URL | `https://reballlostball-muyv3j83q-thechangcnds-projects.vercel.app` |
+| Vercel state | `READY` |
+| 5개 route 문서 구조 | 각 route `h1=1` |
+| layout/asset | overflow 0, broken image 0 |
+| runtime | console error 0, network error 0 |
+
+첫 Preview의 정적 UI 검수는 위와 같이 통과했지만, 배포된 HTML의 Supabase URL과 publishable 공개 key meta가 비어 있었다. 이를 검출하는 frontend 회귀 1개를 추가해 전체 frontend unit이 36개가 됐고, `scripts/public-config.mjs`를 보정했다. 그러나 보정 build의 Vercel 재배포는 아직 수행하지 않았다. 따라서 위 `READY`·5-route 결과를 공개 Supabase 설정 보정 성공이나 최종 운영 배포 성공으로 해석하면 안 된다.
 
 ## 로컬 브라우저 검수
 
@@ -130,9 +155,9 @@ build check는 import 그래프의 누락 CSS와 상대 asset URL을 검사한�
 
 자동 E2E는 360, 390, 768, 1024, 1440 viewport를 포함했다. 실제 기기와 실제 스크린리더 수동 검수는 별도 운영 전 점검으로 남는다.
 
-## 로컬 Supabase 검증 제한
+## Supabase 통합 검증 제한
 
-`npx supabase status`는 로컬 Docker engine pipe를 찾지 못해 실패했다. Docker를 임의 설치·기동하거나 원격 프로젝트에 대신 적용하지 않았다. 그 결과 다음 항목은 코드·정적 불변조건까지만 검증됐다.
+`npx supabase status`는 로컬 Docker engine pipe를 찾지 못해 실패했다. Docker를 임의 설치·기동하지 않았다. remote migration history는 확인했지만 다음 항목은 여전히 코드·정적 불변조건까지만 검증됐다.
 
 - migration을 실제 Postgres에 적용하는 과정과 기존 데이터 호환성
 - 동시 주문 transaction의 row lock, deadlock, lock timeout
@@ -149,8 +174,9 @@ build check는 import 그래프의 누락 CSS와 상대 asset URL을 검사한�
 3. 버튼·필드·카드·모달·토스트의 공통 렌더러 전환은 부분적이다.
 4. 별도 서버 API가 구현되지 않은 관리자/고객 mutation은 안전을 위해 비활성화했다. 오작동은 차단했지만 해당 운영 기능이 완성된 것은 아니다.
 5. `app-current.js`, `index-current.html`과 정의 전용 렌더러는 삭제 승인 전까지 보존한다.
-6. 실제 DB/RLS/동시성은 HG-01~HG-02, Toss 자격증명·webhook·scheduler·환불 암호화 key·실결제는 HG-05~HG-09 승인 후 staging에서 검증해야 한다.
+6. remote migration 버전 반영과 별개로 실제 DB/RLS/동시성, Toss 자격증명·webhook·scheduler·환불 암호화 key·실결제를 staging에서 검증해야 한다.
+7. 공개 Supabase 설정 보정을 포함한 Vercel build를 재배포한 뒤 meta 주입, 5개 route, 온라인 초기화를 다시 검증해야 한다.
 
 ## 결론
 
-자동 QA와 핵심 신뢰 경계 분리는 의미 있게 강화됐고, 현재 로컬 소스의 주요 회귀 검사는 통과했다. 다만 대형 엔트리/CSS의 구조 개선이 미완료이고 실제 DB·결제 공급자 통합 및 Vercel·Supabase 운영 배포 증거가 없으므로 Wave 5는 `REVIEW`다.
+자동 QA와 핵심 신뢰 경계 분리는 의미 있게 강화됐고, 현재 로컬 소스의 주요 회귀 검사는 통과했다. Supabase remote에는 2개 timestamp migration 버전이 보이고 첫 Vercel Preview는 `READY`였으며 5개 정적 route 검수를 통과했다. 다만 대형 엔트리/CSS의 구조 개선이 미완료이고, 첫 Preview에서 발견한 공개 Supabase 설정 누락의 코드 보정을 아직 재배포하지 않았으며, 실제 DB/RLS/동시성·Toss 공급자 통합 증거도 부족하므로 Wave 5는 `REVIEW`다.

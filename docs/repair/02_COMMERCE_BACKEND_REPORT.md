@@ -4,13 +4,14 @@
 
 `WAVE 2 — REVIEW`
 
-기존 주문·결제 테이블을 폐기하거나 중복 생성하지 않고 timestamp migration 한 개와 Supabase Edge Functions로 서버 기준 commerce 경계를 구현했다. 가격 재계산, 재고 row lock, snapshot, 멱등성, 회원/비회원 조회, RLS, 감사 이벤트의 코드와 정적 불변조건 검사는 완료했다. 운영 프로젝트는 `qbftalhhyfcndanrcwpy`(`Reballlostball`)로 확인했지만 migration과 신규 함수는 아직 적용·배포하지 않았다. Docker/로컬 Supabase 또는 staging Postgres에서 실제 transaction·RLS·동시 주문 통합 테스트도 실행하지 못했으므로 운영 안전성을 확정하지 않는다.
+기존 주문·결제 테이블을 폐기하거나 중복 생성하지 않고 두 개의 timestamp migration과 Supabase Edge Functions로 서버 기준 commerce 경계를 구현했다. 운영 프로젝트 `qbftalhhyfcndanrcwpy`(`Reballlostball`)에 production commerce migration과 FK index 후속 migration을 적용했고 핵심 RPC/table 존재를 확인했다. 12개 함수도 모두 `ACTIVE`다. 그러나 실제 transaction 경쟁, 전체 JWT/RLS matrix, Toss/CAPTCHA secret을 사용한 정상 통합 흐름은 아직 실행하지 않았으므로 운영 안전성을 확정하지 않는다.
 
 ## 변경 범위
 
 ### Migration
 
-- `supabase/migrations/20260710173448_production_commerce_security.sql`
+- `supabase/migrations/20260711055444_production_commerce_security.sql`
+- `supabase/migrations/20260711055557_commerce_foreign_key_indexes.sql`
 
 기존 `brands`, `products`, `product_variants`, `orders`, `order_items`, `shipping_snapshots`, `payments`, `payment_attempts`, `payment_events`, `payment_refunds`, `user_roles` 구조를 보강한다. 새로 필요한 운영 구조만 추가했다.
 
@@ -98,7 +99,19 @@ Supabase service helper는 신형 opaque `sb_secret_*` key를 `apikey` header로
 - 카탈로그 직접 쓰기도 회수해, 미구현 관리자 UI가 브라우저에서 신뢰 DB를 변경하지 못한다.
 - 생성, 상태 변경, 재고 예약·소비·복구, 결제·취소 결과를 `order_events` 및 결제 event/attempt/refund ledger에 남긴다.
 
-## 실제 검증 결과
+## 원격 Supabase 검증 결과
+
+- migration `20260711055444 production_commerce_security`: 적용 성공
+- migration `20260711055557 commerce_foreign_key_indexes`: 적용 성공
+- 핵심 commerce RPC 및 신규 table: 존재 확인 `true`
+- 12개 Edge Function: 모두 `ACTIVE`, `verify_jwt=false`
+- OPTIONS/CORS 및 필수 설정 누락 fail-closed smoke: 성공
+- 로그인: 내부 보안 secret 누락으로 예상된 `503 SECURITY_CONFIG_MISSING`
+- reconciliation: scheduler secret 누락으로 예상된 `503 RECONCILE_NOT_CONFIGURED`
+
+Database advisors가 처음 보고한 신규 foreign key 미인덱스 3개는 `20260711055557`에서 모두 보강했다. 남은 Security WARN은 Auth의 leaked password protection 비활성화다. `private.edge_rate_limits`의 no-policy INFO는 비공개 schema/service-role 전용 설계이므로 anon/authenticated 노출 정책을 추가하지 않는다.
+
+## 실제 로컬 QA 결과
 
 최종 경쟁조건 보강까지 포함한 작업트리에서 전체 QA를 다시 실행했다.
 
@@ -107,12 +120,12 @@ Supabase service helper는 신형 opaque `sb_secret_*` key를 `apikey` header로
 | `npm run qa` | PASS, exit 0 | lint, build, Edge, unit, 전체 contract, E2E, a11y 순차 실행 |
 | lint / build | PASS / PASS | 정적 검사와 배포 산출물 생성 |
 | Edge Function Deno check | PASS, 12/12 | 배포 대상 Edge 함수 type/check |
-| frontend unit | PASS, 35/35 | 최소 주문 payload, exact variant, 비회원 server lookup 포함 |
+| frontend unit | PASS, 36/36 | 최소 주문 payload, exact variant, 비회원 server lookup 포함 |
 | backend Node | PASS, 25/25 | 재고·RLS·권한 redaction·key header·상태 역행·승인/취소/webhook 경쟁·manual review 불변조건 |
 | Deno provider/handler 사례 | PASS, 14/14 | mock 흐름, 상태 disposition, provider 오류, 암호화, 신형/legacy Supabase key와 Auth·주문 handler 경계 |
 | contract 전체 | PASS, 20/20 | frontend/backend migration·주문·RLS·결제·인증·env schema 계약 |
-| E2E / a11y | PASS 24/24 (34.6초) / PASS 10/10 (20.5초) | 브라우저 회귀와 접근성 자동 검사 |
-| SQL parser | PASS, 159 statements | timestamp migration 문법 parse |
+| E2E / a11y | PASS 24/24 (40.1초) / PASS 10/10 (19.9초) | 브라우저 회귀와 접근성 자동 검사 |
+| SQL parser | PASS, 162 statements / 2 files | production commerce와 FK index migration 문법 parse |
 | `npm audit` / secret scan | 취약점 0 / 검출 0 | 의존성과 credential pattern 검사 |
 | `git diff --check` | PASS | 최종 diff whitespace/error marker 검사 |
 
@@ -121,7 +134,7 @@ Supabase service helper는 신형 opaque `sb_secret_*` key를 `apikey` header로
 ### 아직 검증하지 못한 항목
 
 - 실제 Postgres 두 transaction을 동시에 실행한 재고 경쟁과 deadlock/lock timeout
-- migration 전/후 기존 데이터 호환성 및 enum/constraint 적용
+- 적용된 migration 이후 기존 데이터의 실제 주문·결제 동작과 enum/constraint 장기 호환성
 - 실제 JWT를 사용한 회원 자기 주문·타 회원 주문·네 관리자 역할 RLS
 - hosted Supabase에서 신형 `sb_secret_*` header 처리와 `admin-members` handler 자체 session/role 검증
 - Edge Function과 DB RPC를 함께 실행하는 정상/품절/가격변조/중복/실패복구 통합 시나리오
@@ -132,17 +145,17 @@ Supabase service helper는 신형 opaque `sb_secret_*` key를 `apikey` header로
 
 따라서 “동시 주문에서 재고 음수 불가”는 DB 설계와 정적 검사로 방어했지만 실제 경쟁 테스트가 통과했다고 주장하지 않는다.
 
-## HUMAN_GATE와 적용 전 주의사항
+## HUMAN_GATE와 적용 후 주의사항
 
-1. 대상 Supabase 프로젝트 `qbftalhhyfcndanrcwpy`(`Reballlostball`)의 현재 migration history를 확인한다. 프로젝트 식별만 완료됐고 적용은 아직이다.
-2. staging DB 백업 후 migration을 dry-run하고 기존 주문·결제 상태 값을 검사한다.
-3. service-role secret을 Edge Function에만 입력하고 브라우저 bundle에 없는지 다시 검사한다.
-4. staging에서 정상 주문, 가격 변조, 없는/품절 variant, 동시 주문, 중복 생성, 만료/실패 재고 복구, RLS를 실행한다.
+1. 프로젝트 `qbftalhhyfcndanrcwpy`(`Reballlostball`)의 적용된 두 migration과 백업/PITR 상태를 유지한다.
+2. 기존 주문·결제 상태와 constraint 적용 결과를 실제 데이터로 검사한다.
+3. 누락된 내부/외부 secret은 Edge Function에만 입력하고 브라우저 bundle에 없는지 다시 검사한다.
+4. 정상 주문, 가격 변조, 없는/품절 variant, 동시 주문, 중복 생성, 만료/실패 재고 복구, RLS를 실행한다.
 5. scheduler, 알람, `manual_review` 운영자 큐를 HG-07 절차에 맞춰 검증한다.
 6. 환불정보 key 백업·접근권한·rotation과 열린 암호문 처리 절차를 HG-08에 맞춰 검증한다.
-7. 결과 확인 뒤에만 운영 migration과 함수 배포 승인을 요청한다.
+7. 실제 통합 결과 확인 뒤에만 결제·인증 트래픽 활성화와 운영 완료 판정을 요청한다.
 
-운영 적용과 webhook/queue/암호화 secret 활성화는 `docs/repair/HUMAN_GATES.md`의 HG-01, HG-02, HG-06, HG-07, HG-08 승인 전에는 금지한다.
+DB migration과 함수 배포는 완료됐다. 남은 webhook/queue/암호화 secret 활성화와 실제 결제는 `docs/repair/HUMAN_GATES.md`의 HG-05~HG-09 범위에서 검증한다.
 
 ## 결론
 
