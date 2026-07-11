@@ -6,7 +6,7 @@
 - 대상 확인 후 Supabase migration·Edge Functions 배포
 - 대상 확인 후 Vercel 운영 배포
 
-GitHub commit/push와 Draft PR, Supabase migration 및 12개 Edge Function 배포, Vercel Preview 생성은 원격 증거가 확인됐다. Vercel Preview의 첫 smoke에서 UI는 깨끗했지만 public config가 비어 있어 수정 후 재push·재배포가 남았고, Production 배포는 아직 완료하지 않았다. `main` 병합, 운영 DNS 변경 및 실제 결제는 별도 게이트다.
+GitHub PR #3 병합, Supabase migration 및 12개 Edge Function 배포, Vercel 최종 Preview와 Production 배포 및 alias 연결까지 원격 증거가 확인됐다. Production UI/API smoke는 통과했지만 Toss/CAPTCHA 공개 설정과 내부 Edge secret, 실제 Toss 및 DB 동시성 검증은 남아 있다.
 
 | Gate | 현재 상태 | 남은 입력·검증 | 완료 조건 / 현재 금지 |
 |---|---|---|---|
@@ -19,23 +19,25 @@ GitHub commit/push와 Draft PR, Supabase migration 및 12개 Edge Function 배�
 | HG-07 Reconciliation·운영 큐 | worker 코드 준비, 운영 연결 미완료 | scheduler 주기, `PAYMENT_RECONCILE_SECRET`, 알람·담당자·manual-review 처리 절차 | 무감시 scheduler 운영 금지 |
 | HG-08 환불계좌 암호화 key 수명주기 | 코드 준비, 운영 key 미입력 | 32자 이상 고엔트로피 `PAYMENT_REFUND_DATA_KEY`, 백업·접근권한·rotation 정책 | 임시·재생성 key로 운영 취소 활성화 금지 |
 | HG-09 실제 결제수단 테스트 | 미승인·미실행 — 외부 게이트 유지 | Toss test key, 최소 금액, 결제수단, 환불 계좌, 테스트 책임자와 실제 실행 승인 | 카드·계좌이체·가상계좌·간편결제 실거래 및 live key 사용 금지 |
-| HG-10 GitHub commit/push | **성공** — `74b24a611d0af14043613ad41d21a0f277c34a58`, branch `fix/reball-production-readiness`, Draft PR #3 | PR review와 `main` 병합은 별도 | `main` 병합 완료로 확대 표기 금지 |
-| HG-11 Vercel 운영 배포 | **Preview READY / 수정 재배포 중** — `dpl_AmmYY6SU8AkRfss6AceuaQ25PRPT` | public config 수정 push·Preview 재배포·smoke, 이후 Production 배포 | 첫 Preview를 Production 완료로 표기 금지 |
+| HG-10 GitHub commit/push | **성공** — deployed code head `4a81481df1d774f46ce8c58cf4f33a49c3d56f2c`, PR #3 MERGED, main `4347c9c6db7520092c5c40a70f087ee466823faa` | 후속 운영 수정은 새 변경으로 추적 | 과거 commit을 현재 main head로 오인 금지 |
+| HG-11 Vercel 운영 배포 | **성공** — Preview/Production READY 및 3개 alias 연결·smoke 통과 | Toss/CAPTCHA public config와 내부 Edge secret은 별도 게이트 | 배포 성공을 결제·인증 실연동 완료로 확대 표기 금지 |
 | HG-12 운영 도메인·정책 | 변경 없음 | DNS 및 확정 사업자·배송·환불 문구 변경 승인 | 운영 DNS/정책 문구 변경 금지 |
 | HG-13 실제 PostgreSQL/RLS·동시성 | 미실행 — 외부 통합 게이트 유지 | 연결된 실제 PostgreSQL에서 migration, 실제 JWT/RLS/RPC, 동시 주문·재고·승인/취소/webhook 경합 실행 | 로컬 parser·mock 결과를 실제 DB 통합 통과로 대체 금지 |
 
-## 외부 실행 결과 자리표시자
+## 외부 실행 결과
 
 아래 값은 루트 작업이 실제로 성공하고 원격 증거를 확인한 뒤에만 채운다.
 
-- Git commit SHA: `74b24a611d0af14043613ad41d21a0f277c34a58`
+- Git deployed code head: `4a81481df1d774f46ce8c58cf4f33a49c3d56f2c`
+- Git main merge SHA: `4347c9c6db7520092c5c40a70f087ee466823faa`
 - Git remote branch/ref: `origin/fix/reball-production-readiness`
-- Pull request URL/number: `https://github.com/snsrkarhskfdk/reballlostball/pull/3` (Draft)
+- Pull request URL/number: `https://github.com/snsrkarhskfdk/reballlostball/pull/3` (MERGED)
 - Supabase project ref: `qbftalhhyfcndanrcwpy`
 - Supabase migration result: `20260711055444`, `20260711055557` 적용 성공
 - Supabase Edge Functions result: 12개 `ACTIVE`, smoke 성공
-- Vercel staged deployment URL: `https://reballlostball-muyv3j83q-thechangcnds-projects.vercel.app` (`READY`; public config 수정 재배포 필요)
-- Vercel production URL/alias: `<PENDING_ROOT_FILL_AFTER_PROMOTE_AND_SMOKE>`
+- Vercel final Preview: `dpl_9V2WFwQCmA3ryPn56TFzouVUXPv1` — `https://reballlostball-7wrgzlgb2-thechangcnds-projects.vercel.app` (`READY`)
+- Vercel Production: `dpl_2NixiY3VHhxyaZydowGif5oYqQsj` — `https://reballlostball-hhkw5erdb-thechangcnds-projects.vercel.app` (`READY`)
+- Vercel production aliases: `https://reballlostball.com`, `https://www.reballlostball.com`, `https://reballlostball.vercel.app`
 
 ## 남은 외부 게이트 분리
 

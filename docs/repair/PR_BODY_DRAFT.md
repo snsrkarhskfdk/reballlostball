@@ -1,17 +1,18 @@
 # PR: REBALL production-readiness repair
 
-> Draft PR #3이 생성됐습니다. Supabase 원격 migration/Functions와 첫 Vercel Preview까지 실행했지만, public config 수정의 재push·재배포 및 Production 배포는 아직 완료하지 않았습니다.
+> PR #3은 MERGED 상태입니다. Supabase migration/Functions와 Vercel 최종 Preview·Production·alias smoke까지 완료했지만 Toss/CAPTCHA·내부 Edge secret 및 실제 Toss/DB 동시성 게이트가 남아 있어 판정은 `REVIEW`입니다.
 
 ## External execution status
 
-- Commit SHA: `74b24a611d0af14043613ad41d21a0f277c34a58`
+- Deployed branch code head: `4a81481df1d774f46ce8c58cf4f33a49c3d56f2c`
+- Main merge SHA: `4347c9c6db7520092c5c40a70f087ee466823faa`
 - Remote branch/ref: `origin/fix/reball-production-readiness`
-- PR URL/number: `https://github.com/snsrkarhskfdk/reballlostball/pull/3` (Draft)
+- PR URL/number: `https://github.com/snsrkarhskfdk/reballlostball/pull/3` (MERGED)
 - Supabase project ref: `qbftalhhyfcndanrcwpy`
 - Supabase migration/Functions result: versions `20260711055444`, `20260711055557` 성공; 12개 Functions `ACTIVE`/smoke 성공
-- Vercel staged deployment: `dpl_AmmYY6SU8AkRfss6AceuaQ25PRPT` (`READY`)
-- Vercel staged URL: `https://reballlostball-muyv3j83q-thechangcnds-projects.vercel.app` — UI smoke clean, public config 누락 수정 후 재배포 대기
-- Vercel production URL/alias: `<PENDING_ROOT_FILL_AFTER_PROMOTE_AND_SMOKE>`
+- Vercel final Preview: `dpl_9V2WFwQCmA3ryPn56TFzouVUXPv1` (`READY`) — `https://reballlostball-7wrgzlgb2-thechangcnds-projects.vercel.app`
+- Vercel Production: `dpl_2NixiY3VHhxyaZydowGif5oYqQsj` (`READY`) — `https://reballlostball-hhkw5erdb-thechangcnds-projects.vercel.app`
+- Production aliases: `https://reballlostball.com`, `https://www.reballlostball.com`, `https://reballlostball.vercel.app`
 
 `승인됨 / 실행 중`은 성공 또는 운영 완료를 의미하지 않는다. 위 항목은 원격 증거를 확인한 뒤에만 실제 값으로 교체한다.
 
@@ -19,7 +20,7 @@
 
 `REVIEW`
 
-로컬 구현과 mock·정적·브라우저 검증은 완료 범위까지 수행했지만, 실제 PostgreSQL RLS/동시성 및 Toss staging 통합 증거가 없고 Wave 5의 대형 `app.js`/`styles.css` 분리가 남아 있다. 외부 배포 승인만으로 이 초안을 운영 완료 또는 배포 완료로 해석하지 않는다.
+로컬 구현과 mock·정적·브라우저 검증 및 Supabase/Vercel 배포는 완료 범위까지 수행했지만, 실제 PostgreSQL RLS/동시성 및 Toss staging 통합 증거가 없고 Wave 5의 대형 `app.js`/`styles.css` 분리가 남아 있다. 배포 성공을 전체 운영 완료 또는 결제 연동 완료로 해석하지 않는다.
 
 ## Summary
 
@@ -38,8 +39,8 @@
 
 - 기준 작업 폴더 전체 안전 복사 및 SHA-256 manifest 완료
 - 로컬 전용 약 4GB 자산 보존; 대량 untracked 파일이 있으므로 `git add -A` 금지
-- GitHub commit/push·Draft PR과 Supabase migration/Functions 배포는 원격 성공 확인
-- Vercel 첫 Preview는 READY이나 public config 수정 재push·재배포와 Production 배포는 미완료
+- GitHub branch push·PR #3 병합과 Supabase migration/Functions 배포는 원격 성공 확인
+- Vercel 최종 Preview·Production·3개 alias 배포와 5-route smoke 성공
 - 실제 Toss 결제·live key 사용·webhook 등록·운영 DNS 변경은 미실행
 - `app-current.js`, `index-current.html` 등 삭제 후보는 물리 삭제하지 않음
 - 로컬 Supabase는 Docker engine pipe 부재로 실행하지 못했으며, 실제 DB 통합 검증은 원격 사후 증거가 기록될 때까지 미완료
@@ -62,7 +63,7 @@
 
 - SQL parser 162 statements across 2 migrations
 - `npm audit` 취약점 0
-- secret scan 검출 0
+- server-secret scan 검출 0 (브라우저 공개용 Supabase publishable key 1건은 의도된 설정)
 - `git diff --check` PASS
 
 위 결과는 로컬 자동 검증이며 실제 PostgreSQL RLS/동시성, 원격 migration 또는 Toss staging 실연동 통과를 의미하지 않는다.
@@ -96,8 +97,8 @@
 
 - HG-01: Supabase migration versions `20260711055444`, `20260711055557` 적용 성공
 - HG-02: 12개 Edge Functions `ACTIVE`, smoke 성공; 내부 Edge secret 입력은 남음
-- HG-10: commit/push 성공, Draft PR #3 생성
-- HG-11: Preview `READY`; public config 수정 재배포와 Production은 `PENDING`
+- HG-10: branch push 성공, PR #3 MERGED, main merge SHA 확인
+- HG-11: final Preview와 Production `READY`, 3개 alias 및 5-route smoke 성공
 
 ## Remaining external gates
 
@@ -106,6 +107,7 @@
 - Supabase/Vercel 공개 설정과 아직 비어 있는 내부 Edge server secret 분리·입력
 - Toss test client/secret key·MID의 매칭 및 안전한 입력
 - `PAYMENT_RECONCILE_SECRET`, `PAYMENT_REFUND_DATA_KEY` 수명주기·rotation 정책
+- 현재 Toss/CAPTCHA public config는 false이며 login/reconcile은 내부 secret 부재로 expected 503
 
 ### Toss webhook 및 실제 결제
 
