@@ -12,7 +12,7 @@
 2. Toss 테스트 key/MID, 외부 webhook, scheduler를 사용하는 staging end-to-end 검증을 하지 않았다.
 3. `app.js`와 `styles.css`의 전면 구조 개선 및 서버 API가 없는 mutation 기능의 운영 완성이 남아 있다.
 
-현재 결과는 “구현 코드와 로컬 mock/정적/브라우저 검증이 준비된 검토본”이다. 운영 확정본, 배포 완료, 결제 연동 완료로 표현하지 않는다.
+현재 결과는 Supabase와 Vercel에 배포된 `REVIEW` 검토본이다. 배포 성공을 전체 운영 확정이나 Toss 결제 연동 완료로 확대 해석하지 않는다.
 
 ## 2. Wave별 판정
 
@@ -61,7 +61,7 @@
 ### Supabase
 
 - `supabase/config.toml`
-- `supabase/migrations/20260710173448_production_commerce_security.sql`
+- remote migration versions `20260711055444`, `20260711055557`
 - `supabase/functions/_shared/core.ts`
 - `supabase/functions/_shared/http.ts`
 - `supabase/functions/_shared/payments.ts`
@@ -148,15 +148,16 @@
 
 ### Migration 목록
 
-이번 repair가 추가한 운영 migration은 하나다.
+이번 repair가 추가한 운영 migration은 두 개다.
 
-- `supabase/migrations/20260710173448_production_commerce_security.sql`
+- `20260711055444`
+- `20260711055557`
 
-이 migration은 기존 commerce 테이블을 보강하고 `commerce_settings`, `shipping_surcharge_zones`, `inventory_reservations`, `order_events`, private rate limit 구조, 암호화된 취소 attempt, finite reconciliation/`manual_review`, 주문/결제/취소/webhook RPC, RLS·grant/revoke·constraint·index를 추가 또는 변경한다.
+두 migration은 기존 commerce 테이블을 보강하고 `commerce_settings`, `shipping_surcharge_zones`, `inventory_reservations`, `order_events`, private rate limit 구조, 암호화된 취소 attempt, finite reconciliation/`manual_review`, 주문/결제/취소/webhook RPC, RLS·grant/revoke·constraint·index를 추가 또는 변경한다.
 
 ### 적용 전 필수 확인
 
-1. 대상 프로젝트의 기존 migration history와 `20260710173448` 충돌 여부를 확인한다.
+1. 대상 프로젝트의 migration history에서 `20260711055444`, `20260711055557` 적용 상태를 확인한다.
 2. staging DB의 schema와 데이터를 백업하고 복구 시간을 실제로 확인한다.
 3. 기존 주문·결제·refund 상태가 새 CHECK/상태 전이 조건에 모두 들어오는지 조회한다.
 4. `SECURITY DEFINER` 함수의 `search_path`, PUBLIC/anon/authenticated revoke, service role grant를 리뷰한다.
@@ -250,7 +251,7 @@ npm run qa
 | a11y | 10/10, 19.9초 |
 | SQL parser | 162 statements across 2 migrations |
 | `npm audit` | 취약점 0 |
-| secret scan | 검출 0 |
+| server-secret scan | 검출 0 (브라우저 공개용 Supabase publishable key 1건은 의도된 설정) |
 | `git diff --check` | PASS |
 
 로컬 브라우저에서 홈·상품·로그인·관리자를 확인했고 오류 0, 최상위 `h1` 1, overflow 0, 깨진 이미지 0, 비로그인 admin shell 0을 기록했다. 로컬 Supabase 상태 확인은 Docker engine pipe 부재로 실패했다.
@@ -270,13 +271,13 @@ npm run qa
 | HG-07 Reconciliation·운영 큐 | scheduler 주기, reconcile secret, 알람·담당자·manual-review 절차 승인 |
 | HG-08 환불계좌 암호화 key 수명주기 | `PAYMENT_REFUND_DATA_KEY` 생성·백업·접근·rotation 정책 승인 |
 | HG-09 실제 결제수단 테스트 | 금액·수단·환불계좌·책임자를 정한 test-key 실거래 승인 |
-| HG-10 GitHub | **성공** — commit `74b24a611d0af14043613ad41d21a0f277c34a58`, branch push, Draft PR #3 |
-| HG-11 외부 배포 | **Preview READY / 재배포 중** — public config 수정 재push·redeploy 및 Production `PENDING` |
+| HG-10 GitHub | **성공** — deployed code head `4a81481df1d774f46ce8c58cf4f33a49c3d56f2c`, PR #3 MERGED, main merge SHA `4347c9c6db7520092c5c40a70f087ee466823faa` |
+| HG-11 외부 배포 | **Production READY** — 최종 Preview와 Production 및 3개 alias smoke 성공; Toss/CAPTCHA·내부 Edge secret은 별도 운영 게이트 |
 | HG-12 운영 도메인·정책 | DNS와 사업자·배송·환불 문구 변경 승인 |
 
 ## 9. 승인되어 실행 중인 외부 작업의 정확한 순서
 
-다음 순서는 사용자 승인을 받아 실행 중이며, 각 원격 결과는 검증 전까지 `PENDING`이다. `<STAGING_PROJECT_REF>`와 secret 파일은 승인된 실제 값으로 치환하고, secret 파일은 저장소 밖에 둔다.
+다음 순서로 원격 배포를 완료했다. 남은 secret 및 실제 Toss/DB 동시성 단계는 별도 운영 게이트이며, secret 파일은 저장소 밖에 둔다.
 
 1. 현재 로컬 branch와 diff를 다시 고정하고 대용량 untracked 원본이 staging 대상에 포함되지 않았는지 확인한다.
 2. `npm ci`와 `npm run qa`를 다시 실행해 최신 hardening을 포함한 최종 소스 전체 회귀를 고정한다. 실패 시 HG-01 이후로 진행하지 않는다.
@@ -328,16 +329,21 @@ GitHub 작업을 승인받은 경우에도 `git add -A`를 사용하지 않는�
 | 로컬 branch | `fix/reball-production-readiness` |
 | 기준 HEAD | `748d7d2` |
 | origin | `https://github.com/snsrkarhskfdk/reballlostball.git` |
-| commit SHA | `74b24a611d0af14043613ad41d21a0f277c34a58` |
+| deployed branch code head | `4a81481df1d774f46ce8c58cf4f33a49c3d56f2c` |
+| main merge SHA | `4347c9c6db7520092c5c40a70f087ee466823faa` |
 | push | `origin/fix/reball-production-readiness` 성공 |
-| 실제 PR | `https://github.com/snsrkarhskfdk/reballlostball/pull/3` (Draft) |
+| 실제 PR | `https://github.com/snsrkarhskfdk/reballlostball/pull/3` (MERGED) |
+| GitHub Pages workflow | Vercel을 canonical host로 유지하기 위해 `disabled_manually` (workflow 파일 보존) |
 | PR 본문 | `docs/repair/PR_BODY_DRAFT.md` 준비 |
 | Supabase migration/Functions | versions `20260711055444`, `20260711055557` 성공; 12개 `ACTIVE`/smoke 성공 |
-| Vercel Preview/staged URL | `dpl_AmmYY6SU8AkRfss6AceuaQ25PRPT` READY — `https://reballlostball-muyv3j83q-thechangcnds-projects.vercel.app` |
-| Vercel 운영 URL/alias | `<PENDING_ROOT_FILL_AFTER_PROMOTE_AND_SMOKE>` |
+| Vercel final Preview | `dpl_9V2WFwQCmA3ryPn56TFzouVUXPv1` READY — `https://reballlostball-7wrgzlgb2-thechangcnds-projects.vercel.app` |
+| Vercel Production | `dpl_2NixiY3VHhxyaZydowGif5oYqQsj` READY — `https://reballlostball-hhkw5erdb-thechangcnds-projects.vercel.app` |
+| Production aliases | `https://reballlostball.com`, `https://www.reballlostball.com`, `https://reballlostball.vercel.app` |
 | 실제 결제 | 미실행 |
 
-작업 루트에는 약 4GB의 로컬 전용 자산이 untracked 상태로 보존돼 있다. 승인 후 commit을 만들 때는 파일 목록을 명시하고 `git status`, staged diff, secret scan을 확인한다.
+`dpl_2NixiY3VHhxyaZydowGif5oYqQsj`은 애플리케이션 코드가 포함된 검증 deployment다. 이후 보고서 전용 커밋이 동일한 `dist`로 새 Vercel deployment를 만들 수 있으므로 현재 alias 대상은 Vercel에서 실시간 확인한다.
+
+작업 루트의 약 4GB 로컬 전용 자산은 untracked 상태로 보존했고 커밋에서 제외했다. repair 파일만 명시적으로 stage해 `git status`, staged diff, server-secret scan을 확인했다.
 
 ## 12. 운영 배포 전 체크리스트
 
@@ -356,12 +362,12 @@ GitHub 작업을 승인받은 경우에도 `git add -A`를 사용하지 않는�
 - [ ] 공개 origin/CORS/success/fail URL이 staging/운영 도메인과 일치
 - [ ] 관리자/고객의 비활성 mutation 범위를 운영팀이 수용하거나 서버 API 완성
 - [ ] 실제 기기와 스크린리더 수동 QA
-- [ ] 대용량 untracked 자산 제외, 명시적 stage, secret scan, 리뷰 승인
+- [x] 대용량 untracked 자산 제외, 명시적 stage, server-secret scan, 리뷰 승인
 - [ ] rollback snapshot/PITR와 직전 frontend/Edge 버전 확인
 - [x] GitHub commit/push와 Supabase/Vercel 배포 명시 승인
-- [x] 원격 commit/ref, Draft PR, migration/Functions 및 첫 Preview READY 증거 기록
-- [ ] public config 수정 재push·Preview 재배포·smoke
-- [ ] Vercel Production deployment URL/alias 성공 증거 기록
+- [x] 원격 deployed code head, MERGED PR, main merge SHA 기록
+- [x] public config 수정 재push·최종 Preview 재배포·smoke
+- [x] Vercel Production deployment와 3개 alias 성공 증거 기록
 - [ ] 실제 결제 별도 승인
 
 ## 현재 외부 실행 상태
@@ -369,9 +375,11 @@ GitHub 작업을 승인받은 경우에도 `git add -A`를 사용하지 않는�
 - 로컬 `fix/reball-production-readiness` 브랜치
 - 내부 Edge secret, CAPTCHA, Toss test key, Auth Leaked Password Protection 미완료
 - Supabase migration 2개 성공, 12개 Functions `ACTIVE`/smoke 성공
-- GitHub commit/push 성공, Draft PR #3 생성
-- Vercel Preview READY이나 public config 수정 재push·재배포 중
-- Vercel Production — `<PENDING_ROOT_FILL_AFTER_PROMOTE_AND_SMOKE>`
+- GitHub deployed code head `4a81481df1d774f46ce8c58cf4f33a49c3d56f2c`, PR #3 MERGED, main `4347c9c6db7520092c5c40a70f087ee466823faa`
+- Vercel final Preview와 Production `READY`, 3개 Production alias 연결 성공
+- Production 5-route smoke: 각 `h1=1`, overflow 0, broken image 0, console/runtime error 0
+- Production Supabase products 200, 상품 버튼 server variant 활성 확인
+- Toss/CAPTCHA public config는 false이며 내부 Edge secret 부재로 login/reconcile의 expected 503 유지
 - 실제 결제 미실행
 
-다음 행동은 승인된 원격 실행 결과를 검증해 자리표시자를 실제 증거로 교체하고, 남은 운영 secret·CAPTCHA·Toss webhook·실결제 및 실제 PostgreSQL/RLS 동시성 게이트를 완료하는 것이다.
+다음 행동은 남은 운영 secret·CAPTCHA·Toss webhook·실결제 및 실제 PostgreSQL/RLS 동시성 게이트를 완료하는 것이다.

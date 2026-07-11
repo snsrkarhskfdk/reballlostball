@@ -4,7 +4,7 @@
 
 `WAVE 4 — REVIEW`
 
-홈을 여섯 단계 구매 흐름으로 재배치하고 페이지별 단일 `h1`, 공통 버튼 높이·반경·상태, 키보드 focus, reduced motion, 반응형 overflow 검사를 적용했다. 로컬 Playwright와 axe 검사는 desktop/mobile 모두 통과했고, axe에서 `color-contrast` 규칙을 제외하지 않았다. 다만 기존 대형 CSS의 호환 selector와 cascade 부채가 남아 있고 실제 스크린리더·실기기 수동 검수 및 운영 배포 결과는 이번 로컬 판정에 포함하지 않았다.
+홈을 여섯 단계 구매 흐름으로 재배치하고 페이지별 단일 `h1`, 공통 버튼 높이·반경·상태, 키보드 focus, reduced motion, 반응형 overflow 검사를 적용했다. 로컬 Playwright와 axe 검사는 desktop/mobile 모두 통과했고, axe에서 `color-contrast` 규칙을 제외하지 않았다. 보정 Preview와 Production의 5개 route 검수도 통과했다. 다만 기존 대형 CSS의 호환 selector와 cascade 부채가 남아 있고 실제 스크린리더·실기기 수동 검수, Toss/CAPTCHA 운영 설정은 별도 게이트로 남아 있다.
 
 ## 홈 구매 위계
 
@@ -72,14 +72,17 @@ hover, `:focus-visible`, active, disabled/`aria-disabled`, `.is-loading`/`aria-b
 
 접근성 검사에서 `color-contrast` 규칙을 제외하지 않았다. 다만 자동 규칙 통과는 실제 보조기기와 모든 운영 상태의 수동 검수를 대체하지 않는다.
 
-## Vercel Preview 검수 현황
+## Vercel Preview·Production 검수 현황
 
 - Preview deployment `dpl_AmmYY6SU8AkRfss6AceuaQ25PRPT`가 `READY` 상태로 생성됐다.
 - Preview URL은 `https://reballlostball-muyv3j83q-thechangcnds-projects.vercel.app`이다.
 - 배포된 Preview의 5개 route에서 각각 page-level `h1=1`, document overflow 0, broken image 0, console error 0, network error 0을 확인했다.
 - 첫 Preview의 HTML meta에 공개 Supabase URL/publishable key가 비어 있어, 정적 UI 이외의 온라인 계정·상품·거래 연결은 해당 배포로 검증할 수 없었다.
 - 로컬 소스의 `scripts/public-config.mjs`는 Vercel에서만 공개 Supabase URL·publishable key 기본값을 사용하고, 명시적 환경변수가 있으면 그 값을 우선하도록 보정됐다. 로컬 기본값과 Toss/CAPTCHA 공개 값은 여전히 비워 둔다.
-- 이 보정을 포함한 재배포는 아직 수행하지 않았다. 따라서 위 `READY` 결과는 최초 Preview artifact의 정적 UI 검수 결과이지, 공개 Supabase 설정 보정의 배포 성공 증거가 아니다.
+- 보정 Preview `dpl_9V2WFwQCmA3ryPn56TFzouVUXPv1`은 `READY`이며 공개 Supabase config 주입 `true`, products 요청 HTTP 200을 확인했다. 동일 5개 route의 `h1=1`, overflow 0, broken image 0, console/network error 0이다.
+- Production `dpl_2NixiY3VHhxyaZydowGif5oYqQsj`도 `READY`이며 `reballlostball.com`, `www.reballlostball.com`, `reballlostball.vercel.app`에 alias되었다.
+- Production의 동일 5개 route에서도 `h1=1`, overflow 0, broken image 0, console/network error 0을 확인했다. 상품 페이지의 서버-backed exact variant 구매 버튼은 enabled였고 runtime error는 0이었다.
+- Toss/CAPTCHA 공개 config는 아직 `false`다. 이는 누락을 성공으로 간주할 항목이 아니라 자격증명·정책 확정 후 활성화할 HUMAN_GATE다.
 
 ## 남은 REVIEW 항목
 
@@ -91,8 +94,8 @@ hover, `:focus-visible`, active, disabled/`aria-disabled`, `.is-loading`/`aria-b
 
 ## HUMAN_GATE
 
-- HG-11 승인 범위에서 Vercel Preview는 생성했지만 보정 build의 재배포와 운영 production 도메인 확정은 아직 남아 있다.
-- 공개 Supabase 설정이 포함된 재배포 후 5개 route 검사와 온라인 계정·상품 조회 초기화를 반드시 다시 확인한다.
+- Vercel Preview·Production 배포와 공개 Supabase 초기화 재검증은 완료했다.
+- Toss client key·webhook 운영 정책과 CAPTCHA provider/site key는 해당 HUMAN_GATE 승인·설정 전까지 fail-closed를 유지한다.
 - 확정 사업자, 배송, 교환·환불 문구와 브랜드 방향은 변경하지 않았다. 변경이 필요하면 HG-12 별도 승인을 받는다.
 - 위의 스크린리더·확대/긴 텍스트 수동 검수는 배포 승인과 별개로 로컬에서 먼저 완료할 수 있으며, HUMAN_GATE로 미루지 않는다.
 
@@ -105,4 +108,4 @@ hover, `:focus-visible`, active, disabled/`aria-disabled`, `.is-loading`/`aria-b
 
 ## 결론
 
-홈 hierarchy와 핵심 접근성·반응형 회귀, 색상 대비를 포함한 axe 자동 규칙은 로컬에서 통과했고 첫 Vercel Preview의 5개 정적 route도 기본 문서·자산 검사를 통과했다. 그러나 Preview에서 공개 Supabase 설정 누락을 발견한 뒤 코드를 보정했으며, 보정 build는 아직 재배포하지 않았다. 실제 보조기기·최종 시각 QA와 CSS 구조 정리, 온라인 연결 재검증이 남아 있어 Wave 4 판정은 `REVIEW`다.
+홈 hierarchy와 핵심 접근성·반응형 회귀, 색상 대비를 포함한 axe 자동 규칙은 로컬에서 통과했다. 보정 Preview와 Production에서 공개 Supabase config·products 200, 5개 route 문서/자산/runtime, 서버-backed 상품 variant 활성 상태도 통과했다. 실제 보조기기·최종 시각 QA와 CSS 구조 정리, Toss/CAPTCHA 게이트가 남아 있어 Wave 4 판정은 `REVIEW`다.

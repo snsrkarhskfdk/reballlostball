@@ -6,7 +6,7 @@
 
 운영 차단 결함을 담당하는 프런트엔드 로직을 기능 모듈로 분리하고, 개발·배포 엔트리를 `index.html`/`app.js`로 통일했으며, unit·contract·E2E·접근성·Edge·SQL 정적 검사를 자동화했다. 최신 결제 취소 경쟁·재시도·민감 환불정보·webhook 방어와 CDN/Toss SDK 실패 복원 보강까지 포함한 전체 로컬 QA를 2026-07-11에 통과했다.
 
-그러나 `app.js`는 현재도 8,015줄이다. CSS는 엔트리와 5개 import module로 나뉘었지만 합계 14,669줄이고, `src/frontend/ui/base.css`만 11,122줄이다. 라우터·상태·화면 렌더러의 전면 모듈화와 CSS 중복/cascade 정리는 완료되지 않았다. Supabase remote migration 이력과 Vercel Preview `READY` 결과는 생겼지만, 로컬 Docker 엔진이 없어 실제 Postgres의 RLS·동시성 통합 테스트를 실행하지 못했다. 또한 첫 Preview에서 공개 Supabase 설정 누락을 발견해 코드를 보정했지만 보정 build는 아직 재배포하지 않았다. 따라서 Wave 5와 전체 결과를 `LOCAL FINAL CANDIDATE`로 올리지 않고 `REVIEW`로 남긴다.
+그러나 `app.js`는 현재도 8,015줄이다. CSS는 엔트리와 5개 import module로 나뉘었지만 합계 14,669줄이고, `src/frontend/ui/base.css`만 11,122줄이다. 라우터·상태·화면 렌더러의 전면 모듈화와 CSS 중복/cascade 정리는 완료되지 않았다. Supabase remote migration 이력, 보정 Preview, Production `READY`와 공개 Supabase 연결 검증은 완료했지만, 로컬 Docker 엔진이 없어 실제 Postgres의 RLS·동시성 통합 테스트를 실행하지 못했고 Toss/CAPTCHA 운영 설정도 게이트로 남았다. 따라서 Wave 5와 전체 결과를 `LOCAL FINAL CANDIDATE`로 올리지 않고 `REVIEW`로 남긴다.
 
 ## 구조 개선 결과
 
@@ -128,7 +128,7 @@ remote migration history에서 다음 2개 timestamp migration 파일명을 확�
 
 이 이력은 remote에 migration 버전이 반영된 증거지만, 실제 회원·비회원·관리자 JWT/RLS matrix와 동시 결제·취소·webhook 시나리오를 remote 데이터베이스에서 모두 통과했다는 의미는 아니다.
 
-### Vercel Preview
+### Vercel Preview·Production
 
 | 항목 | 결과 |
 |---|---|
@@ -139,7 +139,19 @@ remote migration history에서 다음 2개 timestamp migration 파일명을 확�
 | layout/asset | overflow 0, broken image 0 |
 | runtime | console error 0, network error 0 |
 
-첫 Preview의 정적 UI 검수는 위와 같이 통과했지만, 배포된 HTML의 Supabase URL과 publishable 공개 key meta가 비어 있었다. 이를 검출하는 frontend 회귀 1개를 추가해 전체 frontend unit이 36개가 됐고, `scripts/public-config.mjs`를 보정했다. 그러나 보정 build의 Vercel 재배포는 아직 수행하지 않았다. 따라서 위 `READY`·5-route 결과를 공개 Supabase 설정 보정 성공이나 최종 운영 배포 성공으로 해석하면 안 된다.
+첫 Preview의 정적 UI 검수는 위와 같이 통과했지만, 배포된 HTML의 Supabase URL과 publishable 공개 key meta가 비어 있었다. 이를 검출하는 frontend 회귀 1개를 추가해 전체 frontend unit이 36개가 됐고 `scripts/public-config.mjs`를 보정했다.
+
+| 반영 단계 | 결과 |
+|---|---|
+| 보정 Preview | `dpl_9V2WFwQCmA3ryPn56TFzouVUXPv1`, `READY` |
+| Preview 공개 연결 | Supabase config `true`, products HTTP 200 |
+| Preview UI | 5 route `h1=1`, overflow/broken image/console/network error 0 |
+| Production | `dpl_2NixiY3VHhxyaZydowGif5oYqQsj`, `READY` |
+| Production aliases | `reballlostball.com`, `www.reballlostball.com`, `reballlostball.vercel.app` |
+| Production UI/runtime | 동일 5 route 전체 clean, runtime error 0 |
+| Production commerce | 서버-backed exact product variant 버튼 enabled |
+
+보정 Preview와 Production에서 공개 Supabase 주입·상품 API·UI/runtime 재검증을 완료했다. Toss/CAPTCHA 공개 config는 아직 `false`이며, 이는 배포 실패가 아니라 해당 자격증명·정책 게이트가 닫힌 fail-closed 상태다.
 
 ## 로컬 브라우저 검수
 
@@ -175,8 +187,8 @@ remote migration history에서 다음 2개 timestamp migration 파일명을 확�
 4. 별도 서버 API가 구현되지 않은 관리자/고객 mutation은 안전을 위해 비활성화했다. 오작동은 차단했지만 해당 운영 기능이 완성된 것은 아니다.
 5. `app-current.js`, `index-current.html`과 정의 전용 렌더러는 삭제 승인 전까지 보존한다.
 6. remote migration 버전 반영과 별개로 실제 DB/RLS/동시성, Toss 자격증명·webhook·scheduler·환불 암호화 key·실결제를 staging에서 검증해야 한다.
-7. 공개 Supabase 설정 보정을 포함한 Vercel build를 재배포한 뒤 meta 주입, 5개 route, 온라인 초기화를 다시 검증해야 한다.
+7. Vercel·Supabase 반영 검증은 완료했지만 Toss/CAPTCHA 설정은 자격증명·정책 HUMAN_GATE 후 별도 배포·검증해야 한다.
 
 ## 결론
 
-자동 QA와 핵심 신뢰 경계 분리는 의미 있게 강화됐고, 현재 로컬 소스의 주요 회귀 검사는 통과했다. Supabase remote에는 2개 timestamp migration 버전이 보이고 첫 Vercel Preview는 `READY`였으며 5개 정적 route 검수를 통과했다. 다만 대형 엔트리/CSS의 구조 개선이 미완료이고, 첫 Preview에서 발견한 공개 Supabase 설정 누락의 코드 보정을 아직 재배포하지 않았으며, 실제 DB/RLS/동시성·Toss 공급자 통합 증거도 부족하므로 Wave 5는 `REVIEW`다.
+자동 QA와 핵심 신뢰 경계 분리는 의미 있게 강화됐고, 현재 로컬 소스의 주요 회귀 검사는 통과했다. Supabase remote 2개 timestamp migration, 보정 Vercel Preview, Production이 반영됐고 공개 Supabase config·products 200·5-route UI/runtime·서버 exact variant 활성 검증도 통과했다. 다만 대형 엔트리/CSS의 구조 개선이 미완료이고 실제 DB/RLS/동시성·Toss 공급자 통합 증거가 부족하며 Toss/CAPTCHA 게이트도 남아 있으므로 Wave 5는 `REVIEW`다.
