@@ -41,6 +41,7 @@
 - 로컬 전용 약 4GB 자산 보존; 대량 untracked 파일이 있으므로 `git add -A` 금지
 - GitHub branch push·PR #3 병합과 Supabase migration/Functions 배포는 원격 성공 확인
 - Vercel 최종 Preview·Production·3개 alias 배포와 5-route smoke 성공
+- Vercel과 중복되고 environment protection으로 계속 실패하던 GitHub Pages 자동 workflow는 파일을 보존한 채 `disabled_manually` 처리
 - 실제 Toss 결제·live key 사용·webhook 등록·운영 DNS 변경은 미실행
 - `app-current.js`, `index-current.html` 등 삭제 후보는 물리 삭제하지 않음
 - 로컬 Supabase는 Docker engine pipe 부재로 실행하지 못했으며, 실제 DB 통합 검증은 원격 사후 증거가 기록될 때까지 미완료

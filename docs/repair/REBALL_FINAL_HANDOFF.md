@@ -333,6 +333,7 @@ GitHub 작업을 승인받은 경우에도 `git add -A`를 사용하지 않는�
 | main merge SHA | `4347c9c6db7520092c5c40a70f087ee466823faa` |
 | push | `origin/fix/reball-production-readiness` 성공 |
 | 실제 PR | `https://github.com/snsrkarhskfdk/reballlostball/pull/3` (MERGED) |
+| GitHub Pages workflow | Vercel을 canonical host로 유지하기 위해 `disabled_manually` (workflow 파일 보존) |
 | PR 본문 | `docs/repair/PR_BODY_DRAFT.md` 준비 |
 | Supabase migration/Functions | versions `20260711055444`, `20260711055557` 성공; 12개 `ACTIVE`/smoke 성공 |
 | Vercel final Preview | `dpl_9V2WFwQCmA3ryPn56TFzouVUXPv1` READY — `https://reballlostball-7wrgzlgb2-thechangcnds-projects.vercel.app` |
