@@ -1356,8 +1356,103 @@ hr,
   padding-top: 20px;
 }
 
-.home-stage--store .store-notice {
-  padding: clamp(24px, 4vw, 40px);
+.footer-store-business {
+  display: grid;
+  grid-template-columns: minmax(220px, 0.9fr) minmax(340px, 1.25fr) auto;
+  gap: clamp(22px, 3vw, 46px);
+  align-items: center;
+  margin-bottom: 32px;
+  padding: 0 0 4px;
+}
+
+.footer-store-business-heading,
+.footer-store-business-copy {
+  display: grid;
+  gap: 8px;
+}
+
+.footer-store-business-heading p,
+.footer-store-business-heading h2,
+.footer-store-business-copy p {
+  margin: 0;
+}
+
+.footer-store-business-heading p {
+  color: var(--gold-text-aa);
+  font-size: 12px;
+  font-weight: 900;
+  letter-spacing: 0.12em;
+}
+
+.footer-store-business-heading h2 {
+  color: var(--deep);
+  font-size: clamp(18px, 1.7vw, 24px);
+  line-height: 1.35;
+}
+
+.footer-store-business-copy strong {
+  color: var(--deep);
+  font-size: 15px;
+}
+
+.footer-store-business-copy p {
+  color: var(--text-muted-aa);
+  font-size: 12px;
+  font-weight: 650;
+  line-height: 1.65;
+}
+
+.footer-store-business-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 10px;
+}
+
+/* 주문 전 확인은 선이 없는 단일 정보 띠로 표시한다. */
+.detail-check-strip {
+  border: 0;
+  background: transparent;
+  box-shadow: none;
+}
+
+.detail-check-grid article,
+.detail-check-grid article + article,
+.detail-check-grid article:first-child,
+.detail-check-grid article:nth-child(3),
+.detail-check-grid article > span {
+  border: 0 !important;
+}
+
+.detail-check-grid article,
+.detail-check-grid article:has(.shop-icon-22) {
+  background: transparent !important;
+  box-shadow: none !important;
+  -webkit-backdrop-filter: none;
+  backdrop-filter: none;
+}
+
+@media (max-width: 980px) {
+  .footer-store-business {
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .footer-store-business-actions {
+    grid-column: 1 / -1;
+    justify-content: flex-start;
+  }
+}
+
+@media (max-width: 720px) {
+  .footer-store-business {
+    grid-template-columns: 1fr;
+    margin-bottom: 24px;
+  }
+
+  .footer-store-business-actions {
+    grid-column: auto;
+    display: grid;
+  }
 }
 
 .best-body h3,

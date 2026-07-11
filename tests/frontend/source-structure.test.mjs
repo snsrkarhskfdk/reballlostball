@@ -18,10 +18,13 @@ test("release blocker fallback과 브라우저 주문 원본이 제거됐다", (
   assert.match(app, /lookupGuestOrderRequest/);
 });
 
-test("홈은 여섯 단계와 하나의 대표 h1 생성 경계를 사용한다", () => {
-  for (const stage of ["1", "2", "3", "4", "5", "6"]) {
+test("홈은 다섯 단계, 푸터 사업자 정보와 하나의 대표 h1 생성 경계를 사용한다", () => {
+  for (const stage of ["1", "2", "3", "4", "5"]) {
     assert.match(app, new RegExp(`data-home-stage=\\"${stage}\\"`));
   }
+  assert.doesNotMatch(app, /data-home-stage=\\"6\\"/);
+  assert.match(app, /<footer class="site-footer">[\s\S]+footer-store-business/);
+  assert.doesNotMatch(app, /home-stage--store/);
   assert.doesNotMatch(app, /<h1>많이 찾는 인기 브랜드/);
   assert.doesNotMatch(app, /<h1>\$\{escapeHtml\(banner\.title\)/);
   assert.match(app, /<h1 class="hole-title">/);

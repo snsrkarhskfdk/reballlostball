@@ -1960,6 +1960,20 @@ function renderFooter() {
   return `
     <footer class="site-footer">
       <section class="site-footer-card">
+        <section class="footer-store-business" aria-labelledby="footer-store-business-title">
+          <div class="footer-store-business-heading">
+            <p>STORE &amp; BUSINESS</p>
+            <h2 id="footer-store-business-title">매장과 사업자 정보를 투명하게 공개합니다</h2>
+          </div>
+          <div class="footer-store-business-copy">
+            <strong>${businessProfile.address}</strong>
+            <p>대표 ${businessProfile.owner} · 사업자등록번호 ${businessProfile.businessNumber}<br />운영시간 ${businessProfile.operationHours} · 고객센터 ${businessProfile.supportPhone}<br />반품 주소 ${businessProfile.returnAddress}</p>
+          </div>
+          <div class="footer-store-business-actions">
+            <button class="secondary-btn compact dark" type="button" data-route="/store">매장소개 보기</button>
+            <button class="ghost-btn compact" type="button" data-route="/business">사업자 정보 확인</button>
+          </div>
+        </section>
         <div class="footer-main">
           <div class="footer-brand">
             <a class="footer-brand-lockup" href="#/" aria-label="리볼 로스트볼 홈">
@@ -2266,19 +2280,7 @@ function renderHome() {
       ${renderHomeOrderProcessSection()}
     </section>
 
-    <section class="home-stage home-stage--store" data-home-stage="5" aria-labelledby="home-store-title">
-      <header class="home-stage-head"><p>STORE & BUSINESS</p><h2 id="home-store-title">매장과 사업자 정보를 투명하게 공개합니다</h2></header>
-      <article class="store-notice panel-card">
-        <h3>${businessProfile.address}</h3>
-        <p>대표 ${businessProfile.owner} · 사업자등록번호 ${businessProfile.businessNumber}<br />운영시간 ${businessProfile.operationHours} · 고객센터 ${businessProfile.supportPhone}<br />반품 주소 ${businessProfile.returnAddress}</p>
-        <div>
-          <button class="secondary-btn compact dark" type="button" data-route="/store">매장소개 보기</button>
-          <button class="ghost-btn compact" type="button" data-route="/business">사업자 정보 확인</button>
-        </div>
-      </article>
-    </section>
-
-    <section class="home-bottom-cta" data-home-stage="6" aria-labelledby="home-final-cta-title">
+    <section class="home-bottom-cta" data-home-stage="5" aria-labelledby="home-final-cta-title">
       <div><h2 id="home-final-cta-title">지금 바로 프리미엄 로스트볼을 경험하세요!</h2><p>정직한 품질과 합리적인 가격, 리볼 로스트볼이 약속드립니다.</p></div>
       <button class="gold-cart-btn home-bottom-cta-btn" type="button" data-scroll-to="products">실제 재고 상품 보기</button>
     </section>

@@ -230,7 +230,7 @@ test("frontend modules are real entry dependencies and the build copies their im
   }
 });
 
-test("home has one reachable h1 and the six conversion stages in order", () => {
+test("home has one reachable h1 and the five conversion stages in order", () => {
   const reachable = reachableFunctionSources(
     appSource,
     "renderHome",
@@ -248,7 +248,6 @@ test("home has one reachable h1 and the six conversion stages in order", () => {
     ["grade/inspection trust", ["renderhomegrade", "renderhomeinspection", "home-trust", "home-stage--trust"]],
     ["best products", ["bestseller-section", "featured-products-section", "home-best", "home-stage--products"]],
     ["shipping/returns", ["home-shipping", "shipping-section", "delivery-return"]],
-    ["store/business trust", ["store-select-section", "business-trust", "home-store"]],
     ["final commerce CTA", ["home-bottom-cta", "final-cta"]],
   ];
   let previous = -1;
@@ -259,6 +258,10 @@ test("home has one reachable h1 and the six conversion stages in order", () => {
     assert.ok(position > previous, `Home stage ${label} is out of the required conversion order.`);
     previous = position;
   }
+
+  const footerSource = reachableFunctionSources(appSource, "renderFooter").join("\n");
+  assert.match(footerSource, /footer-store-business/u, "Store and business disclosure must remain in the footer.");
+  assert.doesNotMatch(renderHome, /home-stage--store/u, "Store and business disclosure must not render as a home content stage.");
 });
 
 test("button system exposes four variants, two heights, one radius, and interaction states", () => {

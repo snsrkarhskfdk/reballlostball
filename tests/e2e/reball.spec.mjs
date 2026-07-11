@@ -137,13 +137,15 @@ for (const [name, route] of routes) {
   });
 }
 
-test("home follows the six-stage purchase hierarchy", async ({ page }) => {
+test("home follows the five-stage hierarchy and keeps store disclosure in the footer", async ({ page }) => {
   await page.goto("/#/");
   const stages = page.locator("main [data-home-stage]");
-  await expect(stages).toHaveCount(6);
+  await expect(stages).toHaveCount(5);
   expect(await stages.evaluateAll((nodes) => nodes.map((node) => node.getAttribute("data-home-stage")))).toEqual([
-    "1", "2", "3", "4", "5", "6",
+    "1", "2", "3", "4", "5",
   ]);
+  await expect(page.locator("main .home-stage--store")).toHaveCount(0);
+  await expect(page.locator("footer .footer-store-business")).toHaveCount(1);
 });
 
 test("forged local admin state cannot reveal the admin shell", async ({ page }) => {
