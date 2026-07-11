@@ -341,6 +341,8 @@ GitHub 작업을 승인받은 경우에도 `git add -A`를 사용하지 않는�
 | Production aliases | `https://reballlostball.com`, `https://www.reballlostball.com`, `https://reballlostball.vercel.app` |
 | 실제 결제 | 미실행 |
 
+`dpl_2NixiY3VHhxyaZydowGif5oYqQsj`은 애플리케이션 코드가 포함된 검증 deployment다. 이후 보고서 전용 커밋이 동일한 `dist`로 새 Vercel deployment를 만들 수 있으므로 현재 alias 대상은 Vercel에서 실시간 확인한다.
+
 작업 루트의 약 4GB 로컬 전용 자산은 untracked 상태로 보존했고 커밋에서 제외했다. repair 파일만 명시적으로 stage해 `git status`, staged diff, server-secret scan을 확인했다.
 
 ## 12. 운영 배포 전 체크리스트

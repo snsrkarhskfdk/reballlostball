@@ -39,6 +39,8 @@ GitHub PR #3 병합, Supabase migration 및 12개 Edge Function 배포, Vercel �
 - Vercel Production: `dpl_2NixiY3VHhxyaZydowGif5oYqQsj` — `https://reballlostball-hhkw5erdb-thechangcnds-projects.vercel.app` (`READY`)
 - Vercel production aliases: `https://reballlostball.com`, `https://www.reballlostball.com`, `https://reballlostball.vercel.app`
 
+위 Production ID는 애플리케이션 코드를 검증한 deployment다. 후속 보고서 전용 커밋은 앱 산출물을 바꾸지 않지만 Vercel에 새 deployment ID를 만들 수 있다.
+
 ## 남은 외부 게이트 분리
 
 ### 1. 운영 secret 및 Toss test 자격증명

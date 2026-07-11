@@ -14,6 +14,8 @@
 - Vercel Production: `dpl_2NixiY3VHhxyaZydowGif5oYqQsj` (`READY`) — `https://reballlostball-hhkw5erdb-thechangcnds-projects.vercel.app`
 - Production aliases: `https://reballlostball.com`, `https://www.reballlostball.com`, `https://reballlostball.vercel.app`
 
+기록된 Production ID는 애플리케이션 코드를 검증한 deployment다. 후속 보고서 전용 merge는 동일한 앱 산출물로 새 deployment ID를 만들 수 있다.
+
 `승인됨 / 실행 중`은 성공 또는 운영 완료를 의미하지 않는다. 위 항목은 원격 증거를 확인한 뒤에만 실제 값으로 교체한다.
 
 ## Verdict
