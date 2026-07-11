@@ -1,0 +1,41 @@
+project_id = "reball-lostball"
+
+[auth.email]
+enable_signup = true
+enable_confirmations = true
+
+[functions.signup-with-login-id]
+verify_jwt = false
+
+[functions.login-with-identifier]
+verify_jwt = false
+
+[functions.auth-assist]
+verify_jwt = false
+
+[functions.admin-members]
+verify_jwt = false
+
+[functions.create-order]
+verify_jwt = false
+
+[functions.get-order]
+verify_jwt = false
+
+[functions.guest-order-lookup]
+verify_jwt = false
+
+[functions.prepare-payment]
+verify_jwt = false
+
+[functions.payment-confirm]
+verify_jwt = false
+
+[functions.payment-webhook]
+verify_jwt = false
+
+[functions.payment-cancel]
+verify_jwt = false
+
+[functions.reconcile-payments]
+verify_jwt = false

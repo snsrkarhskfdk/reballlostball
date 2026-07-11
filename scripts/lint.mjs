@@ -1,7 +1,20 @@
-import { existsSync, readFileSync } from "node:fs";
+import { existsSync, readFileSync, readdirSync } from "node:fs";
+import { spawnSync } from "node:child_process";
+import { join } from "node:path";
 
 const requiredFiles = ["index.html", "styles.css", "app.js"];
 const errors = [];
+
+function filesUnder(directory, predicate) {
+  if (!existsSync(directory)) return [];
+  const output = [];
+  for (const entry of readdirSync(directory, { withFileTypes: true })) {
+    const file = join(directory, entry.name);
+    if (entry.isDirectory()) output.push(...filesUnder(file, predicate));
+    else if (entry.isFile() && predicate(file)) output.push(file);
+  }
+  return output;
+}
 
 for (const file of requiredFiles) {
   if (!existsSync(file)) {
@@ -11,8 +24,20 @@ for (const file of requiredFiles) {
 
 if (errors.length === 0) {
   const app = readFileSync("app.js", "utf8");
-  const css = readFileSync("styles.css", "utf8");
+  const cssFiles = ["styles.css", ...filesUnder("src/frontend/ui", (file) => file.endsWith(".css"))];
+  const css = cssFiles.map((file) => readFileSync(file, "utf8")).join("\n");
+  const cssForChecks = css.replace(/\/\*[\s\S]*?\*\//g, "");
   const index = readFileSync("index.html", "utf8");
+
+  const syntaxFiles = [
+    "app.js",
+    ...filesUnder("scripts", (file) => /\.m?js$/i.test(file)),
+    ...filesUnder("src/frontend", (file) => /\.m?js$/i.test(file)),
+  ];
+  for (const file of syntaxFiles) {
+    const check = spawnSync(process.execPath, ["--check", file], { encoding: "utf8" });
+    if (check.status !== 0) errors.push(`JavaScript syntax error in ${file}: ${check.stderr.trim()}`);
+  }
 
   const requiredFunctions = [
     "renderHome",
@@ -51,12 +76,12 @@ if (errors.length === 0) {
   }
 
   for (const token of ["--fairway", "--mint", "--gold", "--gradient-deep"]) {
-    if (!css.includes(token)) {
+    if (!cssForChecks.includes(token)) {
       errors.push(`Missing CSS token: ${token}`);
     }
   }
 
-  if (css.includes("tailwind")) {
+  if (cssForChecks.includes("tailwind")) {
     errors.push("Tailwind should not be introduced for this static implementation");
   }
 }

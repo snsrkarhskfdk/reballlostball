@@ -1,10 +1,99 @@
 ﻿const ASSET_PATH = "./assets/figma";
+import {
+  assertOrderableQuantity,
+  chooseVariantForOption,
+  findExactOrderableVariant,
+  findFirstOrderableVariant,
+  isOrderableVariant,
+  isVariantOptionSelectable,
+  orderableVariants,
+  variantSelection,
+} from "./src/frontend/catalog/variants.mjs";
+import {
+  clearLegacySensitiveStorage,
+  loadCartSession,
+  loadGuestLookupSession,
+  saveCartSession,
+  saveGuestLookupSession,
+} from "./src/frontend/core/storage.mjs";
+import {
+  createIdempotencyKey,
+  createOrderRequest,
+  lookupGuestOrderRequest,
+  normalizeServerOrder,
+  orderLinePayload,
+} from "./src/frontend/commerce/order-client.mjs";
+import {
+  canAccessAdminTab,
+  firstAllowedAdminTab,
+  hasAdminRole,
+  requireAdminTab,
+} from "./src/frontend/auth/admin-permissions.mjs";
+import { captchaTokenFromForm, mountCaptchaWidgets } from "./src/frontend/auth/captcha-client.mjs";
+import { confirmTossPayment, prepareTossPayment, requestTossPayment } from "./src/frontend/payments/toss-client.mjs";
+import { normalizeCatalogSlug, sanitizeAssetReference } from "./src/frontend/core/url-safety.mjs";
+import { parseRoute, paymentReturnKind, paymentReturnParams, replacePaymentReturnUrl } from "./src/frontend/core/router.mjs";
+import { createAppState } from "./src/frontend/core/state.mjs";
+import { bundleId, cartItemDescription, cartItemFromVariant, cartTotal, shippingCost } from "./src/frontend/cart/model.mjs";
+import { escapeHtml, renderMultilineText } from "./src/frontend/ui/components.mjs";
+import {
+  checkoutCustomerFromForm,
+  isCheckoutCustomerValid,
+  renderCheckoutField,
+  renderCheckoutMethod,
+  renderCheckoutPolicyCard,
+} from "./src/frontend/checkout/view.mjs";
+import {
+  asYesNo,
+  boolFromYesNo,
+  formatAccountAddress,
+  formatDateLabel,
+  normalizeNotifications,
+  stringOrEmpty,
+  todayIso,
+  translateDeliveryStatus,
+  translateOrderStatus,
+  translatePaymentMethod,
+  translatePaymentStatus,
+} from "./src/frontend/account/presentation.mjs";
+import {
+  adminChartLabels,
+  adminChartPercentages,
+  adminDefaultModal,
+  adminFirstColumn,
+  adminTabDescription,
+  adminTabEyebrow,
+  adminTabLabel,
+  defaultAdminBanners,
+  defaultAdminProfile,
+} from "./src/frontend/admin/presentation.mjs";
+import {
+  brandMenu,
+  businessProfile,
+  createFaqItems,
+  defaultCoupons,
+  defaultNotifications,
+  defaultPosts,
+  gradeOptions,
+  lostballNotice,
+  noticeItems,
+  packOptions,
+  paymentProfile,
+  products,
+  shippingPolicy,
+  storeGalleryPhotos,
+  storeMapUrl,
+} from "./src/frontend/catalog/content.mjs";
+
 const HERO_PATH = "/hero";
 const ASSET_VERSION = "20260612-06";
 const HERO_DROP_FRAME_COUNT = 10;
 const HERO_DROP_VIRTUAL_FRAME_COUNT = 36;
-const SUPABASE_URL = "https://qbftalhhyfcndanrcwpy.supabase.co";
-const SUPABASE_KEY = "sb_publishable_K876i166RCGtBxdp3xRQZw_yJxPaKwL";
+const metaConfig = (name) => document.querySelector(`meta[name="${name}"]`)?.content?.trim() || "";
+const SUPABASE_URL = metaConfig("reball-supabase-url").replace(/\/$/, "");
+const SUPABASE_KEY = metaConfig("reball-supabase-publishable-key");
+const supabaseConfigured = /^https?:\/\//i.test(SUPABASE_URL) && Boolean(SUPABASE_KEY);
+const SUPABASE_SDK_TIMEOUT_MS = 2_500;
 const ADMIN_MEMBERS_FUNCTION_URL = `${SUPABASE_URL}/functions/v1/admin-members`;
 const SIGNUP_FUNCTION_URL = `${SUPABASE_URL}/functions/v1/signup-with-login-id`;
 const AUTH_ASSIST_FUNCTION_URL = `${SUPABASE_URL}/functions/v1/auth-assist`;
@@ -14,20 +103,66 @@ const PENDING_SIGNUP_EMAIL_KEY = "reball.pendingSignupEmail";
 const PENDING_SIGNUP_LOGIN_ID_KEY = "reball.pendingSignupLoginId";
 const SIGNUP_LOGIN_ID_REGISTRY_KEY = "reball.signupLoginIds";
 const LOGIN_ID_PATTERN = /^[a-z0-9][a-z0-9._-]{3,19}$/;
-const ADMIN_CATALOG_ROLES = new Set(["inventory_manager", "owner_admin"]);
 const UI_GRADE_TO_DB_GRADE = { S: "A_PLUS", A: "A", B: "B" };
 const DB_GRADE_TO_UI_GRADE = { A_PLUS: "S", A: "A", B: "B" };
 
-const { createClient } = await import("https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/+esm");
+clearLegacySensitiveStorage(globalThis.localStorage);
+resetSeededMemberStorage();
 
-const supabase = createClient(SUPABASE_URL, SUPABASE_KEY, {
-  auth: {
-    autoRefreshToken: true,
-    detectSessionInUrl: true,
-    persistSession: true,
-    storageKey: "reballlostball.auth",
-  },
-});
+function createUnavailableSupabaseClient() {
+  const unavailable = new Error("온라인 계정 서비스를 불러오지 못했습니다.");
+  let query;
+  query = new Proxy({}, {
+    get(_target, property) {
+      if (property === "then") {
+        return (resolve, reject) => Promise.resolve({ data: null, error: unavailable }).then(resolve, reject);
+      }
+      return () => query;
+    },
+  });
+  return {
+    auth: {
+      getSession: async () => ({ data: { session: null }, error: null }),
+      onAuthStateChange: () => ({ data: { subscription: { unsubscribe() {} } } }),
+      setSession: async () => ({ data: { session: null }, error: unavailable }),
+      signInWithPassword: async () => ({ data: { session: null }, error: unavailable }),
+      updateUser: async () => ({ data: { user: null }, error: unavailable }),
+      signOut: async () => ({ error: null }),
+    },
+    from: () => query,
+  };
+}
+
+let supabase = createUnavailableSupabaseClient();
+
+async function configureSupabaseClient() {
+  if (!supabaseConfigured) return;
+  let timeout;
+  try {
+    const sdk = await Promise.race([
+      import("https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.110.2/+esm"),
+      new Promise((_, reject) => {
+        timeout = globalThis.setTimeout(
+          () => reject(new Error("Supabase SDK load timeout")),
+          SUPABASE_SDK_TIMEOUT_MS
+        );
+      }),
+    ]);
+    if (typeof sdk?.createClient !== "function") return;
+    supabase = sdk.createClient(SUPABASE_URL, SUPABASE_KEY, {
+      auth: {
+        autoRefreshToken: true,
+        detectSessionInUrl: true,
+        persistSession: true,
+        storageKey: "reballlostball.auth",
+      },
+    });
+  } catch {
+    // The static catalog remains usable and account/commerce actions fail closed.
+  } finally {
+    if (timeout) globalThis.clearTimeout(timeout);
+  }
+}
 
 const money = new Intl.NumberFormat("ko-KR");
 const app = document.querySelector("#app");
@@ -95,499 +230,63 @@ const shopIcons = {
 };
 const originalCartIcon = icons.cart;
 
-const ORDER_STATUS_LABELS = {
-  draft: "주문 접수",
-  payment_ready: "결제 대기",
-  payment_auth_started: "결제 진행 중",
-  waiting_for_deposit: "입금 대기",
-  paid: "결제 완료",
-  payment_failed: "결제 실패",
-  cancel_requested: "취소 요청",
-  canceled: "주문 취소",
-  partially_canceled: "부분 취소",
-  refunded: "환불 완료",
-  shipping_ready: "상품 준비중",
-  shipped: "배송중",
-  delivered: "배송완료",
-};
+const faqItems = createFaqItems((value) => money.format(value));
 
-const PAYMENT_METHOD_LABELS = {
-  card: "카드",
-  transfer: "계좌이체",
-  virtual: "가상계좌",
-  easy: "간편결제",
-  virtual_account: "가상계좌",
-  easy_pay: "간편결제",
-};
+const pendingCartEntries = loadCartSession(globalThis.sessionStorage);
 
-const businessProfile = {
-  name: "리볼로스트볼",
-  owner: "이영석",
-  businessNumber: "867-01-03727",
-  mailOrderNumber: "제 2025 - 부천소사 -0655 호",
-  address: "부천 소사구 송내동 300-12 1층",
-  supportPhone: "010-8484-4646",
-  supportEmail: "evil1229@naver.com",
-  operationHours: "09:00 ~ 18:00 시",
-  returnAddress: "부천 소사구 송내동 300-12 1층",
-  tossEmail: "evil1229@naver.com",
-  settlementBank: "국민은행",
-  settlementAccount: "839201-04-201761",
-  settlementHolder: "이영석 (리볼 로스트볼)",
-  settlementManager: "이영석",
-  taxInvoiceEmail: "evil1229@naver.com",
-  documentBusinessRegistration: "legal/business-registration.jpg",
-  documentMailOrder: "legal/mail-order-license.jpg",
-};
-
-const shippingPolicy = {
-  baseFee: 3500,
-  freeThreshold: 50000,
-  islandExtra: 2000,
-  cutoffTime: "오후 3시",
-  averageLeadTime: "1~2일",
-  simpleReturnFee: 7000,
-  simpleReturnWindow: "수령 후 7일 이내",
-  defectWindow: "제품 문제 발생 시 30일 이내",
-  simpleReturnText: "구매자 단순변심은 수령 후 7일 이내 가능하며 배송비는 구매자 부담입니다.",
-  defectReturnText: "제품에 문제가 있을 경우 30일 이내 교환/환불 가능하며 배송비는 판매자가 부담합니다.",
-};
-
-const storeMapUrl = "https://place.map.kakao.com/450496449";
-
-const storeGalleryPhotos = [
-  {
-    image: "store/reball-store-01.webp",
-    title: "송내동 매장 외관",
-    label: "Storefront",
-    body: "간판과 입구가 바로 보이는 1층 매장입니다.",
-  },
-  {
-    image: "store/reball-store-02.webp",
-    title: "브랜드별 진열 공간",
-    label: "Display",
-    body: "타이틀리스트, 캘러웨이, 스릭슨 등 브랜드별 재고를 한눈에 확인합니다.",
-  },
-  {
-    image: "store/reball-store-03.webp",
-    title: "등급별 보관 선반",
-    label: "Stock",
-    body: "색상과 등급 기준에 맞춰 선별한 로스트볼을 묶음 단위로 보관합니다.",
-  },
-  {
-    image: "store/reball-store-04.webp",
-    title: "검수·포장 테이블",
-    label: "Packing",
-    body: "방문 구매와 온라인 출고를 같은 기준으로 준비합니다.",
-  },
-];
-
-const paymentProfile = {
-  methods: ["카드", "계좌이체", "가상계좌", "간편결제"],
-  transferLabel: "계좌이체 입금 계좌",
-};
-
-const lostballNotice = [
-  "본 상품은 수거·세척·선별 과정을 거친 로스트볼(중고 골프공)입니다.",
-  "등급별 기준에 따라 선별하여 판매하고 있으며, 로스트볼 특성상 미세 스크래치, 펜마킹, 로고, 변색 등이 일부 존재할 수 있습니다.",
-  "상품 상태는 등급 기준을 참고해 주시기 바라며, 사용에 지장이 있는 공은 제외 후 출고됩니다.",
-  "실제 상품 상태는 브랜드 및 등급에 따라 차이가 있을 수 있습니다.",
-];
-
-const faqItems = [
-  {
-    category: "등급",
-    question: "A+ / A / B 등급은 어떻게 구분하나요?",
-    answer:
-      "A+는 외관 사용감이 가장 적은 상품, A는 연습 및 라운딩에 무난한 상품, B는 스크래치나 마킹이 있을 수 있는 실속형 상품으로 분류합니다.",
-  },
-  {
-    category: "상품",
-    question: "사진과 동일한 로고나 번호의 공이 오나요?",
-    answer:
-      "로스트볼 특성상 모델, 번호, 로고, 펜마킹 상태는 재고 구성에 따라 달라질 수 있습니다. 사용에 지장이 있는 공은 선별 과정에서 제외합니다.",
-  },
-  {
-    category: "배송",
-    question: "언제 출고되나요?",
-    answer: `${shippingPolicy.cutoffTime} 이전 주문은 당일 출고 준비를 기준으로 운영합니다. 평균 배송 기간은 ${shippingPolicy.averageLeadTime}이며 지역과 택배사 사정에 따라 달라질 수 있습니다.`,
-  },
-  {
-    category: "주문",
-    question: "비회원 주문도 조회할 수 있나요?",
-    answer: "비회원 주문조회 화면에서 주문자명, 휴대폰 번호, 주문번호 또는 비회원 주문 비밀번호를 입력하면 주문 진행 상태를 확인할 수 있습니다.",
-  },
-  {
-    category: "교환/반품",
-    question: "단순변심 반품이 가능한가요?",
-    answer: `${shippingPolicy.simpleReturnWindow} 단순변심 반품 접수가 가능하며, 왕복 반품 배송비는 ${money.format(shippingPolicy.simpleReturnFee)}원 기준으로 안내합니다.`,
-  },
-  {
-    category: "고객센터",
-    question: "상담은 어디로 하면 되나요?",
-    answer: `고객센터 ${businessProfile.supportPhone} 또는 ${businessProfile.supportEmail}로 문의할 수 있습니다. 운영시간은 평일 ${businessProfile.operationHours}입니다.`,
-  },
-];
-
-const noticeItems = [
-  {
-    category: "운영",
-    date: "2025.07.01",
-    title: "리볼 로스트볼 쇼핑몰 오픈 안내",
-    body:
-      "리볼 로스트볼 공식 쇼핑몰이 2025년 7월에 오픈했습니다. 엄격한 검수 기준을 통과한 로스트볼을 등급별로 확인하고, 원하는 브랜드와 구성을 온라인에서 편하게 주문하실 수 있습니다.",
-    pinned: true,
-  },
-  {
-    category: "배송",
-    date: "2025.07.08",
-    title: "오후 3시 이전 주문 당일 출고 준비 안내",
-    body:
-      "평일 오후 3시 이전 결제 완료 주문은 당일 출고 준비를 기준으로 운영합니다. 택배사 물량, 도서산간 지역, 공휴일 전후 일정에 따라 실제 배송 기간은 달라질 수 있습니다.",
-  },
-  {
-    category: "상품",
-    date: "2025.07.15",
-    title: "로스트볼 등급 표기 기준 안내",
-    body:
-      "상품 상세페이지의 S, A, B 등급은 외관 사용감과 실전 사용 적합성을 기준으로 분류합니다. 로스트볼 특성상 로고, 번호, 펜마킹은 재고 구성에 따라 다를 수 있습니다.",
-  },
-  {
-    category: "혜택",
-    date: "2025.07.22",
-    title: "신규 회원 3,000원 쿠폰 지급 안내",
-    body:
-      "신규 리볼회원 가입 시 바로 사용할 수 있는 3,000원 쿠폰이 지급됩니다. 쿠폰은 마이페이지 쿠폰함에서 확인할 수 있으며, 사용 조건은 주문 단계에서 함께 안내됩니다.",
-  },
-];
-
-const brandMenu = [
-  ["titleist", "타이틀리스트"],
-  ["taylormade", "테일러메이드"],
-  ["bridgestone", "브리지스톤"],
-  ["callaway", "캘러웨이"],
-  ["srixon", "스릭슨"],
-  ["volvik", "볼빅"],
-  ["saintnine", "세인트나인"],
-  ["mix", "브랜드혼합"],
-];
-
-const products = [
-  {
-    brandSlug: "titleist",
-    brandName: "타이틀리스트",
-    slug: "titleist-pro-v1-v1x-lostball",
-    name: "타이틀리스트 로스트볼",
-    line: "PRO V1 / PRO V1X / 투어스피드 / 트루필 / 벨로시티",
-    copy: "PRO V1, PRO V1X, 투어스피드, 트루필, 벨로시티 옵션을 등급별로 선별합니다.",
-    price: 12900,
-    colors: ["화이트"],
-    models: ["PRO V1", "PRO V1X", "투어스피드", "트루필", "벨로시티"],
-    image: "ball-titleist.png",
-    detailImage: "detail-titleist.webp",
-    galleryVideo: "product-videos/reball-titleist-rotation.mp4",
-    galleryImages: [
-      { image: "gallery/titleist-02.png", label: "타이틀리스트 PRO V1 정렬선" },
-      { image: "gallery/titleist-05.png", label: "타이틀리스트 스탠딩 로고" },
-      { image: "gallery/titleist-07.png", label: "타이틀리스트 스탠딩 좌측" },
-      { image: "gallery/titleist-08.png", label: "타이틀리스트 기본 정면" },
-    ],
-    detailVariants: {
-      "PRO V1": "detail-titleist-pro-v1.webp",
-      "PRO V1X": "detail-titleist-pro-v1x.webp",
-    },
-    accent: "#113A2A",
-    stock: 42,
-  },
-  {
-    brandSlug: "bridgestone",
-    brandName: "브리지스톤",
-    slug: "bridgestone-tour-b-lostball",
-    name: "브리지스톤 로스트볼",
-    line: "투어 X / XS / E12 / 혼합",
-    copy: "투어 X, XS, E12, 혼합 옵션을 중심으로 직진성과 타구감 밸런스를 맞춘 구성입니다.",
-    price: 10900,
-    colors: ["화이트", "혼합"],
-    models: ["투어 X", "XS", "E12", "혼합"],
-    image: "ball-bridgestone.png",
-    detailImage: "detail-bridgestone.webp",
-    galleryVideo: "product-videos/reball-bridgestone-rotation.mp4",
-    galleryImages: [
-      { image: "gallery/bridgestone-01.png", label: "브리지스톤 TOUR B X 측면" },
-      { image: "gallery/bridgestone-02.png", label: "브리지스톤 로고" },
-      { image: "gallery/bridgestone-03.png", label: "브리지스톤 기본 정면" },
-    ],
-    accent: "#113A2A",
-    stock: 35,
-  },
-  {
-    brandSlug: "taylormade",
-    brandName: "테일러메이드",
-    slug: "taylormade-tp5-lostball",
-    name: "테일러메이드 로스트볼",
-    line: "TP5 / TP5X / TP5 Pix / 투어 리스폰스 / 혼합",
-    copy: "TP5, TP5X, TP5 Pix, 투어 리스폰스, 혼합 옵션을 상황에 맞게 선택할 수 있습니다.",
-    price: 11900,
-    colors: ["화이트", "혼합"],
-    models: ["TP5", "TP5X", "TP5 Pix", "투어 리스폰스", "혼합"],
-    image: "ball-taylormade.png",
-    detailImage: "detail-taylormade.webp",
-    galleryVideo: "product-videos/reball-taylormade-rotation.mp4",
-    galleryAnimation: "product-videos/reball-taylormade-rotation.webp",
-    galleryImages: [
-      { image: "gallery/taylormade-01.png", label: "테일러메이드 TP5 정렬선" },
-      { image: "gallery/taylormade-02.png", label: "테일러메이드 로고 정면" },
-      { image: "gallery/taylormade-03.png", label: "테일러메이드 로고 우측" },
-      { image: "gallery/taylormade-04.png", label: "테일러메이드 기본 정면" },
-    ],
-    accent: "#113A2A",
-    stock: 46,
-  },
-  {
-    brandSlug: "saintnine",
-    brandName: "세인트나인",
-    slug: "saintnine-lostball",
-    name: "세인트나인 로스트볼",
-    line: "화이트 / 컬러",
-    copy: "화이트와 컬러 옵션 중심의 국내 친숙형 라인으로 가성비 연습 구성을 부담 없이 고를 수 있습니다.",
-    price: 8900,
-    colors: ["화이트", "컬러"],
-    models: ["화이트", "컬러"],
-    image: "ball-saintnine.png",
-    detailImage: "detail-saintnine.webp",
-    galleryVideo: "product-videos/reball-saintnine-rotation.mp4",
-    galleryImages: [
-      { image: "gallery/saintnine-01.png", label: "세인트나인 로고" },
-      { image: "gallery/saintnine-02.png", label: "세인트나인 캐릭터 좌측" },
-      { image: "gallery/saintnine-03.png", label: "세인트나인 캐릭터 우측" },
-      { image: "gallery/saintnine-04.png", label: "세인트나인 캐릭터 정면" },
-    ],
-    accent: "#12A869",
-    stock: 60,
-  },
-  {
-    brandSlug: "volvik",
-    brandName: "볼빅",
-    slug: "volvik-lostball",
-    name: "볼빅 로스트볼",
-    line: "비비드 컬러 / 화이트 / 반반볼 크리스탈",
-    copy: "비비드 컬러, 화이트, 반반볼 크리스탈 구성으로 시인성과 개성을 함께 챙길 수 있습니다.",
-    price: 7900,
-    colors: ["컬러", "화이트"],
-    models: ["비비드 컬러", "화이트", "반반볼 크리스탈"],
-    image: "ball-volvik.png",
-    detailImage: "detail-volvik.webp",
-    galleryVideo: "product-videos/reball-volvik-rotation.mp4",
-    galleryImages: [
-      { image: "gallery/volvik-01.png", label: "볼빅 VTU3 후면" },
-      { image: "gallery/volvik-02.png", label: "볼빅 VTU3 측면" },
-      { image: "gallery/volvik-03.png", label: "볼빅 VTU3 로고" },
-      { image: "gallery/volvik-04.png", label: "볼빅 VTU3 정면" },
-      { image: "gallery/volvik-05.png", label: "볼빅 TIGER" },
-    ],
-    accent: "#E7D8B8",
-    stock: 55,
-  },
-  {
-    brandSlug: "callaway",
-    brandName: "캘러웨이",
-    slug: "callaway-chrome-tour-lostball",
-    aliasSlugs: ["callaway-lostball"],
-    name: "캘러웨이 CHROME TOUR 로스트볼",
-    line: "CHROME TOUR / 트리플트랙 / ERC 소프트",
-    copy: "페어웨이에서 더 긴 비거리를 경험할 수 있는 캘러웨이 크롬투어 로스트볼 구성입니다.",
-    price: 11900,
-    colors: ["화이트", "옐로우", "트리플트랙"],
-    models: ["CHROME TOUR", "360 트리플트랙 화이트", "360 트리플트랙 옐로우"],
-    image: "ball-callaway.png",
-    detailImage: "detail-callaway.png",
-    galleryVideo: "callaway-rotation.mp4",
-    galleryImages: [
-      { image: "gallery/callaway-01.png", label: "캘러웨이 CHROME TOUR 정면" },
-      { image: "gallery/callaway-02.png", label: "캘러웨이 전면 트리플트랙" },
-      { image: "gallery/callaway-03.png", label: "캘러웨이 로고 오른쪽" },
-      { image: "gallery/callaway-04.png", label: "캘러웨이 로고 왼쪽" },
-      { image: "gallery/callaway-05.png", label: "캘러웨이 로고 왼쪽 클로즈업" },
-      { image: "gallery/callaway-06.png", label: "캘러웨이 CHROME TOUR 누끼" },
-    ],
-    accent: "#B68935",
-    stock: 44,
-  },
-  {
-    brandSlug: "srixon",
-    brandName: "스릭슨",
-    slug: "srixon-z-star-lostball",
-    name: "스릭슨 로스트볼",
-    line: "Z-STAR / 반반볼",
-    copy: "Z-STAR와 반반볼 중심의 선별 라인으로 스핀 컨트롤과 실속 구성을 함께 제공합니다.",
-    price: 9900,
-    colors: ["화이트", "혼합"],
-    models: ["Z-STAR", "반반볼"],
-    image: "ball-srixon.png",
-    detailImage: "detail-srixon.webp",
-    galleryVideo: "product-videos/reball-srixon-rotation.mp4",
-    galleryImages: [
-      { image: "gallery/srixon-01.png", label: "스릭슨 Z-STAR 측면" },
-      { image: "gallery/srixon-02.png", label: "스릭슨 Z-STAR 후면" },
-      { image: "gallery/srixon-03.png", label: "스릭슨 로고 정면" },
-      { image: "gallery/srixon-04.png", label: "스릭슨 기본 정면" },
-    ],
-    accent: "#113A2A",
-    stock: 40,
-  },
-  {
-    brandSlug: "mix",
-    brandName: "브랜드혼합",
-    slug: "brand-mix-lostball",
-    name: "브랜드혼합 로스트볼",
-    line: "화이트 / 컬러 혼합",
-    copy: "브랜드 지정 없이 화이트 또는 컬러 계열로 실속 있게 구성한 혼합 라인입니다.",
-    price: 7500,
-    colors: ["화이트", "컬러"],
-    models: ["화이트", "컬러"],
-    image: "ball-volvik.png",
-    detailImage: "detail-volvik.webp",
-    galleryImages: [
-      { image: "gallery/mix-01.jpg", label: "브랜드혼합 혼합볼 이미지 1" },
-      { image: "gallery/mix-02.jpg", label: "브랜드혼합 혼합볼 이미지 2" },
-      { image: "gallery/mix-03.jpg", label: "브랜드혼합 혼합볼 이미지 3" },
-      { image: "gallery/mix-05.jpg", label: "브랜드혼합 혼합볼 이미지 4" },
-      { image: "gallery/mix-04.jpg", label: "브랜드혼합 혼합볼 이미지 5" },
-    ],
-    accent: "#113A2A",
-    stock: 70,
-  },
-];
-
-products.sort(
-  (left, right) =>
-    brandMenu.findIndex(([slug]) => slug === left.brandSlug) -
-    brandMenu.findIndex(([slug]) => slug === right.brandSlug)
-);
-
-const gradeOptions = [
-  { id: "S", label: "S", delta: 1800, text: "새 볼에 가까운 최상급" },
-  { id: "A", label: "A", delta: 0, text: "실전 라운드용 우수급" },
-  { id: "B", label: "B", delta: -1800, text: "연습과 가성비 중심 실속급" },
-];
-const packOptions = [
-  { id: "10구", qty: 10, multiplier: 1 },
-  { id: "30구", qty: 30, multiplier: 2.62 },
-];
-
-const defaultNotifications = {
-  order: false,
-  delivery: false,
-  coupon: false,
-  marketing: false,
-  restock: false,
-};
-
-const defaultCoupons = [
-  {
-    id: "WELCOME3000",
-    title: "신규 회원가입 축하 쿠폰",
-    benefit: "3,000원 할인",
-    benefitAmount: 3000,
-    period: "2026.06.04 - 2026.06.30",
-    status: "사용 가능",
-    useCount: 129,
-  },
-];
-
-const defaultPosts = [
-  {
-    id: "POST-001",
-    type: "문의",
-    title: "PRO V1 A급 재입고 문의",
-    date: "2026-06-04",
-    status: "답변 완료",
-    body: "PRO V1 A+ 등급 10구 화이트 재입고 일정이 궁금합니다.",
-    answer:
-      "안녕하세요, 리볼 로스트볼입니다.\nPRO V1 A+ 등급은 금일 검수분 기준으로 소량 입고 예정이며, 15시 재고 업데이트 후 구매 가능합니다.\n입고 수량이 적어 빠르게 품절될 수 있어 상품 상세 페이지의 재고 현황을 함께 확인해 주세요.",
-    answeredAt: "2026-06-04 15:10",
-  },
-];
-
-function defaultAdminCredentials() {
-  return {
-    id: "admin",
-    password: "",
-  };
-}
-
-function defaultAdminProfile() {
-  return {
-    id: "admin",
-    role: "관리자",
-    email: businessProfile.supportEmail,
-  };
-}
-
-function defaultAdminBanners() {
-  return [
-    { id: "BN-001", title: "홈 메인 배너", meta: "첫 번째 캐러셀", status: "노출중", order: 1, placement: "홈" },
-    { id: "BN-002", title: "매장 이벤트 배너", meta: "두 번째 캐러셀", status: "노출중", order: 2, placement: "홈" },
-    { id: "BN-003", title: "프리미엄 선별 배너", meta: "세 번째 캐러셀", status: "노출중", order: 3, placement: "홈" },
-  ];
-}
-
-resetSeededMemberStorage();
-
-const state = {
+const state = createAppState({
   route: parseRoute(),
   products,
-  cart: load("reball.cart", []),
   wishlist: load("reball.wishlist", []),
-  orders: [],
-  ephemeralOrders: load("reball.ephemeralOrders", []),
-  viewer: null,
-  authSession: null,
-  authUser: null,
-  authReady: false,
-  authBusy: false,
-  authRedirect: AUTH_REDIRECT_DEFAULT,
-  accountLoading: false,
-  authRoles: [],
-  authRolesLoaded: false,
-  addresses: [],
-  paymentMethods: [],
-  notifications: normalizeNotifications(load("reball.notifications", defaultNotifications)),
+  notifications: normalizeNotifications(load("reball.notifications", defaultNotifications), defaultNotifications),
   coupons: load("reball.coupons", defaultCoupons),
-  posts: normalizePosts(load("reball.posts", defaultPosts)),
-  activeBanner: 0,
-  pendingScrollTarget: null,
-  postSearch: "",
-  expandedInquiryId: null,
-  selected: {},
-  myTab: "orders",
-  selectedReviewOrderId: "",
-  signupLoginCheck: { loginId: "", status: "idle", message: "" },
-  adminTab: "dashboard",
-  adminUser: load("reball.adminUser", null),
-  adminCredentials: load("reball.adminCredentials", defaultAdminCredentials()),
-  adminSessionPassword: "",
-  adminProfile: load("reball.adminProfile", defaultAdminProfile()),
+  posts: normalizePosts(defaultPosts),
+  authRedirect: AUTH_REDIRECT_DEFAULT,
+  adminProfile: defaultAdminProfile(businessProfile.supportEmail),
   adminBanners: load("reball.adminBanners", defaultAdminBanners()),
-  adminCustomers: load("reball.adminCustomers", []),
-  adminMembers: [],
-  adminMembersLoading: false,
-  adminMembersLoaded: false,
-  adminMembersError: "",
-  adminProducts: load("reball.adminProducts", []),
-  remoteProducts: load("reball.remoteProducts", []),
-  adminModal: null,
-  adminModalContext: null,
-  adminSearch: "",
-  adminLoginError: "",
-  menuOpen: false,
-  cartPromptOpen: false,
-  consultOpen: false,
-  consultMessages: [],
-  heroIntroHasPlayed: false,
-};
+});
 
 const bundleRegistry = new Map();
+let dialogReturnTarget = null;
+
+function focusDialogSoon(selector) {
+  dialogReturnTarget = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+  window.requestAnimationFrame(() => {
+    const dialog = document.querySelector(selector);
+    const first = dialog?.querySelector('button:not(:disabled), input:not(:disabled), select:not(:disabled), textarea:not(:disabled), [href], [tabindex="0"]');
+    (first || dialog)?.focus?.();
+  });
+}
+
+function restoreDialogFocus() {
+  const target = dialogReturnTarget;
+  dialogReturnTarget = null;
+  window.requestAnimationFrame(() => target?.isConnected && target.focus());
+}
+
+function bindDialogAccessibility() {
+  document.querySelectorAll('[role="dialog"]').forEach((dialog) => {
+    dialog.addEventListener("keydown", (event) => {
+      if (event.key === "Escape") {
+        const close = dialog.parentElement?.querySelector("[data-close-modal], [data-cart-continue], [data-admin-modal-close], [data-consult-close]") || dialog.querySelector("[data-close-modal], [data-cart-continue], [data-admin-modal-close], [data-consult-close]");
+        close?.click();
+        return;
+      }
+      if (event.key !== "Tab") return;
+      const focusable = [...dialog.querySelectorAll('button:not(:disabled), input:not(:disabled), select:not(:disabled), textarea:not(:disabled), a[href], [tabindex="0"]')].filter((node) => !node.hidden);
+      if (!focusable.length) return;
+      const first = focusable[0];
+      const last = focusable.at(-1);
+      if (event.shiftKey && document.activeElement === first) {
+        event.preventDefault();
+        last.focus();
+      } else if (!event.shiftKey && document.activeElement === last) {
+        event.preventDefault();
+        first.focus();
+      }
+    });
+  });
+}
 
 function heroFrameAsset(index) {
   return heroAsset(`drop/${String(index + 1).padStart(2, "0")}.webp`);
@@ -657,7 +356,7 @@ function HoleInOneBridge(representativeProducts) {
 
 function FlightTransitionSection(representativeProducts) {
   return `
-    <section class="flight-transition-section" data-flight-transition aria-label="리볼 로스트볼 인트로 전환">
+    <section class="flight-transition-section" data-flight-transition data-home-stage="1" aria-label="리볼 로스트볼 대표 메시지">
       <div class="flight-transition-stage">
         <img class="flight-plate flight-plate-intro" src="${heroAsset("flight/plates/intro_end_plate.webp")}" alt="" aria-hidden="true" loading="eager" decoding="async" />
         <img class="flight-plate flight-plate-grass" src="${heroAsset("flight/plates/grass_landing_plate.webp")}" alt="" aria-hidden="true" loading="eager" decoding="async" />
@@ -741,7 +440,7 @@ function resetSeededMemberStorage() {
 
     localStorage.setItem("reball.memberInfoResetVersion", LEGACY_MEMBER_STATE_RESET_VERSION);
   } catch {
-    localStorage.setItem("reball.memberInfoResetVersion", LEGACY_MEMBER_STATE_RESET_VERSION);
+    // Storage can be disabled; the application continues with in-memory state.
   }
 }
 
@@ -758,19 +457,19 @@ function consumeAuthRedirect() {
 
 function setPendingSignupEmail(email) {
   try {
-    localStorage.setItem(PENDING_SIGNUP_EMAIL_KEY, email);
+    sessionStorage.setItem(PENDING_SIGNUP_EMAIL_KEY, email);
   } catch {}
 }
 
 function setPendingSignupLoginId(loginId) {
   try {
-    localStorage.setItem(PENDING_SIGNUP_LOGIN_ID_KEY, loginId);
+    sessionStorage.setItem(PENDING_SIGNUP_LOGIN_ID_KEY, loginId);
   } catch {}
 }
 
 function getPendingSignupEmail() {
   try {
-    return localStorage.getItem(PENDING_SIGNUP_EMAIL_KEY) || "";
+    return sessionStorage.getItem(PENDING_SIGNUP_EMAIL_KEY) || "";
   } catch {
     return "";
   }
@@ -778,7 +477,7 @@ function getPendingSignupEmail() {
 
 function getPendingSignupLoginId() {
   try {
-    return localStorage.getItem(PENDING_SIGNUP_LOGIN_ID_KEY) || "";
+    return sessionStorage.getItem(PENDING_SIGNUP_LOGIN_ID_KEY) || "";
   } catch {
     return "";
   }
@@ -786,13 +485,13 @@ function getPendingSignupLoginId() {
 
 function clearPendingSignupEmail() {
   try {
-    localStorage.removeItem(PENDING_SIGNUP_EMAIL_KEY);
+    sessionStorage.removeItem(PENDING_SIGNUP_EMAIL_KEY);
   } catch {}
 }
 
 function clearPendingSignupLoginId() {
   try {
-    localStorage.removeItem(PENDING_SIGNUP_LOGIN_ID_KEY);
+    sessionStorage.removeItem(PENDING_SIGNUP_LOGIN_ID_KEY);
   } catch {}
 }
 
@@ -817,7 +516,11 @@ function validateLoginId(loginId) {
 }
 
 function signupLoginIdRegistry() {
-  return load(SIGNUP_LOGIN_ID_REGISTRY_KEY, []);
+  try {
+    return JSON.parse(sessionStorage.getItem(SIGNUP_LOGIN_ID_REGISTRY_KEY) || "[]");
+  } catch {
+    return [];
+  }
 }
 
 function rememberSignupLoginId(loginId) {
@@ -825,7 +528,9 @@ function rememberSignupLoginId(loginId) {
   if (!normalized) return;
   const registry = signupLoginIdRegistry();
   if (registry.includes(normalized)) return;
-  save(SIGNUP_LOGIN_ID_REGISTRY_KEY, [normalized, ...registry].slice(0, 500));
+  try {
+    sessionStorage.setItem(SIGNUP_LOGIN_ID_REGISTRY_KEY, JSON.stringify([normalized, ...registry].slice(0, 100)));
+  } catch {}
 }
 
 function loginIdTakenLocally(loginId) {
@@ -844,7 +549,7 @@ function showToastAfterNavigation(message) {
   window.setTimeout(emit, 300);
 }
 
-async function signInWithIdentifier(identifier, password) {
+async function signInWithIdentifier(identifier, password, captchaToken) {
   const normalizedIdentifier = stringOrEmpty(identifier).trim().toLowerCase();
   if (!isEmailLike(normalizedIdentifier)) {
     const invalidMessage = validateLoginId(normalizeLoginId(normalizedIdentifier));
@@ -857,7 +562,7 @@ async function signInWithIdentifier(identifier, password) {
       "Content-Type": "application/json",
       apikey: SUPABASE_KEY,
     },
-    body: JSON.stringify({ identifier: normalizedIdentifier, password }),
+    body: JSON.stringify({ identifier: normalizedIdentifier, password, captchaToken }),
   });
 
   const payload = await response.json().catch(() => ({}));
@@ -884,14 +589,8 @@ async function signUpWithLoginId(payload) {
 
   const result = await response.json().catch(() => ({}));
   if (!response.ok) throw new Error(result?.message || "회원가입을 처리하지 못했습니다.");
-  if (!result?.access_token || !result?.refresh_token) throw new Error("회원가입 세션을 처리하지 못했습니다.");
-
-  const { data, error } = await supabase.auth.setSession({
-    access_token: result.access_token,
-    refresh_token: result.refresh_token,
-  });
-  if (error) throw error;
-  return data;
+  if (result?.accepted !== true) throw new Error("회원가입 요청을 처리하지 못했습니다.");
+  return result;
 }
 
 async function requestAuthAssist(payload) {
@@ -961,6 +660,8 @@ function setFormBusy(form, pending) {
   const submitButton = form?.querySelector('[type="submit"]');
   if (submitButton) {
     submitButton.disabled = pending;
+    submitButton.classList.toggle("is-loading", pending);
+    submitButton.setAttribute("aria-busy", pending ? "true" : "false");
     submitButton.dataset.originalLabel ||= submitButton.textContent;
     submitButton.textContent = pending ? "처리 중..." : submitButton.dataset.originalLabel;
   }
@@ -1075,6 +776,7 @@ async function syncSessionState(session, options = {}) {
   state.authSession = session;
   state.authUser = session.user;
   await loadAccountData(session.user, { silent });
+  await loadCurrentAuthRoles({ force: true });
 }
 
 async function initializeAuth() {
@@ -1090,7 +792,9 @@ async function initializeAuth() {
     showToast(normalizeAuthError(error, "로그인 상태를 확인하지 못했습니다."));
   } finally {
     state.authReady = true;
-    if (!(await handleAuthCallbackHash())) renderRoute();
+    if (await handleAuthCallbackHash()) return;
+    if (await handlePaymentReturn()) return;
+    renderRoute();
   }
 
   supabase.auth.onAuthStateChange((event, session) => {
@@ -1111,6 +815,9 @@ async function initializeAuth() {
           state.authUser = session.user;
           if (event !== "TOKEN_REFRESHED") await loadAccountData(session.user, { silent: true });
           else if (!state.viewer) state.viewer = buildViewer(session.user);
+          if (event !== "TOKEN_REFRESHED" || !state.authRolesLoaded) {
+            await loadCurrentAuthRoles({ force: true });
+          }
 
           if (event === "PASSWORD_RECOVERY") {
             routeTo("/login/reset-password");
@@ -1147,6 +854,7 @@ async function handleAuthFormSubmit(form) {
   setFormBusy(form, true);
 
   try {
+    const captchaToken = captchaTokenFromForm(form);
     if (mode === "signup") {
       const loginId = normalizeLoginId(formData.get("loginId"));
       const loginIdError = validateLoginId(loginId);
@@ -1187,6 +895,7 @@ async function handleAuthFormSubmit(form) {
         loginId,
         email,
         password,
+        captchaToken,
         profile: {
           name,
           phone,
@@ -1205,20 +914,17 @@ async function handleAuthFormSubmit(form) {
         },
       };
 
-      const data = await signUpWithLoginId(signupPayload);
-      const signedUpUser = data.user ?? data.session?.user;
-      if (!signedUpUser) throw new Error("회원가입 응답을 처리하지 못했습니다.");
-
-      clearPendingSignup();
+      await signUpWithLoginId(signupPayload);
+      setPendingSignupEmail(email);
+      setPendingSignupLoginId(loginId);
       rememberSignupLoginId(loginId);
-      await loadAccountData(signedUpUser);
-      showToast("회원가입이 완료되었습니다. 바로 쇼핑할 수 있습니다.");
-      routeTo(consumeAuthRedirect());
+      showToast("확인 메일을 보냈습니다. 이메일 인증 후 로그인해 주세요.");
+      routeTo("/signup/complete");
 
       return;
     }
 
-    const data = await signInWithIdentifier(identifier, password);
+    const data = await signInWithIdentifier(identifier, password, captchaToken);
     const signedInUser = data.user ?? data.session?.user;
     if (!signedInUser) throw new Error("로그인 응답을 처리하지 못했습니다.");
 
@@ -1254,6 +960,7 @@ async function handleAuthAssistFormSubmit(form) {
   setFormBusy(form, true);
 
   try {
+    const captchaToken = captchaTokenFromForm(form);
     if (mode === "find-id") {
       const email = stringOrEmpty(formData.get("contactEmail")).trim().toLowerCase();
       if (!email || !isEmailLike(email)) {
@@ -1265,14 +972,13 @@ async function handleAuthAssistFormSubmit(form) {
         name,
         phone,
         email,
+        captchaToken,
       });
       setResult(
-        `<strong>가입 아이디</strong><b>${escapeHtml(result.loginId || "이메일 계정")}</b><span>인증 이메일 ${escapeHtml(
-          result.emailMasked || "-"
-        )}</span>`,
+        `<strong>요청 접수</strong><span>${escapeHtml(result.message || "일치하는 계정이 있으면 안내를 진행합니다.")}</span><span>${escapeHtml(result.hint || "가입 이메일로 로그인할 수 있습니다.")}</span>`,
         "success"
       );
-      showToast("아이디를 찾았습니다.");
+      showToast("계정 확인 요청을 접수했습니다.");
       return;
     }
 
@@ -1288,12 +994,13 @@ async function handleAuthAssistFormSubmit(form) {
       name,
       phone,
       redirectTo: `${location.origin}${location.pathname}`,
+      captchaToken,
     });
     setResult(
-      `<strong>재설정 메일 발송 완료</strong><span>${escapeHtml(result.emailMasked || "가입 이메일")}로 보낸 링크에서 새 비밀번호를 입력해 주세요.</span>`,
+      `<strong>요청 접수</strong><span>${escapeHtml(result.message || "일치하는 계정이 있으면 재설정 메일을 보냅니다.")}</span>`,
       "success"
     );
-    showToast("비밀번호 재설정 메일을 보냈습니다.");
+    showToast("비밀번호 재설정 요청을 접수했습니다.");
   } catch (error) {
     const message = normalizeAuthError(error, "입력한 회원 정보를 확인하지 못했습니다.");
     setResult(`<strong>확인 실패</strong><span>${escapeHtml(message)}</span>`, "error");
@@ -1363,7 +1070,7 @@ async function loadCurrentAuthRoles(options = {}) {
 }
 
 function hasAdminCatalogRole(roles = []) {
-  return roles.some((role) => ADMIN_CATALOG_ROLES.has(role));
+  return canAccessAdminTab(roles, "product");
 }
 
 async function ensureAdminCatalogSession(password = "", emailOverride = "") {
@@ -1396,26 +1103,15 @@ async function ensureAdminCatalogSession(password = "", emailOverride = "") {
   return roles;
 }
 
-async function syncAdminSupabaseSession(password = "", emailOverride = "") {
-  if (!password) return false;
-  try {
-    await ensureAdminCatalogSession(password, emailOverride);
-    return true;
-  } catch (error) {
-    showToast(normalizeAuthError(error, "관리자 Supabase 세션을 연결하지 못했습니다."));
-    return false;
-  }
-}
-
 async function loadAdminMembers(options = {}) {
   const { force = false, silent = true } = options;
-  if (!state.adminUser || state.adminMembersLoading) return;
+  if (!canAccessAdminTab(state.authRoles, "customer") || state.adminMembersLoading) return;
   if (state.adminMembersLoaded && !force) return;
   if (!state.authReady) return;
 
   if (!state.authSession?.access_token) {
     state.adminMembersLoaded = true;
-    state.adminMembersError = "관리자 회원 목록은 Supabase owner_admin 세션으로 로그인해야 조회할 수 있습니다.";
+    state.adminMembersError = "관리자 회원 목록은 고객/회원관리 권한이 있는 Supabase 관리자 세션으로 로그인해야 조회할 수 있습니다.";
     if (!silent && parseRoute().startsWith("/admin")) renderAdmin();
     return;
   }
@@ -1560,54 +1256,12 @@ async function handleAddressDelete(addressId) {
   }
 }
 
-function normalizeNotifications(notifications) {
-  return {
-    ...defaultNotifications,
-    ...(notifications && typeof notifications === "object" && !Array.isArray(notifications) ? notifications : {}),
-  };
-}
-
-function todayIso() {
-  return new Date().toISOString().slice(0, 10);
-}
-
 function siteUrl() {
   return `${location.origin}${location.pathname}`;
 }
 
-function stringOrEmpty(value) {
-  return value == null ? "" : String(value);
-}
-
-function asYesNo(value) {
-  return value ? "yes" : "no";
-}
-
-function boolFromYesNo(value) {
-  return String(value || "").toLowerCase() === "yes";
-}
-
-function formatDateLabel(value) {
-  if (!value) return "";
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return String(value);
-  return new Intl.DateTimeFormat("ko-KR", { year: "numeric", month: "numeric", day: "numeric" }).format(date);
-}
-
-function formatAccountAddress(address) {
-  return [address.zipCode, address.roadAddress, address.detailAddress].filter(Boolean).join(" ").trim();
-}
-
-function translateOrderStatus(status) {
-  return ORDER_STATUS_LABELS[status] ?? status ?? "주문 접수";
-}
-
-function translatePaymentMethod(method) {
-  return PAYMENT_METHOD_LABELS[method] ?? method ?? "결제수단 미정";
-}
-
 function allOrders() {
-  return [...state.ephemeralOrders, ...state.orders];
+  return [...state.orders];
 }
 
 function findOrderById(orderId) {
@@ -1746,7 +1400,8 @@ function mapOrderRecord(row, items = []) {
     dbId: row.id,
     date: formatDateLabel(row.created_at),
     status: translateOrderStatus(row.status),
-    delivery: translateOrderStatus(row.status),
+    paymentStatus: translatePaymentStatus(row.payment_status),
+    delivery: translateDeliveryStatus(row.status),
     total: Number(row.total_krw ?? 0),
     customer: {
       name: stringOrEmpty(state.viewer?.name),
@@ -1757,11 +1412,6 @@ function mapOrderRecord(row, items = []) {
     },
     items: normalizedItems,
   };
-}
-
-function parseRoute() {
-  const raw = location.hash.replace(/^#/, "") || "/";
-  return raw.startsWith("/") ? raw : `/${raw}`;
 }
 
 function routeTo(route) {
@@ -1782,9 +1432,9 @@ function flushPendingScroll() {
 }
 
 function asset(name) {
-  const value = stringOrEmpty(name).trim();
+  const value = sanitizeAssetReference(name);
   if (!value) return `${ASSET_PATH}/?v=${ASSET_VERSION}`;
-  if (/^(?:https?:)?\/\//i.test(value) || value.startsWith("data:")) return value;
+  if (/^https:\/\//i.test(value)) return value;
   if (value.startsWith("/")) return value;
   return `${ASSET_PATH}/${value}?v=${ASSET_VERSION}`;
 }
@@ -1819,7 +1469,7 @@ function renderShopIcon(name, className = "ui-icon") {
 }
 
 function productBySlug(slug) {
-  return catalogProducts().find((product) => product.slug === slug || product.aliasSlugs?.includes(slug)) ?? catalogProducts()[0];
+  return catalogProducts().find((product) => product.slug === slug || product.aliasSlugs?.includes(slug)) ?? null;
 }
 
 function productByBrand(brandSlug) {
@@ -1849,11 +1499,8 @@ function adminRegisteredProductCount() {
 
 function normalizeCatalogAssetName(value, fallback = "") {
   const raw = stringOrEmpty(value).trim();
-  if (!raw) return fallback;
-  if (/^(?:https?:)?\/\//i.test(raw) || raw.startsWith("data:")) return raw;
-  if (raw.startsWith("/products/")) return fallback;
-  if (raw.startsWith("/")) return raw.split("/").filter(Boolean).pop() || fallback;
-  return raw;
+  if (raw.startsWith("/products/")) return sanitizeAssetReference(fallback);
+  return sanitizeAssetReference(raw, fallback);
 }
 
 function uniqueTextValues(values) {
@@ -1870,7 +1517,8 @@ function mapSupabaseVariantToLocalVariant(row, product, imageFallback) {
   const grade = DB_GRADE_TO_UI_GRADE[stringOrEmpty(row.grade).trim()] || "A";
   const pack = packSizeToLabel(row.pack_size);
   const price = Number(row.price_krw) || 0;
-  const compareAtPrice = compareAtForPrice(product, price);
+  const rawCompareAtPrice = Number(row.compare_at_krw) || 0;
+  const compareAtPrice = rawCompareAtPrice > price ? rawCompareAtPrice : 0;
   return {
     id: stringOrEmpty(row.id) || `${product.slug}-${stringOrEmpty(row.sku)}`,
     sku:
@@ -1885,20 +1533,34 @@ function mapSupabaseVariantToLocalVariant(row, product, imageFallback) {
     discountPercent: discountPercent(price, compareAtPrice),
     imageUrl,
     stock: Math.max(0, Number(row.stock_qty) || 0),
-    available: Boolean(row.active) && Math.max(0, Number(row.stock_qty) || 0) > 0,
+    active: Boolean(row.active),
+    available:
+      Boolean(row.active) &&
+      Math.max(0, Number(row.stock_qty) || 0) > 0 &&
+      Number.isInteger(price) &&
+      price > 0,
   };
 }
 
 function mapSupabaseProductToCatalogProduct(row) {
-  const brandSlug = stringOrEmpty(row.brands?.slug).trim() || adminBrandSlugFromName(row.brands?.name || row.slug || row.name);
+  const safeProductSlug = normalizeCatalogSlug(row.slug);
+  if (!safeProductSlug) return null;
+  const brandSlug = normalizeCatalogSlug(row.brands?.slug, adminBrandSlugFromName(row.brands?.name || safeProductSlug || row.name));
   const template =
-    products.find((product) => product.slug === row.slug) ||
+    products.find((product) => product.slug === safeProductSlug) ||
     products.find((product) => product.brandSlug === brandSlug) ||
     products[0];
-  const variantRows = Array.isArray(row.product_variants) ? row.product_variants.filter((variant) => variant?.active !== false) : [];
+  const variantRows = Array.isArray(row.product_variants) ? row.product_variants.filter(Boolean) : [];
   const models = uniqueTextValues(variantRows.map((variant) => variant.option_model));
   const colors = uniqueTextValues(variantRows.map((variant) => variant.option_color));
-  const totalStock = variantRows.reduce((sum, variant) => sum + Math.max(0, Number(variant.stock_qty) || 0), 0);
+  const totalStock = variantRows.reduce(
+    (sum, variant) =>
+      sum +
+      (variant.active !== false && Number.isInteger(Number(variant.price_krw)) && Number(variant.price_krw) > 0
+        ? Math.max(0, Number(variant.stock_qty) || 0)
+        : 0),
+    0
+  );
   const image = normalizeCatalogAssetName(
     variantRows.find((variant) => stringOrEmpty(variant.thumbnail_url).trim())?.thumbnail_url,
     template.image
@@ -1907,7 +1569,7 @@ function mapSupabaseProductToCatalogProduct(row) {
     ...template,
     brandSlug,
     brandName: stringOrEmpty(row.brands?.name).trim() || template.brandName || brandLabel(brandSlug),
-    slug: stringOrEmpty(row.slug).trim() || template.slug,
+    slug: safeProductSlug,
     name: stringOrEmpty(row.name).trim() || template.name,
     line: stringOrEmpty(row.subtitle).trim() || template.line,
     copy: stringOrEmpty(row.summary).trim() || template.copy || `${stringOrEmpty(row.subtitle).trim() || template.line} 기준으로 등록한 관리자 상품입니다.`,
@@ -1916,9 +1578,9 @@ function mapSupabaseProductToCatalogProduct(row) {
     models: models.length ? models : template.models || [template.line || template.name],
     image,
     detailImage: normalizeCatalogAssetName(row.detail_image_url, template.detailImage || ""),
-    stock: totalStock || Number(template.stock) || 0,
-    adminRegistered: !products.some((product) => product.slug === row.slug),
-    adminOverride: products.some((product) => product.slug === row.slug),
+    stock: totalStock,
+    adminRegistered: !products.some((product) => product.slug === safeProductSlug),
+    adminOverride: products.some((product) => product.slug === safeProductSlug),
     remoteRegistered: true,
     updatedAt: stringOrEmpty(row.updated_at).trim() || todayIso(),
   };
@@ -1948,11 +1610,6 @@ function primaryProductSlug(brandSlug) {
 function brandProductRoute(brandSlug) {
   const productSlug = primaryProductSlug(brandSlug);
   return productSlug ? `/product/${productSlug}` : "/";
-}
-
-function shippingCost(total) {
-  if (!total) return 0;
-  return total >= shippingPolicy.freeThreshold ? 0 : shippingPolicy.baseFee;
 }
 
 function getSelection(product) {
@@ -2027,7 +1684,7 @@ function isUnavailableVariant(product, selection) {
   return false;
 }
 
-function generatedProductVariants(product) {
+function buildDraftAdminVariants(product) {
   const models = product.models?.length ? product.models : [product.line || product.name];
   const colors = product.colors?.length ? product.colors : ["화이트"];
   const baseStock = Math.max(0, Number(product.stock) || 0);
@@ -2061,97 +1718,60 @@ function generatedProductVariants(product) {
 }
 
 function productVariants(product) {
-  if (Array.isArray(product.dbVariants) && product.dbVariants.length) {
-    return [...product.dbVariants].sort(
-      (left, right) =>
-        product.models.indexOf(left.model) - product.models.indexOf(right.model) ||
-        gradeOptions.findIndex((item) => item.id === left.grade) - gradeOptions.findIndex((item) => item.id === right.grade) ||
-        packOptions.findIndex((item) => item.id === left.pack) - packOptions.findIndex((item) => item.id === right.pack) ||
-        product.colors.indexOf(left.color) - product.colors.indexOf(right.color)
-    );
-  }
-  return generatedProductVariants(product);
+  return Array.isArray(product?.dbVariants)
+    ? [...product.dbVariants].sort(
+        (left, right) =>
+          product.models.indexOf(left.model) - product.models.indexOf(right.model) ||
+          gradeOptions.findIndex((item) => item.id === left.grade) - gradeOptions.findIndex((item) => item.id === right.grade) ||
+          packOptions.findIndex((item) => item.id === left.pack) - packOptions.findIndex((item) => item.id === right.pack) ||
+          product.colors.indexOf(left.color) - product.colors.indexOf(right.color)
+      )
+    : [];
 }
 
 function firstAvailableVariant(product, partial = {}) {
-  const variants = productVariants(product);
-  return (
-    variants.find(
-      (variant) =>
-        variant.available &&
-        Object.entries(partial).every(([key, value]) => !value || variant[key] === value)
-    ) ||
-    variants.find((variant) => variant.available) ||
-    variants[0]
-  );
+  return findFirstOrderableVariant(product, partial);
 }
 
 function normalizeProductSelection(product, selection) {
-  // 각 옵션을 독립적으로 검증만 하고, 사용자가 고른 조합을 그대로 보존한다.
-  // (가용 variant로 스냅백하지 않으므로 모델·등급·구성·색상을 자유롭게 선택 가능)
-  return {
-    model: product.models?.includes(selection.model) ? selection.model : product.models?.[0],
-    grade: gradeOptions.some((item) => item.id === selection.grade) ? selection.grade : "A",
-    pack: packOptions.some((item) => item.id === selection.pack) ? selection.pack : "10구",
-    color: product.colors?.includes(selection.color) ? selection.color : product.colors?.[0],
-  };
+  const exact = findExactOrderableVariant(product, selection);
+  return variantSelection(exact || firstAvailableVariant(product) || selection);
 }
 
 function selectedVariant(product) {
-  const selection = getSelection(product);
-  const exact = productVariants(product).find(
-    (variant) =>
-      variant.model === selection.model &&
-      variant.grade === selection.grade &&
-      variant.pack === selection.pack &&
-      variant.color === selection.color
-  );
-  if (exact) return exact;
-
-  // 정확히 일치하는 variant가 없으면(예: 희소한 DB variant) 선택 기준으로 합성해
-  // 어떤 조합을 골라도 가격이 항상 선택대로 계산되도록 한다.
-  const price = priceForSelection(product, selection);
-  const compareAtPrice = compareAtForPrice(product, price);
-  return {
-    id: `${product.slug}-${productToken(selection.model)}-${selection.grade}-${productToken(selection.pack)}-${productToken(selection.color)}`,
-    sku: `RB-${productSkuToken(product.brandSlug).slice(0, 4)}-${productSkuToken(selection.model).slice(0, 5)}-${selection.grade}-${(packOptions.find((p) => p.id === selection.pack)?.qty) || ""}-${productSkuToken(selection.color).slice(0, 3) || "CLR"}`,
-    model: selection.model,
-    grade: selection.grade,
-    pack: selection.pack,
-    color: selection.color,
-    price,
-    compareAtPrice,
-    discountPercent: discountPercent(price, compareAtPrice),
-    imageUrl: productVariantImage(product, selection),
-    stock: 99,
-    available: true,
-  };
+  return findExactOrderableVariant(product, getSelection(product));
 }
 
-function isOptionSelectable() {
-  // 모든 옵션을 자유롭게 선택할 수 있도록 항상 허용한다.
-  // 가격은 선택한 조합(등급·구성)에 따라 selectedVariant에서 계산된다.
-  return true;
+function isOptionSelectable(product, key, value) {
+  return isVariantOptionSelectable(product, key, value);
 }
 
 function productCardMetrics(product) {
-  const variant = firstAvailableVariant(product, { grade: "A", pack: "10구" }) || selectedVariant(product);
+  const variant = firstAvailableVariant(product, { grade: "A", pack: "10구" }) || firstAvailableVariant(product);
+  if (!variant) {
+    const price = Math.max(0, Number(product.price) || 0);
+    return {
+      variant: {
+        id: "",
+        imageUrl: product.image,
+        grade: "-",
+        pack: "-",
+        stock: 0,
+        available: false,
+      },
+      price,
+      compareAtPrice: 0,
+      discountPercent: 0,
+      orderable: false,
+    };
+  }
   return {
     variant,
     price: variant.price,
     compareAtPrice: variant.compareAtPrice,
     discountPercent: variant.discountPercent,
+    orderable: true,
   };
-}
-
-function bundleId(bundle) {
-  if (bundle.id) return bundle.id;
-  const title = (bundle.title || "bundle")
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, "-")
-    .replace(/^-+|-+$/g, "");
-  const productsKey = bundle.products.map((product) => product.slug).join("-");
-  return `${title || "bundle"}__${productsKey}__${bundle.price}`;
 }
 
 function registerBundle(bundle) {
@@ -2173,14 +1793,24 @@ function registerBundle(bundle) {
   return id;
 }
 
-function cartItemDescription(item) {
-  if (item.kind === "bundle") return item.summary ?? "세트 구성";
-  const selection = item.selection ?? {};
-  return [selection.model, selection.grade, selection.pack, selection.color].filter(Boolean).join(" / ");
+function hydrateCartEntries(entries = pendingCartEntries) {
+  const nextCart = [];
+  for (const entry of entries) {
+    for (const product of catalogProducts()) {
+      const variant = orderableVariants(product).find((item) => item.id === entry.variantId);
+      if (!variant) continue;
+      const quantity = Math.min(Number(entry.quantity) || 1, variant.stock);
+      nextCart.push(cartItemFromVariant(product, variant, quantity));
+      break;
+    }
+  }
+  state.cart = nextCart;
+  saveCartSession(globalThis.sessionStorage, state.cart);
 }
 
-function cartTotal() {
-  return state.cart.reduce((sum, item) => sum + item.price * item.quantity, 0);
+function saveCartState() {
+  state.checkoutIdempotencyKey = "";
+  saveCartSession(globalThis.sessionStorage, state.cart);
 }
 
 function isLoggedIn() {
@@ -2205,39 +1835,16 @@ function toggleWishlist(slug) {
   showToast(message);
 }
 
-function escapeHtml(value) {
-  return String(value)
-    .replaceAll("&", "&amp;")
-    .replaceAll("<", "&lt;")
-    .replaceAll(">", "&gt;")
-    .replaceAll('"', "&quot;")
-    .replaceAll("'", "&#039;");
-}
-
-function renderMultilineText(value) {
-  return escapeHtml(value).replaceAll("\n", "<br />");
-}
-
 function normalizePosts(posts) {
-  const defaultAnswer = defaultPosts.find((post) => post.id === "POST-001");
   const source = Array.isArray(posts) ? posts : defaultPosts;
-  return source.filter((post) => post.id !== "POST-002").map((post) => {
-    if (post.id !== "POST-001" || post.answer) return post;
-    return {
-      ...post,
-      status: "답변 완료",
-      body: post.body || defaultAnswer.body,
-      answer: defaultAnswer.answer,
-      answeredAt: defaultAnswer.answeredAt,
-    };
-  });
+  return source.filter((post) => post?.id !== "POST-002");
 }
 
 function layout(content, options = {}) {
   app.innerHTML = `
     <div class="app-shell">
       ${options.noHeader ? "" : renderHeader()}
-      <main${options.mainClass ? ` class="${options.mainClass}"` : ""}>${content}</main>
+      <main id="main-content" tabindex="-1"${options.mainClass ? ` class="${options.mainClass}"` : ""}>${content}</main>
       ${options.admin || options.noFooter ? "" : renderFooter()}
       ${options.admin || options.noHeader ? "" : renderFloatingConsult()}
       ${renderToast()}
@@ -2245,6 +1852,7 @@ function layout(content, options = {}) {
   `;
   bindGlobalEvents();
   bindPageEvents();
+  bindDialogAccessibility();
 }
 
 function renderHeader() {
@@ -2267,17 +1875,17 @@ function renderHeader() {
       </a>
       <nav class="site-nav" aria-label="주요 메뉴">
         <div class="nav-menu-wrap">
-          <button class="nav-link" type="button" data-product-menu>상품</button>
+          <button class="nav-link" type="button" data-product-menu aria-expanded="${state.menuOpen ? "true" : "false"}" aria-controls="desktop-product-menu">상품</button>
           ${renderProductMenu("desktop-product-menu")}
         </div>
         ${items.map(([label, route]) => `<a class="nav-link" href="#${route}">${label}</a>`).join("")}
       </nav>
       <div class="header-actions">
         ${renderHeaderAuth()}
-        <button class="icon-btn plain-header-icon image-icon-btn" type="button" data-product-menu aria-label="상품 선택">${headerSearchIcon}</button>
+        <button class="icon-btn plain-header-icon image-icon-btn" type="button" data-product-menu aria-label="상품 선택" aria-expanded="${state.menuOpen ? "true" : "false"}" aria-controls="desktop-product-menu">${headerSearchIcon}</button>
         <a class="icon-btn plain-header-icon image-icon-btn" href="#/cart" aria-label="장바구니">${headerCartIcon}<b>${state.cart.length}</b></a>
       </div>
-      <button class="mobile-menu ${state.menuOpen ? "is-open" : ""}" type="button" data-product-menu aria-label="상품 메뉴"><span></span><span></span><span></span></button>
+      <button class="mobile-menu ${state.menuOpen ? "is-open" : ""}" type="button" data-product-menu aria-label="상품 메뉴" aria-expanded="${state.menuOpen ? "true" : "false"}" aria-controls="mobile-product-menu"><span></span><span></span><span></span></button>
       ${renderProductMenu("mobile-product-menu")}
     </header>
   `;
@@ -2312,7 +1920,7 @@ function renderProductMenu(extraClass) {
       `
     : "";
   return `
-    <div class="product-menu ${extraClass} ${state.menuOpen ? "is-open" : ""}" data-product-panel>
+    <div class="product-menu ${extraClass} ${state.menuOpen ? "is-open" : ""}" id="${isMobileMenu ? "mobile-product-menu" : "desktop-product-menu"}" data-product-panel ${state.menuOpen ? "" : 'hidden aria-hidden="true"'}>
       <a href="#/">전체(로스트볼)</a>
       ${brandMenu
         .map(([slug, label]) => {
@@ -2480,7 +2088,7 @@ function buildConsultAnswer(query) {
   }
 
   if (/주문조회|비회원|주문번호|주문 상태|주문상태|조회/.test(normalized)) {
-    return "비회원 주문은 주문조회 화면에서 주문자명, 휴대폰 번호, 주문번호 또는 비회원 주문 비밀번호를 입력하면 확인할 수 있습니다. 회원 주문은 마이페이지 주문내역에서 배송 단계까지 확인할 수 있습니다.";
+    return "비회원 주문은 주문조회 화면에서 주문번호와 주문 생성 시 발급된 무작위 조회 토큰으로 확인할 수 있습니다. 회원 주문은 마이페이지 주문내역에서 배송 단계까지 확인할 수 있습니다.";
   }
 
   if (/쿠폰|회원가입|가입|혜택|할인/.test(normalized)) {
@@ -2587,225 +2195,131 @@ function renderCartMovePrompt() {
   `;
 }
 
-function renderHomeHero(representativeProduct) {
-  const ctaRoute = representativeProduct?.slug
-    ? `/product/${representativeProduct.slug}`
-    : "/";
-  const grades = [
-    { grade: "S", label: "최상급 — 외관 사용감이 가장 적은 상품" },
-    { grade: "A", label: "상급 — 라운딩·연습 모두 무난한 상품" },
-    { grade: "B", label: "실속 — 스크래치·마킹이 있을 수 있는 상품" },
-  ];
-  return `
-    <section class="home-hero" aria-labelledby="home-hero-title">
-      <div class="home-hero-copy">
-        <p class="hero-eyebrow">REBALL LOSTBALL</p>
-        <h1 id="home-hero-title">홀컵까지 이어지는<br />프리미엄 로스트볼</h1>
-        <p class="hero-sub">등급 기준과 선별 검수로 믿을 수 있는 로스트볼.<br />원하는 브랜드와 구성을 합리적인 가격에 만나보세요.</p>
-        <div class="home-hero-cta">
-          <button class="primary-btn cta" type="button" data-route="${ctaRoute}">대표 상품 보기</button>
-          <button class="ghost-btn" type="button" data-route="/inspection">검수 기준 알아보기</button>
-        </div>
-        <div class="home-hero-grades" aria-label="등급 안내">
-          ${grades
-            .map(
-              ({ grade, label }) => `
-            <div class="home-hero-grade-item">
-              ${renderGradeChip(grade)}
-              <span>${escapeHtml(label)}</span>
-            </div>`
-            )
-            .join("")}
-        </div>
-      </div>
-      <div class="home-hero-photo">
-        <img
-          src="${asset("hero-poster.webp")}"
-          alt="검수를 마친 프리미엄 로스트볼"
-          width="720"
-          height="900"
-          decoding="async"
-        />
-      </div>
-    </section>
-  `;
-}
-
 function renderHome() {
-  const titleist = productByBrand("titleist")[0];
-  const taylormade = productByBrand("taylormade")[0];
-  const bridgestone = productByBrand("bridgestone")[0];
-  const callaway = productByBrand("callaway")[0];
-  const srixon = productByBrand("srixon")[0];
-  const volvik = productByBrand("volvik")[0];
-  const saintnine = productByBrand("saintnine")[0];
-  const mix = productByBrand("mix")[0];
-  const bestSellers = [
-    { ...titleist, line: "PRO V1", name: "타이틀리스트 PRO V1 로스트볼", grade: "S", review: "실전 라운드와 선물용으로 많이 찾는 구성입니다" },
-    { ...taylormade, line: "TP5 / TP5X", grade: "A", review: "투어 계열 타구감과 비거리를 함께 챙기기 좋습니다" },
-    { ...bridgestone, line: "투어 X / XS", grade: "A", review: "직진성 위주로 찾는 고객 문의가 많은 구성입니다" },
-    { ...volvik, line: "비비드 컬러", name: "볼빅 비비드 컬러 로스트볼", grade: "B", review: "컬러볼 입문과 연습용으로 부담 없이 고를 수 있습니다" },
-    { ...callaway, line: "CHROME TOUR", grade: "A", review: "비거리와 컨트롤 밸런스를 찾는 고객에게 맞는 구성입니다" },
-    { ...srixon, line: "Z-STAR", grade: "A", review: "재구매 비중이 높은 스핀 컨트롤 중심 라인입니다" },
-  ];
-  const storeProducts = [
-    { product: titleist, title: "타이틀리스트 로스트볼", meta: "PRO V1 / PRO V1X / 투어스피드 / 트루필 / 벨로시티", note: "S / A / 10구 · 30구" },
-    { product: taylormade, title: "테일러메이드 로스트볼", meta: "TP5 / TP5X / TP5 Pix / 투어리스폰스 / 혼합", note: "A / 10구 · 30구" },
-    { product: bridgestone, title: "브리지스톤 로스트볼", meta: "투어 X / XS / E12 / 혼합", note: "A / 10구 · 30구" },
-    { product: callaway, title: "캘러웨이 CHROME TOUR 로스트볼", meta: "CHROME TOUR / 트리플트랙", note: "A / 10구 · 30구" },
-    { product: srixon, title: "스릭슨 로스트볼", meta: "Z-STAR / 반반볼", note: "A / 10구 · 30구" },
-    { product: volvik, title: "볼빅 로스트볼", meta: "비비드 컬러 / 화이트 / 반반볼 크리스탈", note: "B / 10구 · 30구" },
-    { product: saintnine, title: "세인트나인 로스트볼", meta: "화이트 / 컬러", note: "A / 10구 · 30구" },
-    { product: mix, title: "브랜드혼합 로스트볼", meta: "화이트 / 컬러", note: "B / 실속형" },
-  ];
+  const catalog = catalogProducts().filter((product) => !product.isPlaceholder);
+  const representativeProducts = ["titleist", "taylormade", "bridgestone"]
+    .map((brand) => productByBrand(brand)[0])
+    .filter(Boolean);
   const bundleSets = [
-    { title: "타이틀리스트 인기 세트", products: [titleist, titleist], desc: "PRO V1 10구 + PRO V1X 10구", price: 25800 },
-    { title: "스핀 & 컨트롤 세트", products: [taylormade, srixon], desc: "TP5 / TP5X 10구 + Z-STAR 10구", price: 23800 },
-    { title: "직진성 추천 세트", products: [bridgestone, callaway], desc: "투어 X / XS 10구 + CHROME TOUR 10구", price: 23800 },
-    { title: "가성비 실속 세트", products: [saintnine, mix], desc: "세인트나인 10구 + 브랜드혼합 10구", price: 18900 },
-  ];
-  const homeFilterChips = [
-    ["전체", "/"],
-    ...brandMenu.map(([slug, label]) => [label, brandProductRoute(slug)]),
-  ];
+    ["타이틀리스트 인기 세트", "titleist", "titleist", "PRO V1 10구 + PRO V1X 10구", 25800],
+    ["스핀 & 컨트롤 세트", "taylormade", "srixon", "TP5 / TP5X 10구 + Z-STAR 10구", 23800],
+    ["직진성 추천 세트", "bridgestone", "callaway", "투어 X / XS 10구 + CHROME TOUR 10구", 23800],
+  ]
+    .map(([title, left, right, desc, price]) => ({
+      title,
+      products: [productByBrand(left)[0], productByBrand(right)[0]],
+      desc,
+      price,
+    }))
+    .filter((bundle) => bundle.products.every(Boolean));
+  const filters = [["전체", "/"], ...brandMenu.map(([slug, label]) => [label, brandProductRoute(slug)])];
+
   layout(`
-    ${FlightTransitionSection([titleist, taylormade, bridgestone])}
+    ${FlightTransitionSection(representativeProducts)}
 
-    <section class="home-filter panel-card" id="products">
-      <div>
-        <p>인기 제품</p>
-        <span>지금 많이 찾는 제품이에요</span>
-      </div>
-      <div class="chip-row" aria-label="상품 필터">
-        ${homeFilterChips
-          .map(
-            ([label, route], index) =>
-              `<button class="${index === 0 ? "is-active" : ""}" type="button" data-route="${route}">${escapeHtml(label)}</button>`
-          )
-          .join("")}
-      </div>
-      <div class="home-filter-actions">
-        <button class="gold-cart-btn compact" type="button" data-add-card="${titleist.slug}">장바구니 담기 ${originalCartIcon}</button>
-        <button class="secondary-btn compact" type="button" data-route="/product/${titleist.slug}">전체보기</button>
-      </div>
-    </section>
-
-    <section class="hero-carousel" aria-label="프로모션 배너">
-      <div class="hero-track" style="transform: translateX(-${state.activeBanner * 100}%);">
-        ${banners.map((banner) => renderBanner(banner)).join("")}
-      </div>
-      <div class="hero-dots">
-        ${banners
-          .map(
-            (_, index) =>
-              `<button class="${state.activeBanner === index ? "is-active" : ""}" type="button" data-banner-index="${index}" aria-label="${index + 1}번 배너 보기"></button>`
-          )
-          .join("")}
-      </div>
-    </section>
-
-    <section class="home-section panel-card featured-products-section">
-      <header class="home-section-head">
-        <div>
-          <p>추천 상품</p>
+    <section class="home-stage home-stage--trust" data-home-stage="2" aria-labelledby="home-trust-title">
+      <header class="home-stage-head">
+        <p>GRADE & INSPECTION</p>
+        <h2 id="home-trust-title">등급과 검수 기준을 먼저 확인하세요</h2>
+      </header>
+      <div class="home-section panel-card home-reason-section">
+        <div class="reason-grid">
+          ${renderReasonCard("why-shield", "엄격한 선별 기준", "전문가의 단계별 검수를 통과한 볼만 제공합니다.")}
+          ${renderReasonCard("why-leaf", "합리적인 가격", "새 볼 대비 부담 없는 가격으로 퍼포먼스를 경험하세요.")}
+          ${renderReasonCard("why-medal", "실재 재고 기준", "등록된 모델·등급·구성·색상만 정확히 선택합니다.")}
+          ${renderReasonCard("why-headset", "믿을 수 있는 서비스", "빠른 출고와 문의 응대로 언제나 만족을 드립니다.")}
         </div>
+      </div>
+      ${renderHomeGradeOverviewSection()}
+      ${renderHomeInspectionProcessSection()}
+    </section>
+
+    <section class="home-stage home-stage--products" data-home-stage="3" id="products" aria-labelledby="home-products-title">
+      <header class="home-stage-head home-stage-head--actions">
+        <div><p>BEST PRODUCTS</p><h2 id="home-products-title">실제 재고가 확인된 베스트 상품</h2></div>
         <button class="secondary-btn compact" type="button" data-route="/category/titleist">브랜드별 보기</button>
       </header>
+      <div class="chip-row home-stage-filters" aria-label="브랜드별 상품 이동">
+        ${filters.map(([label, route], index) => `<button class="${index === 0 ? "is-active" : ""}" type="button" data-route="${route}">${escapeHtml(label)}</button>`).join("")}
+      </div>
+      ${renderHomeCarousel()}
       <div class="product-grid featured-product-grid">
-        ${catalogProducts().filter((product) => !product.isPlaceholder).slice(0, 8).map(renderProductCard).join("")}
+        ${catalog.slice(0, 8).map(renderProductCard).join("")}
+      </div>
+      <div class="home-bundle-group" aria-labelledby="home-bundle-title">
+        <h2 id="home-bundle-title">추천 세트 미리보기</h2>
+        <p>세트별 실제 variant가 등록되기 전에는 개별 상품에서 옵션을 선택해 주세요.</p>
+        <div class="bundle-grid">${bundleSets.map(renderBundleCard).join("")}</div>
       </div>
     </section>
 
-    <section class="home-section panel-card bestseller-section">
-      <header class="home-section-head">
+    <section class="home-stage home-stage--shipping" data-home-stage="4" aria-labelledby="home-shipping-title">
+      <header class="home-stage-head"><p>DELIVERY & RETURNS</p><h2 id="home-shipping-title">배송·교환·반품 정보를 주문 전에 확인하세요</h2></header>
+      <div class="home-section panel-card home-shipping-section">
+        <div class="service-grid">
+          ${renderServiceCard("service-truck", "출고 마감", `${shippingPolicy.cutoffTime} 이전 주문은 당일 출고 준비`)}
+          ${renderServiceCard("service-box", "무료 배송 기준", `₩${money.format(shippingPolicy.freeThreshold)} 이상 구매 시 무료 배송`)}
+          ${renderServiceCard("service-return", "교환/반품 정책", `${shippingPolicy.simpleReturnWindow} 단순변심 반품 · 왕복 ${money.format(shippingPolicy.simpleReturnFee)}원`)}
+          ${renderServiceCard("service-headset", "고객센터", `${businessProfile.supportPhone}\n${businessProfile.operationHours} 운영`)}
+        </div>
+      </div>
+      ${renderHomeOrderProcessSection()}
+    </section>
+
+    <section class="home-stage home-stage--store" data-home-stage="5" aria-labelledby="home-store-title">
+      <header class="home-stage-head"><p>STORE & BUSINESS</p><h2 id="home-store-title">매장과 사업자 정보를 투명하게 공개합니다</h2></header>
+      <article class="store-notice panel-card">
+        <h3>${businessProfile.address}</h3>
+        <p>대표 ${businessProfile.owner} · 사업자등록번호 ${businessProfile.businessNumber}<br />운영시간 ${businessProfile.operationHours} · 고객센터 ${businessProfile.supportPhone}<br />반품 주소 ${businessProfile.returnAddress}</p>
         <div>
-          <p>베스트셀러</p>
-          <h1>많이 찾는 인기 브랜드</h1>
+          <button class="secondary-btn compact dark" type="button" data-route="/store">매장소개 보기</button>
+          <button class="ghost-btn compact" type="button" data-route="/business">사업자 정보 확인</button>
         </div>
-        <button class="secondary-btn compact" type="button" data-route="/product/${titleist.slug}">전체 상품 보기</button>
-      </header>
-      <div class="best-grid">
-        ${bestSellers.map(renderBestSellerCard).join("")}
-      </div>
+      </article>
     </section>
 
-    <section class="home-section panel-card home-reason-section">
-      <header class="home-section-head">
-        <div>
-          <p>왜 리볼 로스트볼인가요?</p>
-          <span>이미지 A컷 신뢰 혜택 카드</span>
-        </div>
-      </header>
-      <div class="reason-grid">
-        ${renderReasonCard("why-shield", "엄격한 선별 기준", "전문가의 3단계 검수를 통과한 볼만 제공합니다.")}
-        ${renderReasonCard("why-leaf", "합리적인 가격", "새 볼 대비 부담 없는 가격으로 퍼포먼스를 경험하세요.")}
-        ${renderReasonCard("why-medal", "다양한 선택", "모델·등급·구성·색상까지 원하는 옵션을 선택합니다.")}
-        ${renderReasonCard("why-headset", "믿을 수 있는 서비스", "빠른 출고와 문의 응대로 언제나 만족을 드립니다.")}
-      </div>
-    </section>
-
-    ${renderHomeGradeOverviewSection()}
-    ${renderHomeInspectionProcessSection()}
-    ${renderHomeOrderProcessSection()}
-    ${renderHomeReviewSection()}
-
-    <section class="home-section panel-card home-shipping-section">
-      <header class="home-section-head">
-        <div>
-          <p>배송 및 주문 안내</p>
-          <span>컴포넌트B의 다크 서비스 카드</span>
-        </div>
-      </header>
-      <div class="service-grid">
-        ${renderServiceCard("service-truck", "출고 마감", `${shippingPolicy.cutoffTime} 이전 주문은 당일 출고 준비`)}
-        ${renderServiceCard("service-box", "무료 배송 기준", `₩${money.format(shippingPolicy.freeThreshold)} 이상 구매 시 무료 배송`)}
-        ${renderServiceCard("service-return", "교환/반품 정책", `${shippingPolicy.simpleReturnWindow} 단순변심 반품 · 왕복 ${money.format(shippingPolicy.simpleReturnFee)}원`)}
-        ${renderServiceCard("service-headset", "고객센터", `${businessProfile.supportPhone}\n${businessProfile.operationHours} 운영`)}
-      </div>
-    </section>
-
-    <section class="home-section panel-card store-select-section">
-      <header class="home-section-head">
-        <div>
-          <p>상품 선택과 매장 안내</p>
-          <span>상품을 먼저 선택하고 매장/검수 기준으로 신뢰를 확인합니다.</span>
-        </div>
-      </header>
-      <div class="store-select-grid">
-        <article class="store-notice">
-          <h2>${businessProfile.address}</h2>
-          <p>운영시간 ${businessProfile.operationHours}<br />고객센터 ${businessProfile.supportPhone}<br />반품 주소 동일</p>
-          <div>
-            <button class="secondary-btn compact dark" type="button" data-route="/store">매장소개 보기</button>
-            <button class="secondary-btn compact" type="button" data-route="/inspection">검수 기준 공개</button>
-          </div>
-        </article>
-        <div class="store-product-list">
-          ${storeProducts.map(renderStoreProduct).join("")}
-        </div>
-      </div>
-    </section>
-
-    <section class="home-section panel-card home-bundle-section">
-      <header class="home-section-head">
-        <div>
-          <p>함께 보면 좋은 추천 세트</p>
-          <span>이미지B의 번들 카드</span>
-        </div>
-      </header>
-      <div class="bundle-grid">
-        ${bundleSets.map(renderBundleCard).join("")}
-      </div>
-    </section>
-
-    <section class="home-bottom-cta">
-      <div>
-        <h2>지금 바로 프리미엄 로스트볼을 경험하세요!</h2>
-        <p>정직한 품질과 합리적인 가격, 리볼 로스트볼이 약속드립니다.</p>
-      </div>
-      <button class="gold-cart-btn compact home-bottom-cta-btn" type="button" data-product-menu>전체 상품 보러가기</button>
+    <section class="home-bottom-cta" data-home-stage="6" aria-labelledby="home-final-cta-title">
+      <div><h2 id="home-final-cta-title">지금 바로 프리미엄 로스트볼을 경험하세요!</h2><p>정직한 품질과 합리적인 가격, 리볼 로스트볼이 약속드립니다.</p></div>
+      <button class="gold-cart-btn home-bottom-cta-btn" type="button" data-scroll-to="products">실제 재고 상품 보기</button>
     </section>
   `);
+}
+
+function renderHomeCarousel() {
+  const active = banners[state.activeBanner] || banners[0];
+  return `
+    <section class="hero-carousel home-promotion-carousel" data-home-carousel aria-label="프로모션 안내">
+      <div class="hero-track">${renderBanner(active)}</div>
+      <div class="hero-dots" aria-label="프로모션 선택">
+        ${banners.map((_, index) => `<button class="${state.activeBanner === index ? "is-active" : ""}" type="button" data-banner-index="${index}" aria-label="${index + 1}번 프로모션 보기" aria-current="${state.activeBanner === index ? "true" : "false"}"></button>`).join("")}
+      </div>
+    </section>`;
+}
+
+function bindHomeCarouselControls() {
+  document.querySelectorAll("[data-banner-index]").forEach((node) => {
+    node.addEventListener("click", () => {
+      const index = Number(node.dataset.bannerIndex);
+      if (!Number.isInteger(index) || !banners[index]) return;
+      state.activeBanner = index;
+      const current = document.querySelector("[data-home-carousel]");
+      if (current) current.outerHTML = renderHomeCarousel();
+      bindHomeCarouselControls();
+      const nextCarousel = document.querySelector("[data-home-carousel]");
+      nextCarousel?.querySelectorAll("[data-route]").forEach((control) =>
+        control.addEventListener("click", () => routeTo(control.dataset.route))
+      );
+      nextCarousel?.querySelectorAll("[data-scroll-to]").forEach((control) =>
+        control.addEventListener("click", () => {
+          state.pendingScrollTarget = control.dataset.scrollTo;
+          window.requestAnimationFrame(flushPendingScroll);
+        })
+      );
+      window.requestAnimationFrame(() =>
+        document.querySelector(`[data-banner-index="${index}"]`)?.focus()
+      );
+    });
+  });
 }
 
 function renderBanner(banner) {
@@ -2843,11 +2357,11 @@ function renderBanner(banner) {
                 buttonsOnly
                   ? ""
                   : `<span>${escapeHtml(banner.eyebrow)}</span>
-              <h1>${escapeHtml(banner.title).replaceAll("\n", "<br />")}</h1>
+              <h2>${escapeHtml(banner.title).replaceAll("\n", "<br />")}</h2>
               <p>${body}</p>`
               }
               <div class="hero-cta-row">
-                <button class="gold-cart-btn compact" type="button" data-route="${banner.route}">${escapeHtml(banner.cta)} ${icons.chevron}</button>
+                <button class="secondary-btn compact dark" type="button" data-route="${banner.route}">${escapeHtml(banner.cta)} ${icons.chevron}</button>
                 ${
                   banner.secondaryCta
                     ? `<button class="secondary-btn compact" type="button" ${banner.secondaryScrollTarget ? `data-scroll-to="${banner.secondaryScrollTarget}"` : `data-route="${banner.secondaryRoute || "/"}"`}>${escapeHtml(banner.secondaryCta)} ${icons.chevron}</button>`
@@ -2984,6 +2498,7 @@ function renderTrustItem(iconName, title, body) {
 function renderBestSellerCard(product) {
   const wished = isWished(product.slug);
   const isPlaceholder = Boolean(product.isPlaceholder || !product.image);
+  const metrics = productCardMetrics(product);
   return `
     <article class="best-item">
       <div class="best-card">
@@ -3000,9 +2515,9 @@ function renderBestSellerCard(product) {
         </div>
         <div class="best-body">
           <span>${escapeHtml(product.brandName)}</span>
-          <h2>${escapeHtml(product.line)}</h2>
-          <p>재고 보유 · 15시 당일 업데이트</p>
-          <strong>${isPlaceholder ? "원본 이미지 연결 예정" : `₩${money.format(product.price)}부터`}</strong>
+          <h3>${escapeHtml(product.line)}</h3>
+          <p>${metrics.orderable ? "재고 보유 · 15시 당일 업데이트" : "실제 재고 등록 대기"}</p>
+          <strong>${isPlaceholder ? "원본 이미지 연결 예정" : metrics.orderable ? `₩${money.format(metrics.price)}부터` : "판매 준비중"}</strong>
         </div>
       </div>
       <div class="best-review ${isPlaceholder ? "no-action" : ""}">
@@ -3010,7 +2525,7 @@ function renderBestSellerCard(product) {
         ${
           isPlaceholder
             ? ""
-            : `<button class="mini-cart-btn" type="button" data-add-card="${product.slug}" aria-label="${escapeHtml(product.name)} 장바구니 담기"><img class="mini-product-img" src="${asset(product.image)}" alt="" /></button>`
+            : `<button class="mini-cart-btn" type="button" data-add-card="${product.slug}" aria-label="${escapeHtml(product.name)} 장바구니 담기" ${metrics.orderable ? "" : 'disabled aria-disabled="true"'}><img class="mini-product-img" src="${asset(product.image)}" alt="" /></button>`
         }
       </div>
     </article>
@@ -3018,7 +2533,7 @@ function renderBestSellerCard(product) {
 }
 
 function renderReasonCard(iconName, title, body) {
-  return `<article>${renderShopIcon(iconName, "section-icon reason-icon")}<div><h2>${escapeHtml(title)}</h2><p>${escapeHtml(body)}</p></div></article>`;
+  return `<article>${renderShopIcon(iconName, "section-icon reason-icon")}<div><h3>${escapeHtml(title)}</h3><p>${escapeHtml(body)}</p></div></article>`;
 }
 
 function renderGradeCard(grade) {
@@ -3052,7 +2567,7 @@ function renderServiceCard(iconName, title, body) {
     <article>
       ${renderShopIcon(iconName, "service-icon")}
       <div>
-        <h2>${escapeHtml(title)}</h2>
+        <h3>${escapeHtml(title)}</h3>
         <p>${escapeHtml(body).replaceAll("\n", "<br />")}</p>
       </div>
     </article>
@@ -3105,10 +2620,10 @@ function renderBundleCard(bundle) {
         <span>+</span>
         <img src="${asset(bundle.products[1].image)}" alt="" />
       </div>
-      <h2>${escapeHtml(bundle.title)}</h2>
+      <h3>${escapeHtml(bundle.title)}</h3>
       <p>${escapeHtml(bundle.desc)}</p>
       <strong>₩${money.format(bundle.price)}</strong>
-      <button class="bundle-cart-btn" type="button" data-add-bundle="${id}" aria-label="${escapeHtml(bundle.title)} 장바구니 담기">${renderUiIcon("bundle-cart", "bundle-cart-img")}</button>
+      <button class="bundle-cart-btn" type="button" data-add-bundle="${id}" aria-label="${escapeHtml(bundle.title)} 실제 구성 등록 대기" disabled aria-disabled="true" title="실제 구성 variant 등록 후 구매할 수 있습니다.">${renderUiIcon("bundle-cart", "bundle-cart-img")}</button>
     </article>
   `;
 }
@@ -3127,11 +2642,11 @@ function renderProductCard(product) {
       </div>
       <div class="product-body">
         <div class="product-top"><span>${escapeHtml(product.brandName)}</span><b>로스트볼</b></div>
-        <h2>${escapeHtml(product.name)}</h2>
+        <h3>${escapeHtml(product.name)}</h3>
         <p>${escapeHtml(product.copy)}</p>
         <div class="product-price-stack" aria-label="상품 가격">
-          <span><del>₩${money.format(metrics.compareAtPrice)}</del><b>${metrics.discountPercent}%</b></span>
-          <strong>₩${money.format(metrics.price)}부터</strong>
+          ${metrics.orderable && metrics.compareAtPrice > metrics.price ? `<span><del>₩${money.format(metrics.compareAtPrice)}</del><b>${metrics.discountPercent}%</b></span>` : ""}
+          <strong>${metrics.orderable ? `₩${money.format(metrics.price)}부터` : "판매 준비중"}</strong>
         </div>
         <div class="product-rating-row" aria-label="리뷰 요약">
           <span>${reviewStats.count ? "★★★★★" : "후기 없음"}</span>
@@ -3141,11 +2656,11 @@ function renderProductCard(product) {
         <dl>
           <div><dt>등급</dt><dd>S / A / B</dd></div>
           <div><dt>구성</dt><dd>10구 / 30구</dd></div>
-          <div><dt>재고</dt><dd>${metrics.variant.stock}세트</dd></div>
+          <div><dt>재고</dt><dd>${metrics.orderable ? `${metrics.variant.stock}세트` : "확인 중"}</dd></div>
         </dl>
         <div class="product-bottom">
-          <strong>${escapeHtml(metrics.variant.grade)}등급 · ${escapeHtml(metrics.variant.pack)}</strong>
-          <button class="gold-cart-btn card-cart-btn" type="button" data-add-card="${product.slug}">장바구니 담기 ${originalCartIcon}</button>
+          <strong>${metrics.orderable ? `${escapeHtml(metrics.variant.grade)}등급 · ${escapeHtml(metrics.variant.pack)}` : "실제 variant 등록 대기"}</strong>
+          <button class="gold-cart-btn card-cart-btn" type="button" data-add-card="${product.slug}" ${metrics.orderable ? "" : 'disabled aria-disabled="true"'}>장바구니 담기 ${originalCartIcon}</button>
         </div>
       </div>
     </article>
@@ -3153,13 +2668,14 @@ function renderProductCard(product) {
 }
 
 function renderHoverActions(product, wished) {
+  const orderable = productCardMetrics(product).orderable;
   return `
     <div class="hover-actions" aria-label="${escapeHtml(product.name)} 빠른 작업">
-      <button class="hover-action-btn wish ${wished ? "is-active" : ""}" type="button" data-wish-card="${product.slug}" aria-pressed="${wished ? "true" : "false"}">
-        <span>WISH</span>
+      <button class="hover-action-btn wish ${wished ? "is-active" : ""}" type="button" data-wish-card="${product.slug}" aria-label="${escapeHtml(product.name)} 찜하기" aria-pressed="${wished ? "true" : "false"}">
+        <span>찜하기</span>
       </button>
-      <button class="hover-action-btn add" type="button" data-add-card="${product.slug}">
-        <span>ADD</span>
+      <button class="hover-action-btn add" type="button" data-add-card="${product.slug}" aria-label="${escapeHtml(product.name)} 장바구니 담기" ${orderable ? "" : 'disabled aria-disabled="true"'}>
+        <span>장바구니</span>
       </button>
     </div>
   `;
@@ -3180,9 +2696,23 @@ function renderCategory(brandSlug) {
 
 function renderDetail(slug) {
   const product = productBySlug(slug);
+  if (!product) {
+    layout(`<section class="empty-card"><h1>상품을 찾을 수 없습니다.</h1><button class="secondary-btn" type="button" data-route="/">전체 상품 보기</button></section>`);
+    return;
+  }
   const selection = getSelection(product);
   const variant = selectedVariant(product);
-  const price = variant.price;
+  const orderable = isOrderableVariant(variant);
+  const price = orderable ? variant.price : Math.max(0, Number(product.price) || 0);
+  const displayVariant = variant || {
+    sku: "판매 준비중",
+    stock: 0,
+    available: false,
+    price,
+    compareAtPrice: 0,
+    discountPercent: 0,
+    imageUrl: product.image,
+  };
   const galleryItems = productGalleryItems(product, variant);
   const modalInitialImage = galleryItems[0] ?? { image: product.image, label: product.name };
 
@@ -3202,15 +2732,15 @@ function renderDetail(slug) {
           </div>
         </section>
         <aside class="buy-panel">
-          <div class="badge-row"><span>${variant.available ? `재고 ${variant.stock}세트` : "품절"}</span><b>${selection.grade}</b></div>
+          <div class="badge-row"><span>${orderable ? `재고 ${displayVariant.stock}세트` : "판매 준비중"}</span><b>${selection.grade || "-"}</b></div>
           <p class="buy-eyebrow">${escapeHtml(product.brandName)} / 로스트볼</p>
           <h1>${escapeHtml(product.name)}</h1>
           <small>${escapeHtml(product.copy)}</small>
           <div class="detail-price-block">
             <strong class="detail-price">₩${money.format(price)}</strong>
-            <span><del>₩${money.format(variant.compareAtPrice)}</del><b>${variant.discountPercent}% 할인</b></span>
+            ${orderable && displayVariant.compareAtPrice > price ? `<span><del>₩${money.format(displayVariant.compareAtPrice)}</del><b>${displayVariant.discountPercent}% 할인</b></span>` : ""}
           </div>
-          <em class="stock-line">SKU ${escapeHtml(variant.sku)} · 재고 ${variant.stock}세트 · 15시 당일 업데이트</em>
+          <em class="stock-line">${orderable ? `SKU ${escapeHtml(displayVariant.sku)} · 재고 ${displayVariant.stock}세트 · 15시 당일 업데이트` : "실제 variant와 재고가 확인되면 구매할 수 있습니다."}</em>
           <dl class="detail-summary-table">
             <div><dt>모델</dt><dd>${escapeHtml(selection.model)}</dd></div>
             <div><dt>등급 / 구성</dt><dd>${escapeHtml(selection.grade)} · ${escapeHtml(selection.pack)}</dd></div>
@@ -3227,11 +2757,11 @@ function renderDetail(slug) {
             <span>선택한 옵션</span>
             <strong>${escapeHtml(selection.model)} → ${escapeHtml(selection.grade)} → ${escapeHtml(selection.pack)} → ${escapeHtml(selection.color)}</strong>
             <b>₩${money.format(price)}</b>
-            <small>SKU ${escapeHtml(variant.sku)}</small>
+            <small>SKU ${escapeHtml(displayVariant.sku)}</small>
           </div>
           <div class="action-row">
-            <button class="gold-cart-btn" type="button" data-add-detail="${product.slug}">장바구니 담기 ${originalCartIcon}</button>
-            <button class="secondary-btn" type="button" data-buy-now="${product.slug}">바로 구매</button>
+            <button class="secondary-btn" type="button" data-add-detail="${product.slug}" data-variant-id="${escapeHtml(displayVariant?.id || "")}" ${orderable ? "" : 'disabled aria-disabled="true"'}>장바구니 담기 ${originalCartIcon}</button>
+            <button class="gold-cart-btn" type="button" data-buy-now="${product.slug}" data-variant-id="${escapeHtml(displayVariant?.id || "")}" ${orderable ? "" : 'disabled aria-disabled="true"'}>바로 구매</button>
           </div>
         </aside>
       </div>
@@ -3243,9 +2773,9 @@ function renderDetail(slug) {
       ${renderDetailPostContent(product)}
     </section>
     <div class="modal" data-modal aria-hidden="true">
-      <button type="button" class="modal-backdrop" data-close-modal></button>
-      <section class="modal-card">
-        <header><strong>상품 이미지 보기</strong><button type="button" data-close-modal>${icons.close}</button></header>
+      <button type="button" class="modal-backdrop" data-close-modal aria-label="상품 이미지 창 닫기"></button>
+      <section class="modal-card" role="dialog" aria-modal="true" aria-labelledby="gallery-dialog-title" tabindex="-1">
+        <header><h2 id="gallery-dialog-title">상품 이미지 보기</h2><button type="button" data-close-modal aria-label="상품 이미지 창 닫기">${icons.close}</button></header>
         <img src="${asset(modalInitialImage.image)}" alt="${escapeHtml(modalInitialImage.label)} 확대 이미지" data-gallery-modal-image />
       </section>
     </div>
@@ -3330,6 +2860,8 @@ function renderDetailCheckItem(iconName, title, body) {
 }
 
 function renderDetailInfoSection(product) {
+  const variant = selectedVariant(product);
+  const orderable = isOrderableVariant(variant);
   return `
     <section class="detail-info-section">
       <header class="detail-section-head">
@@ -3359,7 +2891,7 @@ function renderDetailInfoSection(product) {
       <div class="detail-mini-cta">
         <strong>당신의 라운드를 더 가치 있게</strong>
         <span>리볼 로스트볼과 함께 검수된 품질과 합리적인 가격을 바로 확인하세요.</span>
-        <button class="detail-mini-cta-btn" type="button" data-buy-now="${product.slug}">지금 바로 구매</button>
+        <button class="detail-mini-cta-btn" type="button" data-buy-now="${product.slug}" data-variant-id="${escapeHtml(variant?.id || "")}" ${orderable ? "" : 'disabled aria-disabled="true"'}>지금 바로 구매</button>
       </div>
     </section>
   `;
@@ -3415,10 +2947,12 @@ function protectedDetailMaxWidth() {
 
 function renderProtectedDetailAsset(product) {
   const maxWidth = protectedDetailMaxWidth();
+  const variant = selectedVariant(product);
+  const orderable = isOrderableVariant(variant);
   return `
     <section class="product-detail-frame-shot protected-image-zone" style="--protected-image-max-width:${maxWidth}px" aria-label="${escapeHtml(product.name)} 상세 이미지 원본">
       <img src="${asset(detailAssetName(product))}" alt="${escapeHtml(product.name)} 상품별 상세페이지 원본" loading="eager" fetchpriority="high" width="724" height="2172" decoding="async" />
-      <button class="protected-detail-cta-hitbox" type="button" data-buy-now="${product.slug}" aria-label="${escapeHtml(product.name)} 상세 이미지 하단 구매 버튼"></button>
+      <button class="protected-detail-cta-hitbox" type="button" data-buy-now="${product.slug}" data-variant-id="${escapeHtml(variant?.id || "")}" aria-label="${escapeHtml(product.name)} 상세 이미지 하단 구매 버튼" ${orderable ? "" : 'disabled aria-disabled="true"'}></button>
     </section>
   `;
 }
@@ -3437,6 +2971,8 @@ function detailRelatedBundles(product) {
 
 function renderDetailPostContent(product) {
   const bundles = detailRelatedBundles(product);
+  const variant = selectedVariant(product);
+  const orderable = isOrderableVariant(variant);
   return `
     <section class="home-section panel-card detail-service-section">
       <header class="home-section-head">
@@ -3468,7 +3004,7 @@ function renderDetailPostContent(product) {
         <h2>${escapeHtml(product.name)}, 지금 합리적으로 만나보세요</h2>
         <p>정직한 품질과 합리적인 가격으로 준비했습니다.</p>
       </div>
-      <button class="gold-cart-btn compact home-bottom-cta-btn" type="button" data-buy-now="${product.slug}">지금 바로 구매하기 ${shopIcons.cart}</button>
+      <button class="gold-cart-btn compact home-bottom-cta-btn" type="button" data-buy-now="${product.slug}" data-variant-id="${escapeHtml(variant?.id || "")}" ${orderable ? "" : 'disabled aria-disabled="true"'}>지금 바로 구매하기 ${shopIcons.cart}</button>
     </section>
   `;
 }
@@ -3492,67 +3028,54 @@ function renderOptionGroup(product, key, label, values) {
 
 function addToCart(slug, quantity = 1, options = {}) {
   const product = productBySlug(slug);
-  const selection = getSelection(product);
+  if (!product) {
+    showToast("상품을 찾을 수 없습니다.");
+    return false;
+  }
   const variant = selectedVariant(product);
-  const price = variant.price;
-  const key = `${slug}|${selection.model}|${selection.grade}|${selection.pack}|${selection.color}`;
-  const existing = state.cart.find((item) => item.key === key);
+  if (!variant) {
+    showToast("실제 재고가 확인된 옵션만 장바구니에 담을 수 있습니다.");
+    return false;
+  }
+  let safeQuantity;
+  try {
+    safeQuantity = assertOrderableQuantity(variant, quantity);
+  } catch (error) {
+    showToast(error.message);
+    return false;
+  }
+  const key = variant.id;
+  const existing = state.cart.find((item) => item.variantId === variant.id);
 
   if (existing) {
-    existing.quantity += quantity;
+    try {
+      existing.quantity = assertOrderableQuantity(variant, existing.quantity + safeQuantity);
+    } catch (error) {
+      showToast(error.message);
+      return false;
+    }
   } else {
-    state.cart.push({
-      key,
-      slug,
-      name: product.name,
-      brandName: product.brandName,
-      image: variant.imageUrl || product.image,
-      selection,
-      sku: variant.sku,
-      compareAtPrice: variant.compareAtPrice,
-      price,
-      quantity,
-    });
+    state.cart.push(cartItemFromVariant(product, variant, safeQuantity));
   }
 
-  save("reball.cart", state.cart);
+  saveCartState();
   state.cartPromptOpen = Boolean(options.promptCart);
   renderRoute();
   showToast("장바구니에 담았습니다.");
+  if (state.cartPromptOpen) focusDialogSoon(".cart-move-card");
+  return true;
 }
 
 function addBundleToCart(id, quantity = 1, options = {}) {
   const bundle = bundleRegistry.get(id);
-  if (!bundle) return;
-  const key = `bundle:${id}`;
-  const existing = state.cart.find((item) => item.key === key);
-
-  if (existing) {
-    existing.quantity += quantity;
-  } else {
-    state.cart.push({
-      key,
-      kind: "bundle",
-      slug: id,
-      name: bundle.title,
-      brandName: bundle.brandName,
-      image: bundle.image,
-      summary: bundle.desc,
-      price: bundle.price,
-      quantity,
-      bundleProducts: bundle.products,
-    });
-  }
-
-  save("reball.cart", state.cart);
-  state.cartPromptOpen = Boolean(options.promptCart);
-  renderRoute();
-  showToast("장바구니에 담았습니다.");
+  if (!bundle) return false;
+  showToast("추천 세트는 실제 구성 variant가 등록된 뒤 구매할 수 있습니다.");
+  return false;
 }
 
 function renderCart() {
-  const total = cartTotal();
-  const deliveryFee = shippingCost(total);
+  const total = cartTotal(state.cart);
+  const deliveryFee = shippingCost(total, shippingPolicy);
   const finalAmount = total + deliveryFee;
   layout(`
     <section class="page-title">
@@ -3594,43 +3117,11 @@ function renderCartItem(item) {
         <strong>₩${money.format(item.price)}</strong>
       </div>
       <div class="qty-control">
-        <button type="button" data-qty-key="${escapeHtml(item.key)}" data-qty-delta="-1">-</button>
-        <b>${item.quantity}</b>
-        <button type="button" data-qty-key="${escapeHtml(item.key)}" data-qty-delta="1">+</button>
+        <button type="button" data-qty-key="${escapeHtml(item.key)}" data-qty-delta="-1" aria-label="${escapeHtml(item.name)} 수량 줄이기">−</button>
+        <b aria-live="polite" aria-label="현재 수량 ${item.quantity}개">${item.quantity}</b>
+        <button type="button" data-qty-key="${escapeHtml(item.key)}" data-qty-delta="1" aria-label="${escapeHtml(item.name)} 수량 늘리기" ${item.quantity >= item.stock ? 'disabled aria-disabled="true"' : ""}>+</button>
       </div>
-      <button class="icon-btn" type="button" data-remove="${escapeHtml(item.key)}" aria-label="삭제">${icons.close}</button>
-    </article>
-  `;
-}
-
-function renderCheckoutField(label, control) {
-  return `
-    <label class="checkout-field">
-      <span class="checkout-field-label"><i></i>${escapeHtml(label)}</span>
-      ${control}
-    </label>
-  `;
-}
-
-function renderCheckoutMethod(id, label, icon, checked = false) {
-  return `
-    <label class="checkout-method">
-      <input type="radio" name="payment" value="${id}" ${checked ? "checked" : ""} />
-      <span class="checkout-method-icon" aria-hidden="true">${icon}</span>
-      <span class="checkout-method-label">${escapeHtml(label)}</span>
-    </label>
-  `;
-}
-
-function renderCheckoutPolicyCard(icon, title, body, caption) {
-  return `
-    <article class="checkout-policy-card">
-      <span class="checkout-policy-icon" aria-hidden="true">${icon}</span>
-      <div>
-        <strong>${escapeHtml(title)}</strong>
-        <p>${body}</p>
-        <small>${caption}</small>
-      </div>
+      <button class="icon-btn" type="button" data-remove="${escapeHtml(item.key)}" aria-label="${escapeHtml(item.name)} 장바구니에서 삭제">${icons.close}</button>
     </article>
   `;
 }
@@ -3642,7 +3133,12 @@ function renderCheckoutMainSection() {
         <div class="checkout-section-body">
           ${renderCheckoutField("받는 사람", '<input name="name" required placeholder="수령인 이름을 입력하세요" autocomplete="shipping name" />')}
           ${renderCheckoutField("휴대폰 번호", '<input name="phone" required placeholder="010-0000-0000" inputmode="tel" autocomplete="tel" />')}
-          ${renderCheckoutField("배송지", '<input name="address" required placeholder="배송받을 주소를 입력하세요" autocomplete="shipping street-address" />')}
+          ${renderCheckoutField(
+            "우편번호",
+            '<span class="signup-inline-control"><input name="zipCode" required pattern="[0-9]{5}" maxlength="5" placeholder="5자리 우편번호" inputmode="numeric" autocomplete="shipping postal-code" /><button class="secondary-btn compact" type="button" data-address-search>주소검색</button></span>'
+          )}
+          ${renderCheckoutField("기본주소", '<input name="roadAddress" required placeholder="도로명 또는 지번 주소" autocomplete="shipping address-line1" />')}
+          ${renderCheckoutField("상세주소", '<input name="detailAddress" placeholder="동/호수 등 상세주소" autocomplete="shipping address-line2" />')}
           ${renderCheckoutField(
             "배송 메모",
             `<select name="memo">
@@ -3713,18 +3209,18 @@ function renderCheckoutSummarySection(deliveryFee, finalAmount) {
         <span>총 결제 예정금액</span>
         <strong>₩${money.format(finalAmount)}</strong>
       </div>
-      <button class="gold-cart-btn checkout-submit-btn" type="submit" ${state.cart.length ? "" : "disabled"}>
-        <span class="checkout-submit-copy">${icons.lock}<b>주문 접수하기</b></span>
+      <button class="gold-cart-btn checkout-submit-btn ${state.checkoutBusy ? "is-loading" : ""}" type="submit" ${state.cart.length && !state.checkoutBusy ? "" : "disabled"} aria-busy="${state.checkoutBusy ? "true" : "false"}">
+        <span class="checkout-submit-copy">${icons.lock}<b>${state.checkoutBusy ? "서버에서 주문 확인 중" : "주문 접수하기"}</b></span>
         ${icons.chevron}
       </button>
-      <small class="checkout-summary-note">PG 결제 연동 전입니다. 접수 후 결제 대기 상태로 저장됩니다.</small>
+      <small class="checkout-summary-note">주문 금액은 서버에서 다시 계산되며, 주문 생성 후 토스페이먼츠 결제창으로 이동합니다.</small>
     </aside>
   `;
 }
 
 function renderCheckout() {
-  const total = cartTotal();
-  const deliveryFee = shippingCost(total);
+  const total = cartTotal(state.cart);
+  const deliveryFee = shippingCost(total, shippingPolicy);
   const finalAmount = total + deliveryFee;
   layout(`
     <section class="page-title checkout-page-title">
@@ -3738,64 +3234,196 @@ function renderCheckout() {
   `);
 }
 
-function createOrder(formData) {
-  const subtotal = cartTotal();
-  const total = subtotal + shippingCost(subtotal);
-  const phone = String(formData.get("phone") || "").trim();
-  const paymentMethod = String(formData.get("payment") || "card");
-  const guestPassword = phone.replace(/\D/g, "").slice(-4);
-  const order = {
-    id: `RB${Date.now()}`,
-    date: new Date().toLocaleString("ko-KR"),
-    status: "주문 접수",
-    paymentStatus: paymentMethod === "transfer" || paymentMethod === "virtual" ? "입금 대기" : "결제 대기",
-    delivery: "배송 준비 전",
-    trackingCompany: "",
-    trackingNumber: "",
-    trackingUrl: "",
-    guestPassword,
-    total,
-    customer: {
-      name: formData.get("name"),
-      phone,
-      address: formData.get("address"),
-      memo: formData.get("memo"),
-      payment: paymentMethod,
-    },
-    items: state.cart,
-  };
+async function createOrder(formData) {
+  if (state.checkoutBusy) return;
+  const customer = checkoutCustomerFromForm(formData);
+  if (!isCheckoutCustomerValid(customer)) {
+    showToast("받는 사람, 휴대폰 번호, 5자리 우편번호와 기본주소를 확인해 주세요.");
+    return;
+  }
 
-  state.ephemeralOrders.unshift(order);
-  state.cart = [];
-  save("reball.ephemeralOrders", state.ephemeralOrders.slice(0, 30));
-  save("reball.cart", state.cart);
-  routeTo(`/order/${order.id}`);
+  try {
+    for (const item of state.cart) {
+      const product = productBySlug(item.slug);
+      const variant = product ? orderableVariants(product).find((candidate) => candidate.id === item.variantId) : null;
+      assertOrderableQuantity(variant, item.quantity);
+    }
+    const items = orderLinePayload(state.cart);
+    state.checkoutBusy = true;
+    state.paymentRequestState = "creating_order";
+    renderCheckout();
+    state.checkoutIdempotencyKey ||= createIdempotencyKey();
+    const result = await createOrderRequest(
+      {
+        baseUrl: SUPABASE_URL,
+        anonKey: SUPABASE_KEY,
+        accessToken: state.authSession?.access_token || "",
+        idempotencyKey: state.checkoutIdempotencyKey,
+      },
+      {
+        items,
+        customer,
+        paymentMethod: String(formData.get("payment") || "card"),
+      }
+    );
+    const order = normalizeServerOrder(result);
+    if (!order) throw new Error("서버 주문 응답에 주문번호가 없습니다.");
+    order.customer = { ...order.customer, name: order.customer?.name || customer.receiverName };
+    state.orders = [order, ...state.orders.filter((item) => item.id !== order.id)];
+    if (result.lookupToken) {
+      saveGuestLookupSession(globalThis.sessionStorage, { orderId: order.id, lookupToken: result.lookupToken });
+    }
+    state.cart = [];
+    saveCartState();
+    state.paymentRequestState = "payment_ready";
+    routeTo(`/order/${order.id}`);
+    await maybeRequestTossPayment(order, result);
+  } catch (error) {
+    state.paymentRequestState = "error";
+    showToast(normalizeAuthError(error, "주문을 생성하지 못했습니다. 장바구니는 유지됩니다."));
+  } finally {
+    state.checkoutBusy = false;
+    if (parseRoute() === "/checkout") renderCheckout();
+  }
+}
+
+async function maybeRequestTossPayment(order, createResult) {
+  if (createResult?.skipPayment === true) return;
+  try {
+    await requestTossPaymentForOrder(order.id);
+  } catch (error) {
+    state.paymentRequestState = "error";
+    showToast(error.message || "결제창을 열지 못했습니다. 주문에서 다시 시도할 수 있습니다.");
+  }
+}
+
+async function requestTossPaymentForOrder(orderId) {
+  const safeOrderId = String(orderId || "").trim().toUpperCase();
+  if (!/^[A-Z0-9_-]{6,64}$/.test(safeOrderId)) throw new Error("주문번호를 확인해 주세요.");
+  const configuredClientKey = document.querySelector('meta[name="reball-toss-client-key"]')?.content?.trim() || "";
+  state.paymentRequestState = "preparing_payment";
+  const guestLookup = loadGuestLookupSession(globalThis.sessionStorage);
+  const prepared = await prepareTossPayment({
+    baseUrl: SUPABASE_URL,
+    anonKey: SUPABASE_KEY,
+    accessToken: state.authSession?.access_token || "",
+  }, safeOrderId, guestLookup?.orderId === safeOrderId ? guestLookup.lookupToken : "");
+  if (!prepared?.payment) throw new Error("현재 결제를 시작할 수 없는 주문입니다.");
+  const clientKey = prepared.clientKey || configuredClientKey;
+  if (!clientKey) throw new Error("토스페이먼츠 client key가 필요합니다.");
+  state.paymentRequestState = "requesting_payment";
+  return requestTossPayment({
+    clientKey,
+    customerKey: prepared.customerKey,
+    payment: prepared.payment,
+  });
+}
+
+function renderPaymentReturnStatus({ kind = "processing", orderId = "", message = "" } = {}) {
+  const isProcessing = kind === "processing";
+  layout(`
+    <section class="complete-page payment-return-page" aria-live="polite">
+      <div class="complete-icon">${isProcessing ? icons.lock : icons.close}</div>
+      <h1>${isProcessing ? "결제 승인 결과를 확인하고 있습니다." : "결제를 완료하지 못했습니다."}</h1>
+      <p>${escapeHtml(isProcessing ? "창을 닫거나 뒤로 이동하지 말고 잠시만 기다려 주세요." : message || "결제 정보를 확인한 뒤 다시 시도해 주세요.")}</p>
+      ${orderId ? `<dl><div><dt>주문번호</dt><dd>${escapeHtml(orderId)}</dd></div></dl>` : ""}
+      <div class="complete-actions">
+        ${!isProcessing && orderId ? `<button class="primary-btn" type="button" data-payment-retry="${escapeHtml(orderId)}">결제 다시 시도</button>` : ""}
+        ${!isProcessing ? '<button class="secondary-btn" type="button" data-route="/">홈으로 이동</button>' : ""}
+      </div>
+    </section>
+  `);
+}
+
+async function handlePaymentReturn() {
+  const kind = paymentReturnKind();
+  if (!kind) return false;
+  const params = paymentReturnParams();
+  const orderId = String(params.get("orderId") || "").trim().toUpperCase();
+
+  if (kind === "fail") {
+    replacePaymentReturnUrl("/payment/fail");
+    renderPaymentReturnStatus({
+      kind: "fail",
+      orderId: /^[A-Z0-9_-]{6,64}$/.test(orderId) ? orderId : "",
+      message: "결제가 취소되었거나 승인되지 않았습니다. 결제수단을 확인하고 다시 시도해 주세요.",
+    });
+    return true;
+  }
+
+  renderPaymentReturnStatus({ kind: "processing", orderId });
+  try {
+    const guestLookup = loadGuestLookupSession(globalThis.sessionStorage);
+    const result = await confirmTossPayment(
+      {
+        baseUrl: SUPABASE_URL,
+        anonKey: SUPABASE_KEY,
+        accessToken: state.authSession?.access_token || "",
+      },
+      {
+        paymentKey: params.get("paymentKey"),
+        orderId,
+        amount: Number(params.get("amount")),
+        guestLookupToken: guestLookup?.orderId === orderId ? guestLookup.lookupToken : "",
+      }
+    );
+    const order = normalizeServerOrder(result);
+    if (!order) throw new Error("결제 완료 주문을 확인하지 못했습니다.");
+    state.orders = [order, ...state.orders.filter((item) => item.id !== order.id)];
+    state.paymentRequestState = result.paid ? "paid" : "waiting_for_deposit";
+    replacePaymentReturnUrl(`/order/${encodeURIComponent(order.id)}`);
+    renderRoute();
+    showToast(result.paid ? "결제가 완료되었습니다." : "가상계좌 입금 안내를 확인해 주세요.");
+  } catch (error) {
+    state.paymentRequestState = "error";
+    replacePaymentReturnUrl("/payment/fail");
+    renderPaymentReturnStatus({
+      kind: "fail",
+      orderId: /^[A-Z0-9_-]{6,64}$/.test(orderId) ? orderId : "",
+      message: error?.message || "결제 승인 결과를 확인하지 못했습니다. 같은 주문으로 다시 확인해 주세요.",
+    });
+  }
+  return true;
 }
 
 function renderOrder(orderId) {
   const order = findOrderById(orderId);
   if (!order) {
-    layout(`<section class="empty-card"><strong>주문을 찾을 수 없습니다.</strong><button class="primary-btn" type="button" data-route="/mypage">마이페이지로 이동</button></section>`);
+    layout(`<section class="empty-card"><h1>주문을 찾을 수 없습니다.</h1><button class="primary-btn" type="button" data-route="/mypage">마이페이지로 이동</button></section>`);
     return;
   }
+
+  const guestLookup = loadGuestLookupSession(globalThis.sessionStorage);
+  const guestLookupNotice = guestLookup?.orderId === order.id
+    ? `<aside class="order-lookup-token" aria-label="비회원 주문 조회 정보"><strong>비회원 주문 조회 토큰</strong><code>${escapeHtml(guestLookup.lookupToken)}</code><span>이 토큰은 이 브라우저 세션에서만 보관됩니다. 안전한 곳에 별도로 보관해 주세요.</span></aside>`
+    : "";
+  const retryablePayment = ["payment_ready", "ready", "결제 대기"]
+    .includes(String(order.paymentStatus || order.status || "").toLowerCase());
+  const orderStatusLabel = translateOrderStatus(order.status);
+  const paymentStatusLabel = translatePaymentStatus(order.paymentStatus);
+  const deliveryStatusLabel = order.delivery === "배송 준비 전"
+    ? order.delivery
+    : translateDeliveryStatus(order.delivery || order.status);
 
   layout(`
     <section class="complete-page">
       <div class="complete-icon">${icons.check}</div>
       <h1>주문 접수가 완료되었습니다.</h1>
-      <p>${escapeHtml(order.customer.name)}님의 주문은 ${escapeHtml(order.paymentStatus ?? "결제 대기")} 상태입니다.</p>
+      <p>${escapeHtml(order.customer.name)}님의 주문은 ${escapeHtml(paymentStatusLabel)} 상태입니다.</p>
       <dl>
         <div><dt>주문번호</dt><dd>${escapeHtml(order.id)}</dd></div>
         <div><dt>주문일</dt><dd>${escapeHtml(order.date)}</dd></div>
-        <div><dt>주문상태</dt><dd>${escapeHtml(order.status ?? "주문 접수")}</dd></div>
-        <div><dt>결제상태</dt><dd>${escapeHtml(order.paymentStatus ?? "결제 대기")}</dd></div>
-        <div><dt>배송상태</dt><dd>${escapeHtml(order.delivery)}</dd></div>
+        <div><dt>주문상태</dt><dd>${escapeHtml(orderStatusLabel)}</dd></div>
+        <div><dt>결제상태</dt><dd>${escapeHtml(paymentStatusLabel)}</dd></div>
+        <div><dt>배송상태</dt><dd>${escapeHtml(deliveryStatusLabel)}</dd></div>
         <div><dt>택배사</dt><dd>${escapeHtml(order.trackingCompany || "아직 등록되지 않았습니다.")}</dd></div>
         <div><dt>송장번호</dt><dd>${escapeHtml(order.trackingNumber || "아직 등록되지 않았습니다.")}</dd></div>
         <div><dt>결제금액</dt><dd>₩${money.format(order.total)}</dd></div>
       </dl>
-      <p class="order-privacy-note">비회원 주문조회는 주문자명, 휴대폰 번호, 주문번호 또는 주문 비밀번호로만 확인할 수 있습니다.</p>
+      ${guestLookupNotice}
+      <p class="order-privacy-note">비회원 주문조회는 주문번호와 주문 생성 시 발급된 무작위 조회 토큰으로만 확인할 수 있습니다.</p>
       <div class="action-row center">
+        ${retryablePayment ? `<button class="primary-btn" type="button" data-payment-retry="${escapeHtml(order.id)}">결제 다시 시도</button>` : ""}
         <button class="primary-btn" type="button" data-route="/mypage">주문내역 보기</button>
         <button class="secondary-btn" type="button" data-route="/">메인으로 이동</button>
       </div>
@@ -3980,6 +3608,7 @@ function renderAuthPage(mode = "login", redirect = "/mypage") {
               </div>
             </div>
           </fieldset>
+          ${renderCaptchaControl()}
           <div class="signup-form-actions">
             <button class="secondary-btn" type="button" data-route="/signup">취소</button>
             <button class="primary-btn" type="submit">회원가입 완료</button>
@@ -4025,9 +3654,9 @@ function renderAuthPage(mode = "login", redirect = "/mypage") {
       <section class="login-choice-page">
         <div class="login-choice-card auth-assist-card">
           <header class="signup-choice-header">
-            <h1>아이디 찾기</h1>
-            <p>가입 시 입력한 정보로 아이디를 확인합니다.</p>
-            <span>이름, 휴대전화, 가입 이메일이 모두 일치해야 아이디를 보여드립니다.</span>
+            <h1>가입 이메일 로그인 안내</h1>
+            <p>가입한 이메일 주소는 로그인 아이디로 사용할 수 있습니다.</p>
+            <span>계정 존재 여부나 별도 로그인 아이디는 이 화면에 노출하지 않습니다.</span>
           </header>
           <form class="login-form auth-assist-form" data-auth-assist-form data-assist-mode="find-id">
             <label class="login-field">
@@ -4042,8 +3671,9 @@ function renderAuthPage(mode = "login", redirect = "/mypage") {
               <span>가입 이메일</span>
               <input name="contactEmail" type="email" autocomplete="email" placeholder="주문 안내를 받는 이메일" />
             </label>
+            ${renderCaptchaControl()}
             <div class="auth-assist-result" data-auth-assist-result hidden></div>
-            <button class="gold-cart-btn login-submit-btn" type="submit">아이디 확인</button>
+            <button class="gold-cart-btn login-submit-btn" type="submit">로그인 안내 확인</button>
           </form>
           <div class="login-helper-links auth-assist-nav">
             <span>
@@ -4080,12 +3710,13 @@ function renderAuthPage(mode = "login", redirect = "/mypage") {
               <span>휴대전화</span>
               <input name="phone" inputmode="tel" autocomplete="tel" placeholder="010-0000-0000" />
             </label>
+            ${renderCaptchaControl()}
             <div class="auth-assist-result" data-auth-assist-result hidden></div>
             <button class="gold-cart-btn login-submit-btn" type="submit">재설정 메일 받기</button>
           </form>
           <div class="login-helper-links auth-assist-nav">
             <span>
-              <button type="button" data-route="/login/find-id">아이디 찾기</button>
+              <button type="button" data-route="/login/find-id">이메일 로그인 안내</button>
               <button type="button" data-route="/login">로그인</button>
             </span>
             <button type="button" data-route="/signup">회원가입</button>
@@ -4138,6 +3769,7 @@ function renderAuthPage(mode = "login", redirect = "/mypage") {
   layout(`
     <section class="login-choice-page">
       <div class="login-choice-card">
+        <h1 class="login-page-heading">${isGuestOrder ? "비회원 주문조회" : "로그인"}</h1>
         <div class="login-social-stack" aria-label="간편 로그인">
           <button class="login-social-btn login-social-kakao" type="button" data-social-signup="kakao">
             <span class="kakao-bubble" aria-hidden="true"></span>
@@ -4181,6 +3813,7 @@ function renderMemberLoginForm(redirect) {
           <button type="button" data-toggle-password aria-label="비밀번호 보기" aria-pressed="false">${icons.eye}</button>
         </span>
       </label>
+      ${renderCaptchaControl()}
       <button class="gold-cart-btn login-submit-btn" type="submit">로그인</button>
     </form>
   `;
@@ -4190,25 +3823,17 @@ function renderGuestOrderLookupForm() {
   return `
     <form class="login-form guest-order-form" data-guest-order-form>
       <label class="login-field">
-        <span>주문자명</span>
-        <input name="guestName" autocomplete="name" placeholder="주문자명을 입력해주세요" />
-      </label>
-      <label class="login-field">
-        <span>휴대폰 번호</span>
-        <input name="guestPhone" inputmode="tel" autocomplete="tel" placeholder="010-0000-0000" />
-      </label>
-      <label class="login-field">
         <span>주문번호</span>
-        <input name="orderId" inputmode="numeric" autocomplete="off" placeholder="주문번호를 입력해주세요" />
+        <input name="orderId" autocomplete="off" placeholder="주문번호를 입력해주세요" required />
       </label>
       <label class="login-field">
-        <span>비회원 주문 비밀번호</span>
+        <span>주문 조회 토큰</span>
         <span class="password-input-wrap">
-          <input name="guestPassword" type="password" autocomplete="current-password" placeholder="비회원 주문 비밀번호를 입력해주세요." />
-          <button type="button" data-toggle-password aria-label="비회원 주문 비밀번호 보기" aria-pressed="false">${icons.eye}</button>
+          <input name="lookupToken" type="password" autocomplete="off" placeholder="주문 생성 시 발급된 조회 토큰" required />
+          <button type="button" data-toggle-password aria-label="주문 조회 토큰 보기" aria-pressed="false">${icons.eye}</button>
         </span>
       </label>
-      <small class="guest-order-privacy">개인정보 보호를 위해 주문자명과 휴대폰 번호가 일치해야 조회됩니다.</small>
+      <small class="guest-order-privacy">조회 토큰은 서버에 해시로 저장되며 이름·휴대폰 번호를 조회 비밀번호로 사용하지 않습니다.</small>
       <button class="guest-order-submit-btn" type="submit">비회원 주문조회</button>
     </form>
   `;
@@ -4218,7 +3843,7 @@ function renderLoginHelperLinks() {
   return `
     <div class="login-helper-links">
       <span>
-        <button type="button" data-route="/login/find-id">아이디 찾기</button>
+        <button type="button" data-route="/login/find-id">이메일 로그인 안내</button>
         <button type="button" data-route="/login/find-password">비밀번호 찾기</button>
       </span>
       <button type="button" data-route="/signup">회원가입</button>
@@ -4554,7 +4179,6 @@ function addMypagePost({ type, title, body = "", status = "접수 완료", order
     productName,
     productSlug,
   });
-  save("reball.posts", state.posts);
 }
 
 function renderAddressBook(title = "배송지 관리") {
@@ -4755,7 +4379,7 @@ function renderHomeReviewSection() {
       <header class="home-section-head">
         <div>
           <p>리뷰</p>
-          <h1>실제 구매 후기가 쌓이는 공간</h1>
+          <h2>실제 구매 후기가 쌓이는 공간</h2>
         </div>
         <button class="secondary-btn compact" type="button" data-route="/mypage">내 리뷰 보기</button>
       </header>
@@ -5012,7 +4636,7 @@ function renderStore() {
     </section>
     <section class="dark-cta store-dark-cta">
       <p>REBALL LOSTBALL STORE</p>
-      <h1>매장 방문 전 원하는 브랜드와 등급을 먼저 골라보세요.</h1>
+      <h2>매장 방문 전 원하는 브랜드와 등급을 먼저 골라보세요.</h2>
       <button class="light-btn" type="button" data-route="/">상품 보러가기</button>
       <button class="outline-light-btn" type="button" data-route="/customer-center">고객센터 문의</button>
     </section>
@@ -5463,8 +5087,22 @@ const adminNavGroups = [
 
 function renderAdmin() {
   state.adminTab = normalizeAdminTab(state.adminTab);
-  if (!state.adminUser) {
+  if (!state.authReady || state.adminGateBusy) {
+    layout(
+      `<section class="admin-auth-shell"><div class="admin-auth-card" role="status"><p>ADMIN SECURITY</p><h1>관리자 권한을 확인하고 있습니다</h1><span>Supabase 세션과 역할 확인이 끝날 때까지 운영 화면을 표시하지 않습니다.</span></div></section>`,
+      { admin: true, noHeader: true, mainClass: "admin-main admin-auth-main" }
+    );
+    return;
+  }
+  if (!state.authSession?.access_token) {
     renderAdminLogin();
+    return;
+  }
+  if (!hasAdminRole(state.authRoles)) {
+    layout(
+      `<section class="admin-auth-shell"><div class="admin-auth-card"><p>ACCESS DENIED</p><h1>관리자 권한이 없습니다</h1><span>현재 Supabase 계정에는 운영 역할이 부여되지 않았습니다.</span><button class="secondary-btn" type="button" data-admin-logout>다른 계정으로 로그인</button><button class="ghost-btn" type="button" data-route="/">쇼핑몰로 돌아가기</button></div></section>`,
+      { admin: true, noHeader: true, mainClass: "admin-main admin-auth-main" }
+    );
     return;
   }
 
@@ -5496,16 +5134,12 @@ function renderAdminLogin() {
           </a>
           <div class="admin-auth-copy">
             <p>관리자 페이지</p>
-            <h1>아이디와 암호를 입력하세요</h1>
+            <h1>관리자 이메일과 암호를 입력하세요</h1>
             <span>인증 전에는 관리자 대시보드, 주문, 상품, 정산 화면에 접근할 수 없습니다.</span>
           </div>
           <label>
-            아이디
-            <input name="adminId" autocomplete="username" placeholder="${escapeHtml(profile.id)}" required />
-          </label>
-          <label>
             Supabase 관리자 이메일
-            <input name="adminEmail" type="email" autocomplete="email" placeholder="${escapeHtml(profile.email || "owner_admin@example.com")}" />
+            <input name="adminEmail" type="email" autocomplete="username" placeholder="${escapeHtml(profile.email || "owner_admin@example.com")}" required />
           </label>
           <label>
             암호
@@ -5524,7 +5158,42 @@ function renderAdminLogin() {
 function normalizeAdminTab(tab) {
   const aliases = { products: "product", coupons: "coupon" };
   const normalized = aliases[tab] ?? tab ?? "dashboard";
-  return adminNavGroups.some((group) => group.items.some(([id]) => id === normalized)) ? normalized : "dashboard";
+  if (canAccessAdminTab(state.authRoles, normalized)) return normalized;
+  return firstAllowedAdminTab(state.authRoles) || "dashboard";
+}
+
+function rejectUnimplementedServerMutation(label) {
+  showToast(`${label} 기능은 서버 저장 API 연결 후 이용할 수 있습니다.`);
+  return false;
+}
+
+function markUnavailableServerActions() {
+  const selectors = [
+    '[data-coupon-form] button[type="submit"]',
+    '[data-inquiry-form] button[type="submit"]',
+    '[data-review-write-form] button[type="submit"]',
+    '[data-return-request]',
+    '[data-return-order]',
+    '[data-seller-question]',
+    '[data-post-delete]',
+    '[data-notification-toggle]',
+    '[data-admin-modal-primary]:not([data-admin-modal-action="downloadExport"])',
+  ];
+  document.querySelectorAll(selectors.join(",")).forEach((node) => {
+    node.disabled = true;
+    node.setAttribute("aria-disabled", "true");
+    node.setAttribute("title", "서버 저장 API 연결 후 이용할 수 있습니다.");
+  });
+}
+
+function renderCaptchaControl() {
+  return `
+    <div class="auth-captcha" data-captcha-control data-captcha-status="loading">
+      <div class="auth-captcha-widget" data-captcha-widget></div>
+      <input type="hidden" name="captchaToken" data-captcha-token />
+      <small data-captcha-message>자동입력 방지 확인을 준비하고 있습니다.</small>
+    </div>
+  `;
 }
 
 function renderAdminSidebar() {
@@ -5541,6 +5210,7 @@ function renderAdminSidebar() {
               <div class="admin-nav-group">
                 <p>${escapeHtml(group.title)}</p>
                 ${group.items
+                  .filter(([id]) => canAccessAdminTab(state.authRoles, id))
                   .map(
                     ([id, label, icon]) => `
                       <button class="${state.adminTab === id ? "is-active" : ""}" type="button" data-admin-tab="${id}">
@@ -5567,7 +5237,10 @@ function renderAdminSidebar() {
 }
 
 function renderAdminTopbar() {
-  const profile = state.adminProfile;
+  const profile = {
+    id: state.authUser?.email || state.adminProfile.id,
+    role: state.authRoles.join(", "),
+  };
   const badge = (profile.id || "A").trim().charAt(0).toUpperCase() || "A";
   return `
     <header class="admin-topbar">
@@ -5929,14 +5602,17 @@ function renderAdminInquiryReplyForm(inquiryId) {
 }
 
 function renderAdminProfileSettingsForm() {
-  const profile = state.adminProfile;
+  const profile = {
+    id: state.authUser?.email || "",
+    role: state.authRoles.join(", "),
+    email: state.authUser?.email || state.adminProfile.email,
+  };
   return `
     <div class="admin-modal-form admin-modal-form--profile">
       <label>아이디<input name="adminProfileId" value="${escapeHtml(profile.id)}" readonly /></label>
       <label>역할<input name="adminProfileRole" value="${escapeHtml(profile.role)}" readonly /></label>
       <label>알림 이메일<input name="adminProfileEmail" type="email" value="${escapeHtml(profile.email)}" autocomplete="email" /></label>
-      <p class="admin-modal-helper">비밀번호를 변경하지 않을 경우 아래 3개 입력은 비워두면 됩니다.</p>
-      <label>현재 비밀번호<input name="adminCurrentPassword" type="password" autocomplete="current-password" placeholder="현재 비밀번호" /></label>
+      <p class="admin-modal-helper">비밀번호를 변경하지 않을 경우 아래 입력은 비워두면 됩니다. 변경은 현재 Supabase 세션에만 요청됩니다.</p>
       <label>새 비밀번호<input name="adminNextPassword" type="password" autocomplete="new-password" placeholder="새 비밀번호 8자 이상" /></label>
       <label>새 비밀번호 확인<input name="adminConfirmPassword" type="password" autocomplete="new-password" placeholder="새 비밀번호 확인" /></label>
     </div>
@@ -6170,12 +5846,12 @@ function renderAdminSearchResult() {
   `;
 }
 
-function saveAdminProfileSettings() {
+async function saveAdminProfileSettings() {
+  if (!rejectUnimplementedServerMutation("관리자 프로필 저장")) return;
   const modal = document.querySelector(".admin-modal-card");
   if (!modal) return;
 
   const email = String(modal.querySelector('[name="adminProfileEmail"]')?.value ?? "").trim();
-  const currentPassword = String(modal.querySelector('[name="adminCurrentPassword"]')?.value ?? "");
   const nextPassword = String(modal.querySelector('[name="adminNextPassword"]')?.value ?? "");
   const confirmPassword = String(modal.querySelector('[name="adminConfirmPassword"]')?.value ?? "");
 
@@ -6184,12 +5860,8 @@ function saveAdminProfileSettings() {
     return;
   }
 
-  const wantsPasswordChange = Boolean(currentPassword || nextPassword || confirmPassword);
+  const wantsPasswordChange = Boolean(nextPassword || confirmPassword);
   if (wantsPasswordChange) {
-    if (currentPassword !== state.adminCredentials.password) {
-      showToast("현재 비밀번호가 맞지 않습니다.");
-      return;
-    }
     if (nextPassword.length < 8) {
       showToast("새 비밀번호는 8자 이상으로 입력하세요.");
       return;
@@ -6198,26 +5870,17 @@ function saveAdminProfileSettings() {
       showToast("새 비밀번호 확인이 일치하지 않습니다.");
       return;
     }
-    state.adminCredentials = {
-      ...state.adminCredentials,
-      password: nextPassword,
-    };
-    state.adminSessionPassword = nextPassword;
-    save("reball.adminCredentials", state.adminCredentials);
+    const { error } = await supabase.auth.updateUser({ password: nextPassword });
+    if (error) {
+      showToast(normalizeAuthError(error, "관리자 비밀번호를 변경하지 못했습니다."));
+      return;
+    }
   }
 
   state.adminProfile = {
     ...state.adminProfile,
     email,
   };
-  state.adminUser = {
-    ...(state.adminUser ?? {}),
-    id: state.adminProfile.id,
-    role: state.adminProfile.role,
-    email,
-  };
-  save("reball.adminProfile", state.adminProfile);
-  save("reball.adminUser", state.adminUser);
   state.adminModal = null;
   state.adminModalContext = null;
   renderAdmin();
@@ -6225,6 +5888,7 @@ function saveAdminProfileSettings() {
 }
 
 function saveAdminCouponRegister() {
+  if (!rejectUnimplementedServerMutation("관리자 쿠폰 저장")) return;
   const form = document.querySelector("[data-admin-coupon-form]");
   if (!form) return;
 
@@ -6272,6 +5936,7 @@ function saveAdminCouponRegister() {
 }
 
 function saveAdminBannerOrder() {
+  if (!rejectUnimplementedServerMutation("관리자 배너 저장")) return;
   const form = document.querySelector("[data-admin-banner-order-form]");
   if (!form) return;
 
@@ -6310,6 +5975,7 @@ function saveAdminBannerOrder() {
 }
 
 function saveAdminOrderDetail() {
+  if (!rejectUnimplementedServerMutation("관리자 주문 상태 저장")) return;
   const form = document.querySelector("[data-admin-order-detail-form]");
   if (!form) {
     state.adminModal = null;
@@ -6330,8 +5996,6 @@ function saveAdminOrderDetail() {
   const applyOrderPatch = (order) => (order.id === orderId ? { ...order, ...patch } : order);
 
   state.orders = state.orders.map(applyOrderPatch);
-  state.ephemeralOrders = state.ephemeralOrders.map(applyOrderPatch);
-  save("reball.ephemeralOrders", state.ephemeralOrders.slice(0, 30));
   state.adminModal = null;
   state.adminModalContext = null;
   renderAdmin();
@@ -6791,75 +6455,6 @@ function adminOrderChartValues() {
   return [summary.completed, summary.preparing, summary.issue].map((value) => Math.round((value / summary.total) * 100));
 }
 
-function adminChartPercentages(values) {
-  const total = values.reduce((sum, value) => sum + value, 0);
-  if (!total) return [0, 0, 0];
-  return values.map((value) => Math.round((value / total) * 100));
-}
-
-function adminChartLabels(tab) {
-  if (tab === "inquiry") return ["완료", "대기", "오늘"];
-  const labels = {
-    product: ["판매중", "부족", "신규"],
-    returns: ["완료", "대기", "전체"],
-    coupon: ["쿠폰", "사용", "배너"],
-    pos: ["기기", "주문", "점검"],
-    settlement: ["매출", "정산", "환불"],
-    customer: ["회원", "신규", "문의"],
-    review: ["리뷰", "대기", "포토"],
-    settings: ["관리자", "권한", "알림"],
-  };
-  return labels[tab] ?? ["완료", "대기", "주의"];
-}
-
-function adminTabLabel(tab) {
-  return {
-    dashboard: "관리자 대시보드",
-    orders: "주문관리",
-    product: "상품관리 / 재고관리",
-    returns: "취소/반품/교환관리",
-    inquiry: "문의답변",
-    coupon: "쿠폰/배너관리",
-    pos: "포스기 관리",
-    settlement: "정산/통계",
-    customer: "고객/회원관리",
-    review: "리뷰관리",
-    settings: "설정/권한",
-  }[tab] ?? "관리자 대시보드";
-}
-
-function adminTabEyebrow(tab) {
-  return {
-    dashboard: "REBALL LOSTBALL 운영 현황",
-    orders: "주문/배송",
-    product: "상품/재고",
-    returns: "CS 처리",
-    inquiry: "고객 문의",
-    coupon: "프로모션",
-    pos: "매장 운영",
-    settlement: "정산/분석",
-    customer: "고객 데이터",
-    review: "콘텐츠 관리",
-    settings: "환경 설정",
-  }[tab] ?? "관리자";
-}
-
-function adminTabDescription(tab) {
-  return {
-    dashboard: "오늘 주문, 결제, 재고, 문의 흐름을 한 화면에서 확인하세요.",
-    orders: "주문번호, 고객명, 상품명 기준으로 주문과 배송 상태를 관리할 수 있습니다.",
-    product: "상품 이미지 원본은 유지하고, 재고와 노출 순서만 관리합니다.",
-    returns: "교환/반품 요청을 접수하고 승인 상태를 갱신합니다.",
-    inquiry: "고객이 남긴 1:1 문의를 확인하고 답변을 등록합니다.",
-    coupon: "쿠폰과 홈 배너 노출 상태를 관리합니다.",
-    pos: "오프라인 포스기 상태와 현장 주문을 확인합니다.",
-    settlement: "매출, 정산 예정금, 배송비, 환불 예정 금액을 확인합니다.",
-    customer: "회원 구매 이력과 문의 대기 상태를 확인합니다.",
-    review: "리뷰 승인, 노출, 평점 상태를 관리합니다.",
-    settings: "관리자 권한, 알림, 사업자 정보를 관리합니다.",
-  }[tab] ?? "관리자 화면입니다.";
-}
-
 function adminTableTitle(tab) {
   return tab === "dashboard" ? "최근 주문" : adminTabLabel(tab);
 }
@@ -6881,25 +6476,6 @@ function adminChartCenter(tab) {
   if (tab === "review") return `${adminReviewRows().length}건`;
   if (tab === "settings") return `${adminSettingsRows().length}개`;
   return "0";
-}
-
-function adminFirstColumn(tab) {
-  return tab === "product" ? "상품" : tab === "customer" ? "고객" : tab === "settings" ? "권한" : tab === "inquiry" ? "문의" : "목록";
-}
-
-function adminDefaultModal(tab) {
-  return {
-    orders: "orderDetail",
-    product: "productRegister",
-    returns: "returnRequest",
-    inquiry: "inquiryReply",
-    coupon: "couponRegister",
-    pos: "posDetail",
-    settlement: "downloadExport",
-    customer: "addCustomer",
-    review: "addReview",
-    settings: "permissionDetail",
-  }[tab] ?? "quickAction";
 }
 
 function renderAdminIcon(name) {
@@ -6945,6 +6521,7 @@ function formDataFromScope(scope) {
 }
 
 function handleAdminCustomerRegister() {
+  if (!rejectUnimplementedServerMutation("관리자 고객 등록")) return false;
   const form = document.querySelector("[data-admin-customer-form]");
   if (!form) return true;
 
@@ -6994,7 +6571,6 @@ function handleAdminCustomerRegister() {
     },
     ...registered,
   ].slice(0, 50);
-  save("reball.adminCustomers", state.adminCustomers);
   state.adminTab = "customer";
   state.adminSearch = "";
   return true;
@@ -7017,7 +6593,7 @@ function distributedStockValues(totalStock, count) {
 }
 
 function buildAdminVariantPayloads(product, productId) {
-  const variants = generatedProductVariants({ ...product, dbVariants: [] });
+  const variants = buildDraftAdminVariants({ ...product, dbVariants: [] });
   const distributedStock = distributedStockValues(product.stock, variants.length);
   return variants.map((variant, index) => ({
     product_id: productId,
@@ -7117,6 +6693,7 @@ async function saveAdminProductToSupabase(product, password = "") {
 }
 
 async function handleAdminProductRegister() {
+  if (!rejectUnimplementedServerMutation("관리자 상품 저장")) return false;
   const form = document.querySelector("[data-admin-product-form]");
   if (!form) return true;
 
@@ -7177,11 +6754,9 @@ async function handleAdminProductRegister() {
   };
 
   try {
-    const persistedProduct = await saveAdminProductToSupabase(nextProduct, state.adminSessionPassword || state.adminCredentials?.password || "");
+    const persistedProduct = await saveAdminProductToSupabase(nextProduct, "");
     state.adminProducts = replaceCatalogCacheProduct(state.adminProducts, persistedProduct, 100);
     state.remoteProducts = replaceCatalogCacheProduct(state.remoteProducts, persistedProduct, 200);
-    save("reball.adminProducts", state.adminProducts);
-    save("reball.remoteProducts", state.remoteProducts);
     return true;
   } catch (error) {
     showToast(normalizeAuthError(error, "상품을 Supabase에 저장하지 못했습니다."));
@@ -7218,6 +6793,7 @@ function objectParticle(value) {
 }
 
 function saveAdminInquiryReply() {
+  if (!rejectUnimplementedServerMutation("관리자 문의 답변 저장")) return;
   const form = document.querySelector("[data-admin-inquiry-reply-form]");
   if (!form) {
     state.adminModal = null;
@@ -7242,13 +6818,13 @@ function saveAdminInquiryReply() {
         }
       : post
   );
-  save("reball.posts", state.posts);
   state.adminModal = null;
   renderAdmin();
   showToast("문의 답변이 저장되었습니다.");
 }
 
 function saveAdminReview() {
+  if (!rejectUnimplementedServerMutation("관리자 리뷰 저장")) return;
   const form = document.querySelector("[data-admin-review-form]");
   if (!form) {
     state.adminModal = null;
@@ -7282,7 +6858,6 @@ function saveAdminReview() {
     productSlug: product?.slug || "",
     source: "admin",
   });
-  save("reball.posts", state.posts);
   state.adminModal = null;
   renderAdmin();
   showToast("리뷰가 저장되었습니다.");
@@ -7318,14 +6893,17 @@ function bindGlobalEvents() {
     node.addEventListener("click", () => routeTo(node.dataset.route));
   });
   document.querySelector("[data-consult-toggle]")?.addEventListener("click", () => {
+    if (!state.consultOpen) dialogReturnTarget = document.activeElement;
     state.consultOpen = !state.consultOpen;
     renderRoute();
     if (state.consultOpen) focusConsultInput();
+    else restoreDialogFocus();
   });
   document.querySelectorAll("[data-consult-close]").forEach((node) => {
     node.addEventListener("click", () => {
       state.consultOpen = false;
       renderRoute();
+      restoreDialogFocus();
     });
   });
   document.querySelectorAll("[data-consult-question]").forEach((node) => {
@@ -7348,8 +6926,13 @@ function bindGlobalEvents() {
   });
   document.querySelectorAll("[data-product-menu]").forEach((node) => {
     node.addEventListener("click", () => {
+      const returnLabel = node.getAttribute("aria-label") || node.textContent.trim();
       state.menuOpen = !state.menuOpen;
       renderRoute();
+      window.requestAnimationFrame(() => {
+        const controls = [...document.querySelectorAll("[data-product-menu]")];
+        controls.find((control) => (control.getAttribute("aria-label") || control.textContent.trim()) === returnLabel)?.focus();
+      });
     });
   });
 }
@@ -7562,7 +7145,7 @@ function initHeroTransition() {
     root.style.setProperty("--flight-intro-opacity", reducedMotionQuery.matches || introEnded ? "0.0000" : "1.0000");
     root.style.setProperty("--flight-intro-plate-opacity", progress < 0.35 ? "1.0000" : progress < 0.7 ? (1 - crossfade).toFixed(4) : "0.0000");
     root.style.setProperty("--flight-grass-plate-opacity", progress < 0.35 ? "0.0000" : progress < 0.7 ? crossfade.toFixed(4) : "1.0000");
-    root.style.setProperty("--flight-bridge-opacity", clamp01((progress - 0.68) / 0.18).toFixed(4));
+    root.style.setProperty("--flight-bridge-opacity", Math.max(0.94, clamp01((progress - 0.68) / 0.18)).toFixed(4));
     root.style.setProperty("--flight-intro-scale", (1 + progress * 0.16).toFixed(4));
     root.style.setProperty("--flight-grass-scale", (1.08 - progress * 0.08).toFixed(4));
     root.classList.toggle("is-intro-ended", introEnded || reducedMotionQuery.matches);
@@ -7745,12 +7328,9 @@ function initHeroTransition() {
 
 function bindPageEvents() {
   initHeroTransition();
-  document.querySelectorAll("[data-banner-index]").forEach((node) => {
-    node.addEventListener("click", () => {
-      state.activeBanner = Number(node.dataset.bannerIndex);
-      renderRoute();
-    });
-  });
+  bindHomeCarouselControls();
+  mountCaptchaWidgets().catch(() => {});
+  markUnavailableServerActions();
   document.querySelectorAll("[data-add-card]").forEach((node) => node.addEventListener("click", () => addToCart(node.dataset.addCard, 1, { promptCart: true })));
   document.querySelectorAll("[data-add-bundle]").forEach((node) => node.addEventListener("click", () => addBundleToCart(node.dataset.addBundle, 1, { promptCart: true })));
   document.querySelectorAll("[data-add-detail]").forEach((node) => node.addEventListener("click", () => addToCart(node.dataset.addDetail)));
@@ -7820,30 +7400,31 @@ function bindPageEvents() {
       node.innerHTML = visible ? icons.eye : icons.eyeOff;
     });
   });
-  document.querySelector("[data-guest-order-form]")?.addEventListener("submit", (event) => {
+  document.querySelector("[data-guest-order-form]")?.addEventListener("submit", async (event) => {
     event.preventDefault();
     const form = event.currentTarget;
     const formData = new FormData(form);
     const orderId = String(formData.get("orderId") || "").replace(/\s+/g, "");
-    const guestName = String(formData.get("guestName") || "").trim();
-    const guestPhone = String(formData.get("guestPhone") || "").replace(/\D/g, "");
-    const guestPassword = String(formData.get("guestPassword") || "").trim();
-    if (!guestName || !guestPhone || (!orderId && !guestPassword)) {
-      showToast("주문자명, 휴대폰 번호, 주문번호 또는 비밀번호를 입력하세요.");
+    const lookupToken = String(formData.get("lookupToken") || "").trim();
+    if (!orderId || !lookupToken) {
+      showToast("주문번호와 주문 조회 토큰을 입력하세요.");
       return;
     }
-    const matchedOrder = allOrders().find((order) => {
-      const sameName = String(order.customer?.name || "").trim() === guestName;
-      const samePhone = String(order.customer?.phone || "").replace(/\D/g, "") === guestPhone;
-      const sameOrderId = orderId && order.id === orderId;
-      const samePassword = guestPassword && String(order.guestPassword || "") === guestPassword;
-      return sameName && samePhone && (sameOrderId || samePassword);
-    });
-    if (matchedOrder) {
+    setFormBusy(form, true);
+    try {
+      const result = await lookupGuestOrderRequest(
+        { baseUrl: SUPABASE_URL, anonKey: SUPABASE_KEY },
+        { orderId, lookupToken }
+      );
+      const matchedOrder = normalizeServerOrder(result);
+      if (!matchedOrder) throw new Error("주문 정보를 찾을 수 없습니다.");
+      state.orders = [matchedOrder, ...state.orders.filter((order) => order.id !== matchedOrder.id)];
       routeTo(`/order/${matchedOrder.id}`);
-      return;
+    } catch (error) {
+      showToast(error.message || "주문 정보를 찾을 수 없습니다.");
+    } finally {
+      setFormBusy(form, false);
     }
-    showToast("주문 정보를 찾을 수 없습니다.");
   });
   document.querySelectorAll("[data-social-signup]").forEach((node) => {
     node.addEventListener("click", () => {
@@ -7859,8 +7440,7 @@ function bindPageEvents() {
   });
   document.querySelectorAll("[data-buy-now]").forEach((node) =>
     node.addEventListener("click", () => {
-      addToCart(node.dataset.buyNow);
-      routeTo("/checkout");
+      if (addToCart(node.dataset.buyNow)) routeTo("/checkout");
     })
   );
   document.querySelectorAll("[data-select-option]").forEach((node) => {
@@ -7868,8 +7448,17 @@ function bindPageEvents() {
       if (node.disabled) return;
       const [slug, key, value] = node.dataset.selectOption.split("|");
       const product = productBySlug(slug);
-      state.selected[slug] = normalizeProductSelection(product, { ...state.selected[slug], [key]: value });
+      if (!product) return;
+      const chosen = chooseVariantForOption(product, getSelection(product), key, value);
+      if (!chosen) {
+        showToast("해당 옵션의 실제 판매 variant가 없습니다.");
+        return;
+      }
+      state.selected[slug] = variantSelection(chosen);
       renderDetail(slug);
+      window.requestAnimationFrame(() =>
+        document.querySelector(`[data-select-option="${CSS.escape(`${slug}|${key}|${value}`)}"]`)?.focus()
+      );
     });
   });
   document.querySelectorAll("[data-qty-key]").forEach((node) => {
@@ -7877,21 +7466,38 @@ function bindPageEvents() {
       const key = node.dataset.qtyKey;
       const delta = Number(node.dataset.qtyDelta);
       const item = state.cart.find((entry) => entry.key === key);
-      if (item) item.quantity = Math.max(1, item.quantity + delta);
-      save("reball.cart", state.cart);
+      if (item) item.quantity = Math.min(item.stock, Math.max(1, item.quantity + delta));
+      saveCartState();
       renderCart();
     });
   });
   document.querySelectorAll("[data-remove]").forEach((node) => {
     node.addEventListener("click", () => {
       state.cart = state.cart.filter((item) => item.key !== node.dataset.remove);
-      save("reball.cart", state.cart);
+      saveCartState();
       renderCart();
     });
   });
-  document.querySelector("[data-checkout-form]")?.addEventListener("submit", (event) => {
+  document.querySelector("[data-checkout-form]")?.addEventListener("submit", async (event) => {
     event.preventDefault();
-    createOrder(new FormData(event.currentTarget));
+    await createOrder(new FormData(event.currentTarget));
+  });
+  document.querySelectorAll("[data-payment-retry]").forEach((node) => {
+    node.addEventListener("click", async () => {
+      node.disabled = true;
+      node.setAttribute("aria-busy", "true");
+      try {
+        await requestTossPaymentForOrder(node.dataset.paymentRetry);
+      } catch (error) {
+        state.paymentRequestState = "error";
+        showToast(error?.message || "결제창을 열지 못했습니다.");
+      } finally {
+        if (node.isConnected) {
+          node.disabled = false;
+          node.removeAttribute("aria-busy");
+        }
+      }
+    });
   });
   document.querySelectorAll("[data-my-tab]").forEach((node) => {
     node.addEventListener("click", () => {
@@ -7918,6 +7524,7 @@ function bindPageEvents() {
   });
   document.querySelector("[data-coupon-form]")?.addEventListener("submit", (event) => {
     event.preventDefault();
+    if (!rejectUnimplementedServerMutation("쿠폰 등록")) return;
     const code = String(new FormData(event.currentTarget).get("code") || "").trim().toUpperCase();
     if (!code) {
       showToast("쿠폰 코드를 입력하세요.");
@@ -7939,9 +7546,9 @@ function bindPageEvents() {
   });
   document.querySelectorAll("[data-post-delete]").forEach((node) => {
     node.addEventListener("click", () => {
+      if (!rejectUnimplementedServerMutation("게시물 삭제")) return;
       state.posts = state.posts.filter((post) => post.id !== node.dataset.postDelete);
       if (state.expandedInquiryId === node.dataset.postDelete) state.expandedInquiryId = null;
-      save("reball.posts", state.posts);
       showToast("게시물을 삭제했습니다.");
       renderMypage();
     });
@@ -7969,12 +7576,17 @@ function bindPageEvents() {
   });
   document.querySelectorAll("[data-notification-toggle]").forEach((node) => {
     node.addEventListener("change", () => {
+      if (!rejectUnimplementedServerMutation("알림 설정 저장")) {
+        node.checked = !node.checked;
+        return;
+      }
       state.notifications[node.dataset.notificationToggle] = node.checked;
       save("reball.notifications", state.notifications);
     });
   });
   document.querySelector("[data-inquiry-form]")?.addEventListener("submit", (event) => {
     event.preventDefault();
+    if (!rejectUnimplementedServerMutation("문의 등록")) return;
     const formData = new FormData(event.currentTarget);
     addMypagePost({
       type: String(formData.get("type") || "문의"),
@@ -8001,6 +7613,7 @@ function bindPageEvents() {
   });
   document.querySelectorAll("[data-return-request], [data-return-order]").forEach((node) => {
     node.addEventListener("click", () => {
+      if (!rejectUnimplementedServerMutation("교환·반품 신청")) return;
       const orderId = node.dataset.returnOrder || "";
       addMypagePost({
         type: "교환/반품 문의",
@@ -8028,6 +7641,7 @@ function bindPageEvents() {
   });
   document.querySelector("[data-review-write-form]")?.addEventListener("submit", (event) => {
     event.preventDefault();
+    if (!rejectUnimplementedServerMutation("리뷰 등록")) return;
     const form = event.currentTarget;
     const formData = new FormData(form);
     const orderId = form.dataset.reviewOrderId || state.selectedReviewOrderId;
@@ -8067,6 +7681,7 @@ function bindPageEvents() {
   });
   document.querySelectorAll("[data-seller-question]").forEach((node) => {
     node.addEventListener("click", () => {
+      if (!rejectUnimplementedServerMutation("판매자 문의 등록")) return;
       const orderId = node.dataset.sellerQuestion;
       addMypagePost({
         type: "판매자 문의",
@@ -8090,53 +7705,39 @@ function bindPageEvents() {
   document.querySelector("[data-admin-login-form]")?.addEventListener("submit", async (event) => {
     event.preventDefault();
     const form = new FormData(event.currentTarget);
-    const id = String(form.get("adminId") ?? "").trim();
     const adminEmail = String(form.get("adminEmail") ?? "").trim();
     const password = String(form.get("adminPassword") ?? "").trim();
-    const localPasswordMatches = !state.adminCredentials.password || password === state.adminCredentials.password;
-    const supabaseLoginRequested = Boolean(adminEmail);
-    if (id === state.adminCredentials.id && (localPasswordMatches || supabaseLoginRequested)) {
-      if (!localPasswordMatches && supabaseLoginRequested) {
-        const connected = await syncAdminSupabaseSession(password, adminEmail);
-        if (!connected) {
-          state.adminLoginError = "Supabase 관리자 이메일 또는 비밀번호를 확인하세요.";
-          renderAdmin();
-          return;
-        }
+    if (!adminEmail || !password) return;
+    state.adminGateBusy = true;
+    state.adminLoginError = "";
+    renderAdmin();
+    try {
+      const { data, error } = await supabase.auth.signInWithPassword({ email: adminEmail, password });
+      if (error) throw error;
+      await syncSessionState(data.session, { silent: true });
+      const roles = await loadCurrentAuthRoles({ force: true });
+      if (!hasAdminRole(roles)) {
+        await supabase.auth.signOut();
+        throw new Error("Admin access denied");
       }
-
-      state.adminSessionPassword = password;
-      if (!state.adminCredentials.password && !supabaseLoginRequested) {
-        state.adminCredentials = { ...state.adminCredentials, password };
-        save("reball.adminCredentials", state.adminCredentials);
-      }
-      if (adminEmail) {
-        state.adminProfile = { ...state.adminProfile, email: adminEmail };
-        state.adminCredentials = { ...state.adminCredentials, password: "" };
-        save("reball.adminCredentials", state.adminCredentials);
-        save("reball.adminProfile", state.adminProfile);
-      }
-      state.adminUser = { id, role: state.adminProfile.role, email: state.adminProfile.email };
       state.adminMembersLoaded = false;
       state.adminMembersError = "";
       state.adminLoginError = "";
-      save("reball.adminUser", state.adminUser);
+    } catch (error) {
+      state.adminLoginError = normalizeAuthError(error, "Supabase 관리자 이메일 또는 비밀번호를 확인하세요.");
+    } finally {
+      state.adminGateBusy = false;
       renderAdmin();
-      if (localPasswordMatches) await syncAdminSupabaseSession(password, adminEmail);
-      return;
     }
-    state.adminLoginError = "아이디 또는 암호가 맞지 않습니다.";
-    renderAdmin();
   });
-  document.querySelector("[data-admin-logout]")?.addEventListener("click", () => {
-    state.adminUser = null;
+  document.querySelector("[data-admin-logout]")?.addEventListener("click", async () => {
     state.adminModal = null;
     state.adminModalContext = null;
     state.adminMembers = [];
     state.adminMembersLoaded = false;
     state.adminMembersError = "";
-    state.adminSessionPassword = "";
-    save("reball.adminUser", state.adminUser);
+    await supabase.auth.signOut();
+    emptyAuthData();
     renderAdmin();
   });
   document.querySelector("[data-admin-search-form]")?.addEventListener("submit", (event) => {
@@ -8149,6 +7750,10 @@ function bindPageEvents() {
   });
   document.querySelectorAll("[data-admin-tab]").forEach((node) => {
     node.addEventListener("click", () => {
+      if (!canAccessAdminTab(state.authRoles, node.dataset.adminTab)) {
+        showToast("이 메뉴에 접근할 관리자 권한이 없습니다.");
+        return;
+      }
       state.adminTab = node.dataset.adminTab;
       state.adminModal = null;
       state.adminModalContext = null;
@@ -8157,6 +7762,12 @@ function bindPageEvents() {
   });
   document.querySelectorAll("[data-admin-modal]").forEach((node) => {
     node.addEventListener("click", () => {
+      try {
+        requireAdminTab(state.authRoles, state.adminTab);
+      } catch (error) {
+        showToast(error.message);
+        return;
+      }
       if (node.dataset.adminModal === "downloadExport") {
         state.adminModalContext = null;
         downloadAdminExport();
@@ -8170,6 +7781,7 @@ function bindPageEvents() {
           }
         : null;
       renderAdmin();
+      focusDialogSoon(".admin-modal-card");
     });
   });
   document.querySelectorAll("[data-admin-modal-close]").forEach((node) => {
@@ -8177,10 +7789,17 @@ function bindPageEvents() {
       state.adminModal = null;
       state.adminModalContext = null;
       renderAdmin();
+      restoreDialogFocus();
     });
   });
   document.querySelectorAll("[data-admin-modal-primary]").forEach((node) => {
     node.addEventListener("click", async () => {
+      try {
+        requireAdminTab(state.authRoles, state.adminTab);
+      } catch (error) {
+        showToast(error.message);
+        return;
+      }
       const message = node.dataset.adminModalPrimary || "저장";
       const action = node.dataset.adminModalAction;
       if (action === "downloadExport") {
@@ -8226,29 +7845,36 @@ function bindPageEvents() {
       state.adminModal = null;
       state.adminModalContext = null;
       renderAdmin();
-      showToast(`${message} 처리되었습니다.`);
+      rejectUnimplementedServerMutation(message);
     });
   });
   const modal = document.querySelector("[data-modal]");
-  const openGalleryModal = (source, label) => {
+  const openGalleryModal = (source, label, trigger) => {
     const image = modal?.querySelector("[data-gallery-modal-image]");
     if (image && source) {
       image.src = asset(source);
       image.alt = `${label || "상품 이미지"} 확대 이미지`;
     }
     modal?.classList.add("is-open");
+    modal?.setAttribute("aria-hidden", "false");
+    dialogReturnTarget = trigger || document.activeElement;
+    window.requestAnimationFrame(() => modal?.querySelector('[role="dialog"]')?.focus());
   };
   document.querySelector("[data-open-gallery]")?.addEventListener("click", (event) => {
-    openGalleryModal(event.currentTarget.dataset.gallerySrc, event.currentTarget.dataset.galleryLabel);
+    openGalleryModal(event.currentTarget.dataset.gallerySrc, event.currentTarget.dataset.galleryLabel, event.currentTarget);
   });
   document.querySelectorAll("[data-gallery-thumb]").forEach((node) => {
     node.addEventListener("click", () => {
       document.querySelectorAll("[data-gallery-thumb]").forEach((thumb) => thumb.classList.remove("is-active"));
       node.classList.add("is-active");
-      openGalleryModal(node.dataset.gallerySrc, node.dataset.galleryLabel);
+      openGalleryModal(node.dataset.gallerySrc, node.dataset.galleryLabel, node);
     });
   });
-  document.querySelectorAll("[data-close-modal]").forEach((node) => node.addEventListener("click", () => modal?.classList.remove("is-open")));
+  document.querySelectorAll("[data-close-modal]").forEach((node) => node.addEventListener("click", () => {
+    modal?.classList.remove("is-open");
+    modal?.setAttribute("aria-hidden", "true");
+    restoreDialogFocus();
+  }));
 
   // 상품 상세 회전 영상: 일부 브라우저에서 autoplay 속성만으로 재생이 멈추는 경우가 있어 명시적으로 재생을 강제한다.
   document.querySelectorAll("[data-spin-video]").forEach((video) => {
@@ -8315,11 +7941,13 @@ async function hydrateFromSupabase() {
       )
       .eq("active", true);
     if (error || !Array.isArray(rows)) return;
-    state.remoteProducts = rows.map(mapSupabaseProductToCatalogProduct);
-    save("reball.remoteProducts", state.remoteProducts);
+    state.remoteProducts = rows.map(mapSupabaseProductToCatalogProduct).filter(Boolean);
+    hydrateCartEntries();
     renderRoute();
   } catch {
-    // Local catalog remains the fallback for offline review.
+    state.cart = [];
+    saveCartState();
+    // Marketing fallback remains visible, but it cannot create an order.
   }
 }
 
@@ -8350,6 +7978,15 @@ function renderRoute() {
   if (base === "cart") return renderCart();
   if (base === "checkout") return renderCheckout();
   if (base === "order") return renderOrder(a);
+  if (base === "payment") {
+    const orderId = String(paymentReturnParams().get("orderId") || "").trim().toUpperCase();
+    if (a === "success") return renderPaymentReturnStatus({ kind: "processing", orderId });
+    return renderPaymentReturnStatus({
+      kind: "fail",
+      orderId: /^[A-Z0-9_-]{6,64}$/.test(orderId) ? orderId : "",
+      message: "결제를 완료하지 못했습니다. 결제 정보를 확인한 뒤 다시 시도해 주세요.",
+    });
+  }
   if (base === "mypage") return renderMypage();
   if (base === "store") return renderStore();
   if (base === "inspection") return renderInspection();
@@ -8369,13 +8006,10 @@ window.addEventListener("hashchange", () => {
   renderRoute();
   window.requestAnimationFrame(flushPendingScroll);
 });
-window.setInterval(() => {
-  state.activeBanner = (state.activeBanner + 1) % banners.length;
-  if (parseRoute() === "/") renderHome();
-}, 5200);
-
 renderRoute();
-void initializeAuth();
-hydrateFromSupabase();
+void configureSupabaseClient().then(() => {
+  void initializeAuth();
+  void hydrateFromSupabase();
+});
 
 

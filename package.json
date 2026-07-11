@@ -1,11 +1,37 @@
 {
   "name": "reball-lostball-home",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "private": true,
+  "type": "module",
+  "engines": {
+    "node": ">=22"
+  },
   "scripts": {
     "dev": "node scripts/dev-server.mjs",
     "lint": "node scripts/lint.mjs",
     "build": "node scripts/build.mjs",
-    "build:check": "node scripts/build-check.mjs"
+    "build:check": "node scripts/build-check.mjs",
+    "check:sql": "node scripts/check-sql.mjs",
+    "test:frontend": "node --test tests/frontend/*.test.mjs",
+    "test:backend": "node --test tests/backend/*.test.mjs",
+    "test:backend:deno": "npx --yes deno test --allow-env tests/backend/payment-provider.deno.test.ts",
+    "test:contracts": "node --test tests/contracts/frontend-repair.contract.test.mjs tests/contracts/backend-repair.contract.test.mjs",
+    "test:unit": "npm run test:frontend && npm run test:backend && npm run test:backend:deno",
+    "test:integration": "npm run test:contracts",
+    "test:e2e": "playwright test tests/e2e/reball.spec.mjs",
+    "test:a11y": "playwright test tests/e2e/accessibility.spec.mjs",
+    "test": "npm run test:unit && npm run test:integration",
+    "check:edge": "node scripts/check-edge-functions.mjs",
+    "qa": "npm run lint && npm run build && npm run check:edge && npm run check:sql && npm test && npm run test:e2e && npm run test:a11y",
+    "manifest": "node scripts/generate-source-manifest.mjs",
+    "report:source-diff": "node scripts/generate-source-diff-report.mjs"
+  },
+  "dependencies": {
+    "dotenv": "17.4.2"
+  },
+  "devDependencies": {
+    "@playwright/test": "1.61.1",
+    "axe-core": "4.12.1",
+    "pgsql-parser": "17.9.16"
   }
 }
