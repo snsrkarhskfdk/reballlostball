@@ -1960,10 +1960,9 @@ function renderFooter() {
   return `
     <footer class="site-footer">
       <section class="site-footer-card">
-        <section class="footer-store-business" aria-labelledby="footer-store-business-title">
+        <section class="footer-store-business" aria-label="매장과 사업자 정보">
           <div class="footer-store-business-heading">
             <p>STORE &amp; BUSINESS</p>
-            <h2 id="footer-store-business-title">매장과 사업자 정보를 투명하게 공개합니다</h2>
           </div>
           <div class="footer-store-business-copy">
             <strong>${businessProfile.address}</strong>
