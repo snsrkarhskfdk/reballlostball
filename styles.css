@@ -1622,8 +1622,15 @@ hr,
 }
 
 /* User-supplied catalog photos fill commerce media while legacy cutout balls remain contained. */
+.product-grid .product-media-link {
+  overflow: hidden;
+}
+
 .product-grid .product-media img.catalog-product-photo,
 .product-grid.small .product-media img.catalog-product-photo {
+  position: absolute;
+  inset: 0;
+  display: block;
   width: 100%;
   height: 100%;
   max-width: none;

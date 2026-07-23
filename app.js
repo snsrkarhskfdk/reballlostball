@@ -91,7 +91,7 @@ import {
 } from "./src/frontend/catalog/content.mjs";
 
 const HERO_PATH = "/hero";
-const ASSET_VERSION = "20260723-01";
+const ASSET_VERSION = "20260723-02";
 const HERO_DROP_FRAME_COUNT = 10;
 const HERO_DROP_VIRTUAL_FRAME_COUNT = 36;
 const metaConfig = (name) => document.querySelector(`meta[name="${name}"]`)?.content?.trim() || "";
