@@ -10,6 +10,11 @@ import {
   variantSelection,
 } from "./src/frontend/catalog/variants.mjs";
 import {
+  resolveAdminVariantThumbnail,
+  resolveProductVariantImage,
+  resolveRemoteVariantImage,
+} from "./src/frontend/catalog/product-images.mjs";
+import {
   clearLegacySensitiveStorage,
   loadCartSession,
   loadGuestLookupSession,
@@ -86,7 +91,7 @@ import {
 } from "./src/frontend/catalog/content.mjs";
 
 const HERO_PATH = "/hero";
-const ASSET_VERSION = "20260612-06";
+const ASSET_VERSION = "20260723-01";
 const HERO_DROP_FRAME_COUNT = 10;
 const HERO_DROP_VIRTUAL_FRAME_COUNT = 36;
 const metaConfig = (name) => document.querySelector(`meta[name="${name}"]`)?.content?.trim() || "";
@@ -1472,6 +1477,10 @@ function productBySlug(slug) {
   return catalogProducts().find((product) => product.slug === slug || product.aliasSlugs?.includes(slug)) ?? null;
 }
 
+function isProductPhotoAsset(name) {
+  return String(name || "").startsWith("product-variants/");
+}
+
 function productByBrand(brandSlug) {
   return catalogProducts().filter((product) => product.brandSlug === brandSlug);
 }
@@ -1513,9 +1522,17 @@ function packSizeToLabel(value) {
 }
 
 function mapSupabaseVariantToLocalVariant(row, product, imageFallback) {
-  const imageUrl = normalizeCatalogAssetName(row.thumbnail_url, imageFallback);
   const grade = DB_GRADE_TO_UI_GRADE[stringOrEmpty(row.grade).trim()] || "A";
   const pack = packSizeToLabel(row.pack_size);
+  const model = stringOrEmpty(row.option_model) || product.models?.[0] || product.line || product.name;
+  const color = stringOrEmpty(row.option_color) || product.colors?.[0] || "화이트";
+  const remoteImage = normalizeCatalogAssetName(row.thumbnail_url, "");
+  const imageUrl = resolveRemoteVariantImage(
+    product,
+    { model, grade, pack, color },
+    remoteImage,
+    imageFallback
+  );
   const price = Number(row.price_krw) || 0;
   const rawCompareAtPrice = Number(row.compare_at_krw) || 0;
   const compareAtPrice = rawCompareAtPrice > price ? rawCompareAtPrice : 0;
@@ -1524,10 +1541,10 @@ function mapSupabaseVariantToLocalVariant(row, product, imageFallback) {
     sku:
       stringOrEmpty(row.sku) ||
       `RB-${productSkuToken(product.brandSlug).slice(0, 4)}-${productSkuToken(row.option_model).slice(0, 5)}-${grade}-${Number(row.pack_size) || 10}-${productSkuToken(row.option_color).slice(0, 3) || "CLR"}`,
-    model: stringOrEmpty(row.option_model) || product.models?.[0] || product.line || product.name,
+    model,
     grade,
     pack,
-    color: stringOrEmpty(row.option_color) || product.colors?.[0] || "화이트",
+    color,
     price,
     compareAtPrice,
     discountPercent: discountPercent(price, compareAtPrice),
@@ -1645,6 +1662,8 @@ function selectionKey(product, selection) {
 }
 
 function productVariantImage(product, selection) {
+  const suppliedPhoto = resolveProductVariantImage(product, selection, "");
+  if (suppliedPhoto) return suppliedPhoto;
   const variantImages = product.variantImages || {};
   if (variantImages[selection.model]) return variantImages[selection.model];
   const modelToken = productToken(selection.model);
@@ -1753,7 +1772,7 @@ function productCardMetrics(product) {
     return {
       variant: {
         id: "",
-        imageUrl: product.image,
+        imageUrl: product.cardImage || product.image,
         grade: "-",
         pack: "-",
         stock: 0,
@@ -2633,11 +2652,16 @@ function renderProductCard(product) {
   const wished = isWished(product.slug);
   const metrics = productCardMetrics(product);
   const reviewStats = productReviewStats(product);
+  const cardImage = resolveProductVariantImage(
+    product,
+    metrics.variant,
+    product.cardImage || metrics.variant.imageUrl || product.image
+  );
   return `
     <article class="product-card">
       <div class="product-media product-hover-zone">
         <button class="product-media-link" type="button" data-route="/product/${product.slug}" aria-label="${escapeHtml(product.name)} 상세 보기">
-          <img src="${asset(metrics.variant.imageUrl || product.image)}" alt="${escapeHtml(product.name)}" />
+          <img class="${isProductPhotoAsset(cardImage) ? "catalog-product-photo" : ""}" src="${asset(cardImage)}" alt="${escapeHtml(product.name)}" />
         </button>
         ${renderHoverActions(product, wished)}
       </div>
@@ -2727,7 +2751,7 @@ function renderDetail(slug) {
           <div class="thumb-row" aria-label="상품 이미지 썸네일">
             ${galleryItems.map((item, index) => `
               <button class="${index === 0 ? "is-active" : ""}" type="button" aria-label="${escapeHtml(item.label)} 보기" data-gallery-thumb data-gallery-src="${escapeHtml(item.image)}" data-gallery-label="${escapeHtml(item.label)}">
-                <img src="${asset(item.image)}" alt="" loading="eager" decoding="sync" />
+                <img class="${isProductPhotoAsset(item.image) ? "catalog-product-photo" : ""}" src="${asset(item.image)}" alt="" loading="eager" decoding="sync" />
               </button>
             `).join("")}
           </div>
@@ -2797,7 +2821,7 @@ function productGalleryItems(product, variant = selectedVariant(product)) {
     image: product.image,
     label: `${product.name} 이미지 ${index + 1}`,
   }));
-  const variantImage = variant?.imageUrl || product.image;
+  const variantImage = variant?.imageUrl || product.cardImage || product.image;
   const variantItem = { image: variantImage, label: `${product.name} 선택 옵션 이미지` };
   return [variantItem, ...baseItems.filter((item) => item.image !== variantImage)];
 }
@@ -6607,7 +6631,7 @@ function buildAdminVariantPayloads(product, productId) {
     price_krw: variant.price,
     compare_at_krw: variant.compareAtPrice > variant.price ? variant.compareAtPrice : null,
     stock_qty: distributedStock[index] ?? 0,
-    thumbnail_url: normalizeCatalogAssetName(product.image, ""),
+    thumbnail_url: normalizeCatalogAssetName(resolveAdminVariantThumbnail(product, variant), ""),
     active: true,
   }));
 }
