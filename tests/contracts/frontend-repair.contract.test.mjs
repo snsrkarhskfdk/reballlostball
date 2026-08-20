@@ -231,6 +231,11 @@ test("frontend modules are real entry dependencies and the build copies their im
 });
 
 test("home has one reachable h1 and the five conversion stages in order", () => {
+  assertMatch(
+    appSource,
+    /import\s*\{[^}]*\bgradeConditionGuide\b[^}]*\}\s*from\s*["']\.\/src\/frontend\/catalog\/content\.mjs["']/s,
+    "Home grade guide must import gradeConditionGuide from the catalog content module."
+  );
   const reachable = reachableFunctionSources(
     appSource,
     "renderHome",
