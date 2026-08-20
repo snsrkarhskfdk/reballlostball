@@ -2,7 +2,9 @@
 import {
   assertOrderableQuantity,
   chooseVariantForOption,
+  findExactCatalogVariant,
   findExactOrderableVariant,
+  findFirstCatalogVariant,
   findFirstOrderableVariant,
   isOrderableVariant,
   isVariantOptionSelectable,
@@ -89,6 +91,10 @@ import {
   storeGalleryPhotos,
   storeMapUrl,
 } from "./src/frontend/catalog/content.mjs";
+import {
+  catalogPriceForSelection,
+  priceRowsForProduct,
+} from "./src/frontend/catalog/price-book.mjs";
 
 const HERO_PATH = "/hero";
 const ASSET_VERSION = "20260723-02";
@@ -108,8 +114,8 @@ const PENDING_SIGNUP_EMAIL_KEY = "reball.pendingSignupEmail";
 const PENDING_SIGNUP_LOGIN_ID_KEY = "reball.pendingSignupLoginId";
 const SIGNUP_LOGIN_ID_REGISTRY_KEY = "reball.signupLoginIds";
 const LOGIN_ID_PATTERN = /^[a-z0-9][a-z0-9._-]{3,19}$/;
-const UI_GRADE_TO_DB_GRADE = { S: "A_PLUS", A: "A", B: "B" };
-const DB_GRADE_TO_UI_GRADE = { A_PLUS: "S", A: "A", B: "B" };
+const UI_GRADE_TO_DB_GRADE = { S: "S", "A+": "A_PLUS", A: "A", B: "B" };
+const DB_GRADE_TO_UI_GRADE = { S: "S", A_PLUS: "A+", A: "A", B: "B" };
 
 clearLegacySensitiveStorage(globalThis.localStorage);
 resetSeededMemberStorage();
@@ -336,7 +342,7 @@ function HoleInOneBridge(representativeProducts) {
         </h1>
         <span class="hole-sub">등급 기준과 대표 구성을 빠르게 확인하고,<br />가장 많이 찾는 상품으로 바로 이동하세요.</span>
         <div class="hole-grade-row" aria-hidden="true">
-          ${renderGradeChip("S")}${renderGradeChip("A")}${renderGradeChip("B")}
+          ${renderGradeChip("A+")}${renderGradeChip("A")}${renderGradeChip("B")}
         </div>
         <button class="gold-cart-btn hole-in-one-cta" type="button" data-scroll-to="products">대표 상품 보기 ${originalCartIcon}</button>
       </div>
@@ -1455,10 +1461,11 @@ function renderUiIcon(name, className = "ui-icon") {
 // 브랜드 로고에서 추출한 실사 골프공 + 등급 글자를 "프린트"처럼 올린 칩
 function renderGradeChip(grade, { size = "" } = {}) {
   const g = String(grade || "").toUpperCase();
-  const safeGrade = ["S", "A", "B"].includes(g) ? g : "A";
+  const safeGrade = ["S", "A+", "A", "B"].includes(g) ? g : "A";
+  const gradeClass = safeGrade === "A+" ? "S" : safeGrade;
   const sizeClass = size ? ` ${size}` : "";
   return `
-    <span class="grade-chip grade-chip--${safeGrade}${sizeClass}" data-grade="${safeGrade}" role="img" aria-label="${safeGrade}등급">
+    <span class="grade-chip grade-chip--${gradeClass}${sizeClass}" data-grade="${safeGrade}" role="img" aria-label="${safeGrade}등급">
       <img class="grade-chip-ball" src="${asset("grade-ball.png")}" alt="" loading="lazy" decoding="async" />
       <b class="grade-chip-letter">${safeGrade}</b>
     </span>
@@ -1478,7 +1485,7 @@ function productBySlug(slug) {
 }
 
 function isProductPhotoAsset(name) {
-  return String(name || "").startsWith("product-variants/");
+  return /^product-(?:variants|actual)\//.test(String(name || ""));
 }
 
 function productByBrand(brandSlug) {
@@ -1568,8 +1575,9 @@ function mapSupabaseProductToCatalogProduct(row) {
     products.find((product) => product.brandSlug === brandSlug) ||
     products[0];
   const variantRows = Array.isArray(row.product_variants) ? row.product_variants.filter(Boolean) : [];
-  const models = uniqueTextValues(variantRows.map((variant) => variant.option_model));
-  const colors = uniqueTextValues(variantRows.map((variant) => variant.option_color));
+  const activeVariantRows = variantRows.filter((variant) => variant.active !== false);
+  const models = uniqueTextValues(activeVariantRows.map((variant) => variant.option_model));
+  const colors = uniqueTextValues(activeVariantRows.map((variant) => variant.option_color));
   const totalStock = variantRows.reduce(
     (sum, variant) =>
       sum +
@@ -1579,7 +1587,7 @@ function mapSupabaseProductToCatalogProduct(row) {
     0
   );
   const image = normalizeCatalogAssetName(
-    variantRows.find((variant) => stringOrEmpty(variant.thumbnail_url).trim())?.thumbnail_url,
+    activeVariantRows.find((variant) => stringOrEmpty(variant.thumbnail_url).trim())?.thumbnail_url,
     template.image
   );
   const nextProduct = {
@@ -1601,7 +1609,7 @@ function mapSupabaseProductToCatalogProduct(row) {
     remoteRegistered: true,
     updatedAt: stringOrEmpty(row.updated_at).trim() || todayIso(),
   };
-  nextProduct.dbVariants = variantRows.map((variant) => mapSupabaseVariantToLocalVariant(variant, nextProduct, image));
+  nextProduct.dbVariants = activeVariantRows.map((variant) => mapSupabaseVariantToLocalVariant(variant, nextProduct, image));
   return nextProduct;
 }
 
@@ -1637,6 +1645,9 @@ function getSelection(product) {
     pack: selected.pack ?? "10구",
     color: selected.color ?? product.colors[0],
   };
+  if (!Object.keys(selected).length) {
+    return variantSelection(firstAvailableVariant(product) || findFirstCatalogVariant(product) || initial);
+  }
   return normalizeProductSelection(product, initial);
 }
 
@@ -1675,9 +1686,11 @@ function productVariantImage(product, selection) {
 }
 
 function priceForSelection(product, selection) {
-  const grade = gradeOptions.find((item) => item.id === selection.grade) ?? gradeOptions[0];
+  const exactPrice = catalogPriceForSelection(product, selection)?.price;
+  if (Number.isInteger(exactPrice) && exactPrice > 0) return exactPrice;
   const pack = packOptions.find((item) => item.id === selection.pack) ?? packOptions[0];
-  return Math.max(5900, Math.round((Number(product.price) + grade.delta) * pack.multiplier));
+  const basePack = packOptions[0]?.qty || 10;
+  return Math.max(1000, Math.round((Number(product.price) || 0) * ((pack?.qty || basePack) / basePack)));
 }
 
 function compareAtForPrice(product, price) {
@@ -1697,8 +1710,8 @@ function explicitUnavailableVariantSet(product) {
 
 function isUnavailableVariant(product, selection) {
   if (explicitUnavailableVariantSet(product).has(selectionKey(product, selection))) return true;
-  if (product.brandSlug === "mix" && selection.grade === "S") return true;
-  if ((Number(product.stock) || 0) < 45 && selection.grade === "S" && selection.pack === "30구") return true;
+  if (product.brandSlug === "mix" && selection.grade === "A+") return false;
+  if ((Number(product.stock) || 0) < 45 && selection.grade === "A+" && selection.pack === "30구") return true;
   if (selection.color === "트리플트랙" && !String(selection.model || "").includes("트리플트랙")) return true;
   return false;
 }
@@ -1707,6 +1720,47 @@ function buildDraftAdminVariants(product) {
   const models = product.models?.length ? product.models : [product.line || product.name];
   const colors = product.colors?.length ? product.colors : ["화이트"];
   const baseStock = Math.max(0, Number(product.stock) || 0);
+  const priceRows = priceRowsForProduct(product);
+  if (priceRows.length) {
+    const pricedCombinations = priceRows.flatMap((priceRow) =>
+      colors.map((color) => ({ ...priceRow, color }))
+    );
+    const productGrades = product.grades?.length ? product.grades : gradeOptions.map((grade) => grade.id);
+    const reservedCombinations = models.flatMap((model) =>
+      productGrades.flatMap((grade) =>
+        colors.map((color) => ({
+          model,
+          grade,
+          pack: "50구",
+          color,
+          price: 0,
+          reserved: true,
+        }))
+      )
+    );
+    const combinations = [...pricedCombinations, ...reservedCombinations];
+    return combinations.map((selection, index) => {
+      const stock = selection.reserved
+        ? 0
+        : Math.max(0, Math.floor(baseStock / Math.max(1, pricedCombinations.length)) + (index < baseStock % pricedCombinations.length ? 1 : 0));
+      return {
+        id: `${product.slug}-${productToken(selection.model)}-${productToken(selection.grade)}-${productToken(selection.pack)}-${productToken(selection.color)}`,
+        sku: `RB-${productSkuToken(product.brandSlug).slice(0, 4)}-${productSkuToken(selection.model).slice(0, 5)}-${productSkuToken(selection.grade)}-${packOptions.find((item) => item.id === selection.pack)?.qty || 10}-${productSkuToken(selection.color).slice(0, 3) || "CLR"}`,
+        model: selection.model,
+        grade: selection.grade,
+        pack: selection.pack,
+        color: selection.color,
+        price: selection.price,
+        compareAtPrice: 0,
+        discountPercent: 0,
+        imageUrl: productVariantImage(product, selection),
+        stock,
+        available: stock > 0,
+        freeShipping: Boolean(selection.freeShipping),
+        reserved: Boolean(selection.reserved),
+      };
+    });
+  }
   return models.flatMap((model, modelIndex) =>
     gradeOptions.flatMap((grade, gradeIndex) =>
       packOptions.flatMap((pack, packIndex) =>
@@ -1715,7 +1769,7 @@ function buildDraftAdminVariants(product) {
           const price = priceForSelection(product, selection);
           const stock = Math.max(0, baseStock - modelIndex * 2 - gradeIndex * 3 - packIndex * 6 - colorIndex);
           const unavailable = isUnavailableVariant(product, selection);
-          const compareAtPrice = compareAtForPrice(product, price);
+          const compareAtPrice = 0;
           return {
             id: `${product.slug}-${productToken(model)}-${grade.id}-${productToken(pack.id)}-${productToken(color)}`,
             sku: `RB-${productSkuToken(product.brandSlug).slice(0, 4)}-${productSkuToken(model).slice(0, 5)}-${grade.id}-${pack.qty}-${productSkuToken(color).slice(0, 3) || "CLR"}`,
@@ -1736,6 +1790,15 @@ function buildDraftAdminVariants(product) {
   );
 }
 
+function editableAdminVariants(product) {
+  const saved = Array.isArray(product?.dbVariants)
+    ? product.dbVariants.filter((variant) => variant && variant.active !== false)
+    : [];
+  const reserved = buildDraftAdminVariants({ ...product, dbVariants: [] }).filter((variant) => variant.reserved);
+  const keys = new Set(saved.map((variant) => selectionKey(product, variant)));
+  return [...saved, ...reserved.filter((variant) => !keys.has(selectionKey(product, variant)))];
+}
+
 function productVariants(product) {
   return Array.isArray(product?.dbVariants)
     ? [...product.dbVariants].sort(
@@ -1753,8 +1816,8 @@ function firstAvailableVariant(product, partial = {}) {
 }
 
 function normalizeProductSelection(product, selection) {
-  const exact = findExactOrderableVariant(product, selection);
-  return variantSelection(exact || firstAvailableVariant(product) || selection);
+  const exact = findExactCatalogVariant(product, selection);
+  return variantSelection(exact || firstAvailableVariant(product) || findFirstCatalogVariant(product) || selection);
 }
 
 function selectedVariant(product) {
@@ -1766,7 +1829,9 @@ function isOptionSelectable(product, key, value) {
 }
 
 function productCardMetrics(product) {
-  const variant = firstAvailableVariant(product, { grade: "A", pack: "10구" }) || firstAvailableVariant(product);
+  const orderableVariant = firstAvailableVariant(product, { grade: "A", pack: "10구" }) || firstAvailableVariant(product);
+  const catalogVariant = findFirstCatalogVariant(product, { grade: "A", pack: "10구" }) || findFirstCatalogVariant(product);
+  const variant = orderableVariant || catalogVariant;
   if (!variant) {
     const price = Math.max(0, Number(product.price) || 0);
     return {
@@ -1782,14 +1847,17 @@ function productCardMetrics(product) {
       compareAtPrice: 0,
       discountPercent: 0,
       orderable: false,
+      priced: price > 0,
     };
   }
+  const price = Math.max(0, Number(product.price) || variant.price);
   return {
     variant,
-    price: variant.price,
-    compareAtPrice: variant.compareAtPrice,
-    discountPercent: variant.discountPercent,
-    orderable: true,
+    price,
+    compareAtPrice: orderableVariant ? variant.compareAtPrice : 0,
+    discountPercent: orderableVariant ? variant.discountPercent : 0,
+    orderable: Boolean(orderableVariant),
+    priced: true,
   };
 }
 
@@ -2095,7 +2163,7 @@ function buildConsultAnswer(query) {
     const metrics = productCardMetrics(product);
     return [
       `${product.name} 안내입니다.`,
-      `가격은 ${money.format(metrics.price)}원부터 시작하고, 선택 등급/구성에 따라 달라집니다.`,
+      `가격은 ${money.format(metrics.price)}원부터 시작하고, 선택한 모델·등급·구성의 확정 단가가 적용됩니다.`,
       `현재 표시 재고는 ${product.stock}세트입니다.`,
       `옵션: ${(product.models || []).join(" / ")}`,
       `색상: ${(product.colors || []).join(" / ")}`,
@@ -2104,7 +2172,7 @@ function buildConsultAnswer(query) {
   }
 
   if (/가격|금액|얼마|상품|브랜드|추천|재고|품절|라인/.test(normalized)) {
-    return `현재 판매 상품과 시작 가격입니다.\n${priceList}\n\n정확한 최종 금액은 상품 상세에서 등급(S/A/B), 구성(10구/30구), 색상 옵션을 선택하면 계산됩니다.`;
+    return `현재 판매 상품과 시작 가격입니다.\n${priceList}\n\n정확한 최종 금액은 상품 상세에서 등급(A+/A/B), 구성(10구/30구/일부 100구), 색상 옵션을 선택하면 확인할 수 있습니다.`;
   }
 
   if (/배송|출고|택배|도착|언제|배달/.test(normalized)) {
@@ -2415,7 +2483,7 @@ function renderHomeGradeOverviewSection() {
     <section class="home-section panel-card home-system-section home-grade-overview" id="home-grade-overview">
       <header class="home-system-head">
         <h2>등급 안내</h2>
-        <p>S · A · B 상태를 한눈에 보기</p>
+        <p>A+ · A · B 실제 상태를 한눈에 보기</p>
       </header>
       ${renderHomeGradeGuideBody()}
     </section>
@@ -2426,35 +2494,39 @@ function renderHomeGradeGuideBody() {
   const gradeCards = [
     {
       tone: "strong",
-      label: "S",
-      title: "새 볼에 가까운 최상급",
-      body: "스크래치와 변색이 매우 적어 선물용과 실전 라운드에 적합합니다.",
+      label: "A+",
+      title: gradeConditionGuide["A+"].title,
+      body: gradeConditionGuide["A+"].body,
+      image: gradeConditionGuide["A+"].sampleImage,
       rate: "●●●●",
     },
     {
       tone: "soft",
       label: "A",
       title: "실전 라운드용 우수급",
-      body: "미세한 사용감은 있으나 실전 라운드용으로 안정적인 표준 등급입니다.",
+      body: gradeConditionGuide.A.body,
+      image: gradeConditionGuide.A.sampleImage,
       rate: "●●●○",
     },
     {
       tone: "warm",
       label: "B",
       title: "연습과 가성비 중심 실속급",
-      body: "연습과 부담 없는 구매에 적합한 실속형 구성입니다.",
+      body: gradeConditionGuide.B.body,
+      image: gradeConditionGuide.B.sampleImage,
       rate: "●●○○",
     },
   ];
   return `
-    <div class="home-grade-system-grid" aria-label="S A B 등급 안내">
+    <div class="home-grade-system-grid" aria-label="A+ A B 등급 안내">
       ${gradeCards
         .map(
           (grade) => `
         <article class="home-grade-system-card ${escapeHtml(grade.tone)}">
-          <span class="home-grade-letter">
-            ${renderGradeChip(grade.label, { size: "xl" })}
-          </span>
+          <figure class="home-grade-photo">
+            <img src="${asset(grade.image)}" alt="${escapeHtml(grade.label)} 등급 실제 로스트볼 예시" loading="lazy" decoding="async" />
+            <span class="home-grade-letter">${renderGradeChip(grade.label, { size: "xl" })}</span>
+          </figure>
           <div>
             <small><span>${escapeHtml(grade.label)} 등급</span><b>${escapeHtml(grade.rate)}</b></small>
             <h3>${escapeHtml(grade.title)}</h3>
@@ -2473,7 +2545,7 @@ function renderHomeInspectionProcessSection() {
     ["process-test", "세척 및 표면 정리", "오염과 이물질 정리"],
     ["process-inspect", "외관 검사", "스크래치, 변색 확인"],
     ["why-shield", "성능 확인", "탄성, 무게, 밸런스"],
-    ["process-pack", "등급 분류 및 포장", "S·A·B 등급 포장"],
+    ["process-pack", "등급 분류 및 포장", "A+·A·B 등급 포장"],
   ];
   return renderHomeProcessSystemSection("5단계 검수 프로세스", "공급부터 포장까지 단계별로 확인합니다", steps, "inspection");
 }
@@ -2537,7 +2609,7 @@ function renderBestSellerCard(product) {
           <span>${escapeHtml(product.brandName)}</span>
           <h3>${escapeHtml(product.line)}</h3>
           <p>${metrics.orderable ? "재고 보유 · 15시 당일 업데이트" : "실제 재고 등록 대기"}</p>
-          <strong>${isPlaceholder ? "원본 이미지 연결 예정" : metrics.orderable ? `₩${money.format(metrics.price)}부터` : "판매 준비중"}</strong>
+          <strong>${isPlaceholder ? "원본 이미지 연결 예정" : metrics.priced ? `₩${money.format(metrics.price)}부터` : "판매 준비중"}</strong>
         </div>
       </div>
       <div class="best-review ${isPlaceholder ? "no-action" : ""}">
@@ -2557,13 +2629,14 @@ function renderReasonCard(iconName, title, body) {
 }
 
 function renderGradeCard(grade) {
-  const tone = grade.id === "S" ? "strong" : grade.id === "A" ? "soft" : "warm";
+  const tone = grade.id === "A+" ? "strong" : grade.id === "A" ? "soft" : "warm";
+  const guide = gradeConditionGuide[grade.id] || gradeConditionGuide.A;
   return `
     <article class="${tone}">
       <b>${escapeHtml(grade.label)}</b>
       <div>
         <h2>${escapeHtml(grade.text)}</h2>
-        <p>${grade.id === "S" ? "스크래치와 변색이 매우 적어 새 볼에 가까운 상태입니다." : grade.id === "A" ? "미세한 사용감은 있으나 실전 라운드용으로 안정적입니다." : "연습과 가성비 구매에 적합한 실속 등급입니다."}</p>
+        <p>${escapeHtml(guide.body)}</p>
         <span>추천도 ●●●${grade.id === "B" ? "○" : "●"}</span>
       </div>
     </article>
@@ -2671,7 +2744,7 @@ function renderProductCard(product) {
         <p>${escapeHtml(product.copy)}</p>
         <div class="product-price-stack" aria-label="상품 가격">
           ${metrics.orderable && metrics.compareAtPrice > metrics.price ? `<span><del>₩${money.format(metrics.compareAtPrice)}</del><b>${metrics.discountPercent}%</b></span>` : ""}
-          <strong>${metrics.orderable ? `₩${money.format(metrics.price)}부터` : "판매 준비중"}</strong>
+          <strong>${metrics.priced ? `₩${money.format(metrics.price)}부터` : "판매 준비중"}</strong>
         </div>
         <div class="product-rating-row" aria-label="리뷰 요약">
           <span>${reviewStats.count ? "★★★★★" : "후기 없음"}</span>
@@ -2679,8 +2752,8 @@ function renderProductCard(product) {
           <small>${escapeHtml(reviewStats.badge)}</small>
         </div>
         <dl>
-          <div><dt>등급</dt><dd>S / A / B</dd></div>
-          <div><dt>구성</dt><dd>10구 / 30구</dd></div>
+          <div><dt>등급</dt><dd>${escapeHtml((product.grades || ["A+", "A", "B"]).join(" / "))}</dd></div>
+          <div><dt>구성</dt><dd>${escapeHtml([...(product.packs || ["10구", "30구"]), "50구 준비중"].join(" / "))}</dd></div>
           <div><dt>재고</dt><dd>${metrics.orderable ? `${metrics.variant.stock}세트` : "확인 중"}</dd></div>
         </dl>
         <div class="product-bottom">
@@ -2726,9 +2799,9 @@ function renderDetail(slug) {
     return;
   }
   const selection = getSelection(product);
-  const variant = selectedVariant(product);
+  const variant = findExactCatalogVariant(product, selection);
   const orderable = isOrderableVariant(variant);
-  const price = orderable ? variant.price : Math.max(0, Number(product.price) || 0);
+  const price = variant?.price || Math.max(0, Number(product.price) || 0);
   const displayVariant = variant || {
     sku: "판매 준비중",
     stock: 0,
@@ -2740,6 +2813,8 @@ function renderDetail(slug) {
   };
   const galleryItems = productGalleryItems(product, variant);
   const modalInitialImage = galleryItems[0] ?? { image: product.image, label: product.name };
+  const gradeGuide = gradeConditionGuide[selection.grade] || gradeConditionGuide.A;
+  const packLabels = product.packs?.length ? [...product.packs, "50구(준비중)"].join(" / ") : "10구 / 30구 / 50구(준비중)";
 
   layout(`
     <section class="detail-page">
@@ -2747,7 +2822,7 @@ function renderDetail(slug) {
       <div class="detail-layout">
         <section class="detail-gallery">
           ${renderGalleryStage(product, modalInitialImage)}
-          <p class="gallery-note">상품은 10구 / 30구 구성으로 판매되며, 로스트볼 특성상 모델 인쇄·마킹·로고 상태는 브랜드와 등급별로 차이가 있을 수 있습니다.</p>
+          <p class="gallery-note">상품은 ${escapeHtml(packLabels)} 구성으로 판매되며, 로스트볼 특성상 모델 인쇄·마킹·로고 상태는 브랜드와 등급별로 차이가 있을 수 있습니다.</p>
           <div class="thumb-row" aria-label="상품 이미지 썸네일">
             ${galleryItems.map((item, index) => `
               <button class="${index === 0 ? "is-active" : ""}" type="button" aria-label="${escapeHtml(item.label)} 보기" data-gallery-thumb data-gallery-src="${escapeHtml(item.image)}" data-gallery-label="${escapeHtml(item.label)}">
@@ -2765,19 +2840,20 @@ function renderDetail(slug) {
             <strong class="detail-price">₩${money.format(price)}</strong>
             ${orderable && displayVariant.compareAtPrice > price ? `<span><del>₩${money.format(displayVariant.compareAtPrice)}</del><b>${displayVariant.discountPercent}% 할인</b></span>` : ""}
           </div>
-          <em class="stock-line">${orderable ? `SKU ${escapeHtml(displayVariant.sku)} · 재고 ${displayVariant.stock}세트 · 15시 당일 업데이트` : "실제 variant와 재고가 확인되면 구매할 수 있습니다."}</em>
+          <em class="stock-line">${orderable ? `SKU ${escapeHtml(displayVariant.sku)} · 재고 ${displayVariant.stock}세트 · 15시 당일 업데이트` : variant ? `SKU ${escapeHtml(displayVariant.sku)} · 현재 재고 0세트 · 입고 후 구매 가능` : "실제 variant와 재고가 확인되면 구매할 수 있습니다."}</em>
           <dl class="detail-summary-table">
             <div><dt>모델</dt><dd>${escapeHtml(selection.model)}</dd></div>
             <div><dt>등급 / 구성</dt><dd>${escapeHtml(selection.grade)} · ${escapeHtml(selection.pack)}</dd></div>
             <div><dt>색상</dt><dd>${escapeHtml(selection.color)}</dd></div>
-            <div><dt>상태 안내</dt><dd>랜덤 마킹·로고·미세 스크래치 포함 가능</dd></div>
+            <div class="grade-condition-row"><dt>상태 안내</dt><dd><strong>${escapeHtml(gradeGuide.title)}</strong><span>${escapeHtml(gradeGuide.body)}</span><small>추천: ${escapeHtml(gradeGuide.recommendation)}</small></dd></div>
           </dl>
           <div class="option-stack">
             ${renderOptionGroup(product, "model", "모델", product.models)}
-            ${renderOptionGroup(product, "grade", "등급", gradeOptions.map((item) => item.id))}
-            ${renderOptionGroup(product, "pack", "구성", packOptions.map((item) => item.id))}
+            ${renderOptionGroup(product, "grade", "등급", product.grades?.length ? product.grades : gradeOptions.map((item) => item.id))}
+            ${renderOptionGroup(product, "pack", "구성", [...new Set([...(product.packs || []), "50구"])])}
             ${renderOptionGroup(product, "color", "색상", product.colors)}
           </div>
+          ${renderProductPriceTable(product)}
           <div class="selected-box">
             <span>선택한 옵션</span>
             <strong>${escapeHtml(selection.model)} → ${escapeHtml(selection.grade)} → ${escapeHtml(selection.pack)} → ${escapeHtml(selection.color)}</strong>
@@ -2811,10 +2887,7 @@ function renderProductStory(slug) {
   renderDetail(slug);
 }
 
-function productGalleryItems(product, variant = selectedVariant(product)) {
-  if (product.brandSlug === "mix" && Array.isArray(product.galleryImages) && product.galleryImages.length) {
-    return product.galleryImages;
-  }
+function productGalleryItems(product, variant = findExactCatalogVariant(product, getSelection(product))) {
   const baseItems = Array.isArray(product.galleryImages) && product.galleryImages.length
     ? product.galleryImages
     : Array.from({ length: 6 }, (_, index) => ({
@@ -2827,6 +2900,15 @@ function productGalleryItems(product, variant = selectedVariant(product)) {
 }
 
 function renderGalleryStage(product, modalInitialImage) {
+  if (isProductPhotoAsset(modalInitialImage.image)) {
+    return `
+      <div class="gallery-stage gallery-stage--actual-grade">
+        <img class="catalog-product-photo" src="${asset(modalInitialImage.image)}" alt="${escapeHtml(modalInitialImage.label)}" loading="eager" fetchpriority="high" decoding="sync" />
+        <span class="gallery-actual-badge">선택 등급 실제 사진</span>
+        <button class="gallery-more-btn" type="button" data-open-gallery data-gallery-src="${escapeHtml(modalInitialImage.image)}" data-gallery-label="${escapeHtml(modalInitialImage.label)}">더 많은 이미지 보기</button>
+      </div>
+    `;
+  }
   // 회전 영상이 있으면 항상 재생되도록 메인 스테이지에 노출한다(옵션 이미지와 무관).
   if (product.galleryAnimation) {
     return `
@@ -2866,7 +2948,7 @@ function renderDetailCheckStrip(product) {
         ${renderDetailCheckItem("why-shield", "리볼 로스트볼", "공식 기준 선별<br />믿을 수 있는 품질")}
         <article>
           <span class="detail-check-ball"><img src="${asset(product.image)}" alt="" /></span>
-          <div><strong>등급 선택</strong><small>S / A / B 구성<br />원하는 등급 선택</small></div>
+          <div><strong>등급 선택</strong><small>${escapeHtml((product.grades || ["A+", "A", "B"]).join(" / "))} 구성<br />원하는 등급 선택</small></div>
         </article>
         ${renderDetailCheckItem("order-box", "10구 / 30구", "필요 수량에 맞춰<br />합리적인 선택")}
         ${renderDetailCheckItem("order-truck", `${shippingPolicy.cutoffTime} 전 출고 준비`, `${shippingPolicy.averageLeadTime} 내 수령 예상<br />오늘도 안전하게`)}
@@ -2904,7 +2986,7 @@ function renderDetailInfoSection(product) {
           <span class="detail-info-media">
             ${renderShopIcon("order-box", "detail-info-icon")}
           </span>
-          <div><strong>구성 안내</strong><small>10구 / 30구 단위 선택 가능<br />등급 S / A / B 선택<br />브랜드별 옵션 구성 상이</small></div>
+          <div><strong>구성 안내</strong><small>${escapeHtml(product.packs?.join(" / ") || "10구 / 30구")} 단위 선택 가능<br />등급 ${escapeHtml((product.grades || ["A+", "A", "B"]).join(" / "))} 선택<br />브랜드별 옵션 구성 상이</small></div>
         </article>
         <article class="detail-info-card">
           <span class="detail-info-media">
@@ -2946,7 +3028,7 @@ function renderDetailSpecSection(product, price) {
           <strong>상품 상세 정보</strong>
           <dl>
             <div><dt>상품 구성</dt><dd>10구 / 30구 선택</dd></div>
-            <div><dt>등급 기준</dt><dd>S / A / B</dd></div>
+            <div><dt>등급 기준</dt><dd>${escapeHtml((product.grades || ["A+", "A", "B"]).join(" / "))}</dd></div>
             <div><dt>기준 가격</dt><dd>₩${money.format(price)}부터</dd></div>
           </dl>
         </article>
@@ -3043,11 +3125,51 @@ function renderOptionGroup(product, key, label, values) {
         ${values
           .map((value) => {
             const selectable = isOptionSelectable(product, key, value, selection);
-            return `<button class="${selection[key] === value ? "is-active" : ""}" type="button" data-option-kind="${escapeHtml(key)}" data-option-value="${escapeHtml(value)}" data-select-option="${product.slug}|${key}|${escapeHtml(value)}" ${selectable ? "" : "disabled aria-disabled=\"true\""}>${escapeHtml(value)}</button>`;
+            const pendingPack = key === "pack" && value === "50구" && !selectable;
+            const optionLabel = pendingPack ? "50구 · 가격 준비중" : value;
+            const title = pendingPack ? ' title="50구 가격 입력 후 선택할 수 있습니다."' : "";
+            return `<button class="${selection[key] === value ? "is-active" : ""} ${pendingPack ? "is-pending" : ""}" type="button" data-option-kind="${escapeHtml(key)}" data-option-value="${escapeHtml(value)}" data-select-option="${product.slug}|${key}|${escapeHtml(value)}" ${selectable ? "" : "disabled aria-disabled=\"true\""}${title}>${escapeHtml(optionLabel)}</button>`;
           })
           .join("")}
       </div>
     </div>
+  `;
+}
+
+function renderProductPriceTable(product) {
+  const dbRows = Array.isArray(product.dbVariants)
+    ? product.dbVariants.filter((variant) => variant?.active !== false && Number(variant.price) > 0)
+    : [];
+  const rows = dbRows.length
+    ? dbRows.map((variant) => ({
+        model: variant.model,
+        grade: variant.grade,
+        pack: variant.pack,
+        price: variant.price,
+        stock: variant.stock,
+        freeShipping: Boolean(catalogPriceForSelection(product, variant)?.freeShipping),
+      }))
+    : priceRowsForProduct(product).map((row) => ({ ...row, stock: 0 }));
+  const uniqueRows = [...new Map(rows.map((row) => [[row.model, row.grade, row.pack].join("|"), row])).values()];
+  if (!uniqueRows.length) return "";
+  return `
+    <details class="detail-price-table">
+      <summary>모델·등급·구성 전체 가격표 <span>${uniqueRows.length}개</span></summary>
+      <div class="detail-price-table-grid" role="table" aria-label="전체 판매 가격표">
+        ${uniqueRows
+          .map(
+            (row) => `
+          <div class="detail-price-table-row" role="row">
+            <span>${escapeHtml(row.model)}</span>
+            <b>${escapeHtml(row.grade)}</b>
+            <em>${escapeHtml(row.pack)}</em>
+            <strong>₩${money.format(row.price)}</strong>
+            <small>${row.freeShipping ? "무료배송" : Number(row.stock) > 0 ? `재고 ${row.stock}세트` : "재고 입력 대기"}</small>
+          </div>`
+          )
+          .join("")}
+      </div>
+    </details>
   `;
 }
 
@@ -3100,7 +3222,7 @@ function addBundleToCart(id, quantity = 1, options = {}) {
 
 function renderCart() {
   const total = cartTotal(state.cart);
-  const deliveryFee = shippingCost(total, shippingPolicy);
+  const deliveryFee = shippingCost(total, shippingPolicy, state.cart);
   const finalAmount = total + deliveryFee;
   layout(`
     <section class="page-title">
@@ -3245,7 +3367,7 @@ function renderCheckoutSummarySection(deliveryFee, finalAmount) {
 
 function renderCheckout() {
   const total = cartTotal(state.cart);
-  const deliveryFee = shippingCost(total, shippingPolicy);
+  const deliveryFee = shippingCost(total, shippingPolicy, state.cart);
   const finalAmount = total + deliveryFee;
   layout(`
     <section class="page-title checkout-page-title">
@@ -4635,7 +4757,7 @@ function renderStore() {
       <article>
         <b>02</b>
         <h3>등급 확인</h3>
-        <p>S · A · B 기준에 맞춰 외관 상태와 사용 목적을 함께 안내합니다.</p>
+        <p>A+ · A · B 기준에 맞춰 외관 상태와 사용 목적을 함께 안내합니다.</p>
       </article>
       <article>
         <b>03</b>
@@ -4655,7 +4777,7 @@ function renderStore() {
       </div>
       <ul>
         <li><strong>브랜드</strong><span>평소 쓰는 공 또는 관심 브랜드를 정합니다.</span></li>
-        <li><strong>등급</strong><span>라운딩용은 S/A, 연습용은 B까지 넓게 봅니다.</span></li>
+        <li><strong>등급</strong><span>라운딩용은 A+/A, 연습용은 B까지 넓게 봅니다.</span></li>
         <li><strong>수량</strong><span>10구 단위와 30구 단위를 미리 비교합니다.</span></li>
       </ul>
     </section>
@@ -4671,7 +4793,7 @@ function renderStore() {
 function renderInspection() {
   const gradeRows = [
     {
-      grade: "S",
+      grade: "A+",
       name: "최상급",
       appearance: "외관 사용감이 가장 적은 상품",
       use: "라운딩·선물용",
@@ -4694,7 +4816,7 @@ function renderInspection() {
       <section class="inspection-grade-section panel-card" aria-labelledby="inspection-grade-title">
         <header class="inspection-grade-head">
           <p>INSPECTION</p>
-          <h1 id="inspection-grade-title">S · A · B 등급 기준을<br />투명하게 공개합니다</h1>
+          <h1 id="inspection-grade-title">A+ · A · B 등급 기준을<br />투명하게 공개합니다</h1>
           <span>외관 상태와 사용 목적에 맞춰 동일한 기준으로 선별합니다.</span>
         </header>
         <div class="grade-table" role="table" aria-label="등급 비교">
@@ -4742,13 +4864,13 @@ function renderBrandStory() {
     <section class="legal-page">
       <article class="legal-card">
         <h2>우리가 하는 일</h2>
-        <p>리볼 로스트볼은 전국에서 수거된 로스트볼을 세척하고, 외관 상태와 사용 목적에 따라 S·A·B 등급으로 선별해 판매합니다. 부천 소사구 송내동 매장에서 직접 운영하며, 온라인 주문과 매장 방문 구매를 같은 기준으로 준비합니다.</p>
+        <p>리볼 로스트볼은 전국에서 수거된 로스트볼을 세척하고, 외관 상태와 사용 목적에 따라 A+·A·B 등급으로 선별해 판매합니다. 부천 소사구 송내동 매장에서 직접 운영하며, 온라인 주문과 매장 방문 구매를 같은 기준으로 준비합니다.</p>
       </article>
       <article class="legal-card">
         <h2>등급 선별 기준</h2>
         <p>모든 상품은 동일한 조명·기준으로 검수합니다. 사용에 지장이 있는 공은 선별 과정에서 제외하며, 등급별 외관 차이는 검수기준 페이지에서 투명하게 공개합니다.</p>
         <div class="legal-grade-row" aria-label="등급 요약">
-          <span class="legal-grade-item">${renderGradeChip("S")}<b>최상급</b></span>
+          <span class="legal-grade-item">${renderGradeChip("A+")}<b>최상급</b></span>
           <span class="legal-grade-item">${renderGradeChip("A")}<b>상급</b></span>
           <span class="legal-grade-item">${renderGradeChip("B")}<b>실속</b></span>
         </div>
@@ -4809,7 +4931,7 @@ function renderTerms() {
         heading: "제2조 (정의)",
         list: [
           "‘로스트볼’이란 수거·세척·선별 과정을 거친 중고 골프공을 말합니다.",
-          "‘등급’이란 외관 상태와 사용 목적에 따라 분류한 S·A·B 기준을 말합니다.",
+          "‘등급’이란 외관 상태와 사용 목적에 따라 분류한 A+·A·B 기준을 말합니다.",
           "‘이용자’란 회원 및 비회원으로서 본 서비스를 이용하는 자를 말합니다.",
         ],
       },
@@ -5734,6 +5856,7 @@ function renderAdminFormFields(fields) {
 function renderAdminProductRegisterForm() {
   const editingProduct = currentEditingProduct();
   const template = editingProduct || products.find((product) => product.brandSlug === "taylormade") || products[0];
+  const editableVariants = editableAdminVariants(template);
   return `
     <div class="admin-modal-form admin-product-register-form" data-admin-product-form>
       ${editingProduct ? `<input type="hidden" name="slug" value="${escapeHtml(editingProduct.slug)}" />` : ""}
@@ -5746,7 +5869,31 @@ function renderAdminProductRegisterForm() {
       <label>재고<input name="stock" inputmode="numeric" value="${escapeHtml(String(template.stock || 0))}" data-required-input data-label="재고" required /></label>
       <label>대표 이미지 파일명<input name="image" value="${escapeHtml(template.image || "ball-taylormade.png")}" data-required-input data-label="대표 이미지" required /></label>
       <label>상세 이미지 파일명<input name="detailImage" value="${escapeHtml(template.detailImage || "")}" /></label>
-      <small class="admin-modal-helper">수정 저장 시 상품 목록, 상세 옵션, 카드 가격과 재고 계산에 바로 반영됩니다.</small>
+      <small class="admin-modal-helper">아래 옵션별 가격표가 실제 판매가의 정본입니다. 가격·재고·사진 파일명만 고치면 해당 옵션에 바로 반영됩니다.</small>
+      <div class="admin-variant-editor" data-admin-variant-editor>
+        <div class="admin-variant-editor-head"><b>옵션별 가격·재고·사진</b><span>${editableVariants.length}개 옵션</span></div>
+        <div class="admin-variant-table" role="table" aria-label="옵션별 가격표">
+          <div class="admin-variant-row admin-variant-row--head" role="row">
+            <span>모델 / 등급 / 구성 / 색상</span><span>가격</span><span>재고</span><span>사진 파일명</span>
+          </div>
+          ${editableVariants
+            .map(
+              (variant, index) => `
+              <div class="admin-variant-row" role="row" data-admin-variant-row>
+                <input type="hidden" name="variant:${index}:sku" value="${escapeHtml(variant.sku || "")}" />
+                <input type="hidden" name="variant:${index}:model" value="${escapeHtml(variant.model || "")}" />
+                <input type="hidden" name="variant:${index}:grade" value="${escapeHtml(variant.grade || "A")}" />
+                <input type="hidden" name="variant:${index}:pack" value="${escapeHtml(variant.pack || "10구")}" />
+                <input type="hidden" name="variant:${index}:color" value="${escapeHtml(variant.color || "화이트")}" />
+                <strong>${escapeHtml([variant.model, variant.grade, variant.pack, variant.color].filter(Boolean).join(" / "))}${variant.reserved ? "<small>가격 준비중</small>" : ""}</strong>
+                <label><span class="sr-only">가격</span><input name="variant:${index}:price" inputmode="numeric" value="${escapeHtml(String(variant.price || 0))}" required /></label>
+                <label><span class="sr-only">재고</span><input name="variant:${index}:stock" inputmode="numeric" value="${escapeHtml(String(variant.stock || 0))}" required /></label>
+                <label><span class="sr-only">사진 파일명</span><input name="variant:${index}:imageUrl" value="${escapeHtml(variant.imageUrl || productVariantImage(template, variant) || template.image || "")}" /></label>
+              </div>`
+            )
+            .join("")}
+        </div>
+      </div>
     </div>
   `;
 }
@@ -6618,9 +6765,11 @@ function distributedStockValues(totalStock, count) {
 }
 
 function buildAdminVariantPayloads(product, productId) {
-  const variants = buildDraftAdminVariants({ ...product, dbVariants: [] });
+  const variants = Array.isArray(product.adminVariants) && product.adminVariants.length
+    ? product.adminVariants
+    : buildDraftAdminVariants({ ...product, dbVariants: [] });
   const distributedStock = distributedStockValues(product.stock, variants.length);
-  return variants.map((variant, index) => ({
+  return variants.filter((variant) => Number.isInteger(variant.price) && variant.price > 0).map((variant, index) => ({
     product_id: productId,
     sku: variant.sku,
     option_model: variant.model,
@@ -6630,8 +6779,8 @@ function buildAdminVariantPayloads(product, productId) {
     pack_size: packOptions.find((item) => item.id === variant.pack)?.qty || 10,
     price_krw: variant.price,
     compare_at_krw: variant.compareAtPrice > variant.price ? variant.compareAtPrice : null,
-    stock_qty: distributedStock[index] ?? 0,
-    thumbnail_url: normalizeCatalogAssetName(resolveAdminVariantThumbnail(product, variant), ""),
+    stock_qty: Number.isInteger(variant.stock) ? variant.stock : distributedStock[index] ?? 0,
+    thumbnail_url: normalizeCatalogAssetName(variant.imageUrl || resolveAdminVariantThumbnail(product, variant), ""),
     active: true,
   }));
 }
@@ -6718,7 +6867,6 @@ async function saveAdminProductToSupabase(product, password = "") {
 }
 
 async function handleAdminProductRegister() {
-  if (!rejectUnimplementedServerMutation("관리자 상품 저장")) return false;
   const form = document.querySelector("[data-admin-product-form]");
   if (!form) return true;
 
@@ -6777,6 +6925,28 @@ async function handleAdminProductRegister() {
     createdAt: editingProduct?.createdAt || todayIso(),
     updatedAt: todayIso(),
   };
+  nextProduct.adminVariants = Array.from(form.querySelectorAll("[data-admin-variant-row]")).map((row, index) => {
+    const field = (suffix) => row.querySelector(`[name="variant:${index}:${suffix}"]`)?.value ?? "";
+    return {
+      sku: field("sku"),
+      model: field("model"),
+      grade: field("grade"),
+      pack: field("pack"),
+      color: field("color"),
+      price: Number(String(field("price")).replace(/[^\d]/g, "")),
+      stock: Number(String(field("stock")).replace(/[^\d]/g, "")),
+      imageUrl: field("imageUrl").trim(),
+      compareAtPrice: 0,
+      active: true,
+      available: Number(String(field("price")).replace(/[^\d]/g, "")) > 0 && Number(String(field("stock")).replace(/[^\d]/g, "")) > 0,
+      reserved: field("pack") === "50구" && Number(String(field("price")).replace(/[^\d]/g, "")) === 0,
+    };
+  });
+  const invalidVariant = nextProduct.adminVariants.find((variant) => !Number.isInteger(variant.price) || variant.price < 0 || (!variant.reserved && variant.price === 0) || !Number.isInteger(variant.stock) || variant.stock < 0);
+  if (invalidVariant) {
+    showToast("판매 옵션 가격은 1원 이상, 재고는 0 이상 숫자로 입력하세요. 50구 준비중 행만 가격 0원을 사용할 수 있습니다.");
+    return false;
+  }
 
   try {
     const persistedProduct = await saveAdminProductToSupabase(nextProduct, "");
@@ -8036,5 +8206,3 @@ void configureSupabaseClient().then(() => {
   void initializeAuth();
   void hydrateFromSupabase();
 });
-
-

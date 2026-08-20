@@ -11,11 +11,18 @@ function positiveInteger(value) {
 
 export function isOrderableVariant(variant) {
   return Boolean(
+    isCatalogVariant(variant) &&
+      variant.available !== false &&
+      positiveInteger(variant.stock) > 0 &&
+      positiveInteger(variant.price) > 0
+  );
+}
+
+export function isCatalogVariant(variant) {
+  return Boolean(
     variant &&
       text(variant.id) &&
       variant.active !== false &&
-      variant.available !== false &&
-      positiveInteger(variant.stock) > 0 &&
       positiveInteger(variant.price) > 0
   );
 }
@@ -26,6 +33,10 @@ export function catalogVariants(product) {
 
 export function orderableVariants(product) {
   return catalogVariants(product).filter(isOrderableVariant);
+}
+
+export function activePricedVariants(product) {
+  return catalogVariants(product).filter(isCatalogVariant);
 }
 
 export function variantSelection(variant) {
@@ -40,10 +51,23 @@ export function findExactOrderableVariant(product, selection) {
   return orderableVariants(product).find((variant) => selectionMatches(variant, selection)) ?? null;
 }
 
+export function findExactCatalogVariant(product, selection) {
+  return activePricedVariants(product).find((variant) => selectionMatches(variant, selection)) ?? null;
+}
+
 export function findFirstOrderableVariant(product, partial = {}) {
   const entries = Object.entries(partial).filter(([, value]) => text(value));
   return (
     orderableVariants(product).find((variant) =>
+      entries.every(([key, value]) => text(variant?.[key]) === text(value))
+    ) ?? null
+  );
+}
+
+export function findFirstCatalogVariant(product, partial = {}) {
+  const entries = Object.entries(partial).filter(([, value]) => text(value));
+  return (
+    activePricedVariants(product).find((variant) =>
       entries.every(([key, value]) => text(variant?.[key]) === text(value))
     ) ?? null
   );
