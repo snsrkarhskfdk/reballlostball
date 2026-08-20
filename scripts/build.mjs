@@ -1,4 +1,8 @@
-import "dotenv/config";
+try {
+  await import("dotenv/config");
+} catch (error) {
+  if (error?.code !== "ERR_MODULE_NOT_FOUND") throw error;
+}
 import { cp, copyFile, mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { existsSync } from "node:fs";
 import { injectPublicConfig } from "./public-config.mjs";

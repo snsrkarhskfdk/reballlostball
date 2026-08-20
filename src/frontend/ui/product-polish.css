@@ -106,11 +106,51 @@ a:focus-visible {
 }
 
 .home-grade-system-card {
-  grid-template-columns: 104px minmax(0, 1fr);
+  grid-template-columns: 148px minmax(0, 1fr);
   gap: 20px;
   min-height: 168px;
   border-radius: 8px;
   padding: 22px;
+}
+
+.home-grade-photo {
+  position: relative;
+  overflow: hidden;
+  width: 148px;
+  height: 124px;
+  margin: 0;
+  border: 1px solid rgba(220, 229, 221, 0.9);
+  border-radius: 10px;
+  background: #f3f4f1;
+}
+
+.home-grade-photo > img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.home-grade-photo .home-grade-letter {
+  position: absolute;
+  right: 8px;
+  bottom: 8px;
+  width: 54px;
+  height: 54px;
+  border: 0;
+  border-radius: 999px;
+  padding: 0;
+  background: rgba(255, 255, 255, 0.92);
+  box-shadow: 0 8px 20px -12px rgba(5, 35, 24, 0.72);
+}
+
+.home-grade-photo .grade-chip.xl {
+  width: 54px;
+  height: 54px;
+}
+
+.home-grade-photo .grade-chip.xl .grade-chip-letter {
+  font-size: 20px;
 }
 
 .home-grade-system-card::after {
@@ -185,10 +225,15 @@ a:focus-visible {
 
 @media (max-width: 720px) {
   .home-grade-system-card {
-    grid-template-columns: 86px minmax(0, 1fr);
+    grid-template-columns: 112px minmax(0, 1fr);
     gap: 16px;
     min-height: 148px;
     padding: 18px;
+  }
+
+  .home-grade-photo {
+    width: 112px;
+    height: 104px;
   }
 
   .home-grade-letter {
@@ -205,4 +250,54 @@ a:focus-visible {
   .home-grade-system-card small {
     font-size: 18px;
   }
+}
+
+.gallery-stage--actual-grade {
+  background: #f4f4f0;
+}
+
+.gallery-stage--actual-grade > img.catalog-product-photo {
+  width: 100%;
+  height: 100%;
+  min-height: 370px;
+  max-height: 520px;
+  object-fit: cover;
+}
+
+.gallery-actual-badge {
+  position: absolute;
+  top: 18px;
+  left: 18px;
+  z-index: 3;
+  border-radius: 999px;
+  background: rgba(6, 56, 33, 0.9);
+  padding: 8px 12px;
+  color: #fff;
+  font-size: 12px;
+  font-weight: 900;
+  backdrop-filter: blur(8px);
+}
+
+.detail-summary-table .grade-condition-row {
+  align-items: stretch;
+}
+
+.detail-summary-table .grade-condition-row dd {
+  display: grid;
+  gap: 4px;
+}
+
+.detail-summary-table .grade-condition-row dd strong {
+  color: #063821;
+  font-size: 13px;
+}
+
+.detail-summary-table .grade-condition-row dd span,
+.detail-summary-table .grade-condition-row dd small {
+  font-weight: 650;
+  line-height: 1.5;
+}
+
+.detail-summary-table .grade-condition-row dd small {
+  color: #596960;
 }

@@ -4,6 +4,7 @@ import assert from "node:assert/strict";
 import {
   assertOrderableQuantity,
   chooseVariantForOption,
+  findExactCatalogVariant,
   findExactOrderableVariant,
   isOrderableVariant,
   isVariantOptionSelectable,
@@ -42,16 +43,25 @@ test("활성·양수 가격·양수 재고를 모두 만족해야 구매 가능�
 
 test("존재하지 않는 조합은 exact variant로 대체하지 않는다", () => {
   const product = { dbVariants: [active] };
-  assert.equal(findExactOrderableVariant(product, { ...active, grade: "S" }), null);
+  assert.equal(findExactOrderableVariant(product, { ...active, grade: "A+" }), null);
   assert.equal(findExactOrderableVariant(product, active)?.id, active.id);
 });
 
+test("재고 0 옵션은 가격표 데이터로 남지만 선택·주문할 수 없다", () => {
+  const soldOut = { ...active, id: "variant-s", grade: "S", pack: "5구", price: 17000, stock: 0, available: false };
+  const product = { dbVariants: [active, soldOut] };
+  assert.equal(findExactCatalogVariant(product, soldOut)?.id, soldOut.id);
+  assert.equal(isVariantOptionSelectable(product, "grade", "S"), false);
+  assert.equal(chooseVariantForOption(product, active, "grade", "S"), null);
+  assert.equal(isOrderableVariant(soldOut), false);
+});
+
 test("옵션 변경은 실제 존재하는 variant로만 이동한다", () => {
-  const second = { ...active, id: "variant-s", grade: "S", pack: "30구", stock: 1 };
+  const second = { ...active, id: "variant-a-plus", grade: "A+", pack: "30구", stock: 1 };
   const product = { dbVariants: [active, second] };
-  assert.equal(isVariantOptionSelectable(product, "grade", "S"), true);
+  assert.equal(isVariantOptionSelectable(product, "grade", "A+"), true);
   assert.equal(isVariantOptionSelectable(product, "color", "옐로우"), false);
-  assert.equal(chooseVariantForOption(product, active, "grade", "S")?.id, second.id);
+  assert.equal(chooseVariantForOption(product, active, "grade", "A+")?.id, second.id);
 });
 
 test("수량은 실제 variant 재고를 넘을 수 없다", () => {

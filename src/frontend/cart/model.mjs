@@ -36,7 +36,14 @@ export function cartTotal(cart = []) {
   return cart.reduce((sum, item) => sum + item.price * item.quantity, 0);
 }
 
-export function shippingCost(total, policy) {
+export function shippingCost(total, policy, cart = []) {
   if (!total) return 0;
+  const hasSpecialFreeShipping = cart.some(
+    (item) =>
+      item?.slug === "general-brand-lostball" &&
+      item?.selection?.pack === "100구" &&
+      ["A", "B"].includes(item?.selection?.grade)
+  );
+  if (hasSpecialFreeShipping) return 0;
   return total >= policy.freeThreshold ? 0 : policy.baseFee;
 }

@@ -1,4 +1,19 @@
 import { productPhotoCatalog } from "./product-images.mjs";
+import {
+  gradeConditionGuide,
+  gradeOptions,
+  minimumCatalogPrice,
+  packOptions,
+  uniquePriceBookValues,
+} from "./price-book.mjs";
+
+export { gradeConditionGuide, gradeOptions, packOptions };
+
+const actualPhoto = (filename, label) => ({ image: `product-actual/${filename}`, label });
+const actualPhotoSeries = (prefix, count, label) =>
+  Array.from({ length: count }, (_, index) =>
+    actualPhoto(`${prefix}-${String(index + 1).padStart(2, "0")}.webp`, `${label} 실물 ${index + 1}`)
+  );
 
 export const businessProfile = {
   name: "리볼로스트볼",
@@ -132,7 +147,7 @@ export const noticeItems = [
     date: "2025.07.15",
     title: "로스트볼 등급 표기 기준 안내",
     body:
-      "상품 상세페이지의 S, A, B 등급은 외관 사용감과 실전 사용 적합성을 기준으로 분류합니다. 로스트볼 특성상 로고, 번호, 펜마킹은 재고 구성에 따라 다를 수 있습니다.",
+      "상품 상세페이지의 A+, A, B 등급은 외관 사용감과 실전 사용 적합성을 기준으로 분류합니다. 로스트볼 특성상 로고, 번호, 펜마킹은 재고 구성에 따라 다를 수 있습니다.",
   },
   {
     category: "혜택",
@@ -152,6 +167,7 @@ export const brandMenu = [
   ["volvik", "볼빅"],
   ["saintnine", "세인트나인"],
   ["mix", "브랜드혼합"],
+  ["general", "일반브랜드"],
 ];
 
 export const products = [
@@ -160,15 +176,21 @@ export const products = [
     brandName: "타이틀리스트",
     slug: "titleist-pro-v1-v1x-lostball",
     name: "타이틀리스트 로스트볼",
-    line: "PRO V1 / PRO V1X / 투어스피드 / 트루필 / 벨로시티",
-    copy: "PRO V1, PRO V1X, 투어스피드, 트루필, 벨로시티 옵션을 등급별로 선별합니다.",
-    price: 12900,
+    line: "PRO V1 / PRO V1X / AVX / 일반 2피스",
+    copy: "PRO V1·PRO V1X S등급 5구와 A+·A·B 등급별 실제 판매 구성을 제공합니다.",
+    price: minimumCatalogPrice("titleist-pro-v1-v1x-lostball"),
     colors: ["화이트"],
-    models: ["PRO V1", "PRO V1X", "투어스피드", "트루필", "벨로시티"],
+    models: uniquePriceBookValues("titleist-pro-v1-v1x-lostball", "model"),
+    grades: uniquePriceBookValues("titleist-pro-v1-v1x-lostball", "grade"),
+    packs: uniquePriceBookValues("titleist-pro-v1-v1x-lostball", "pack"),
     image: "ball-titleist.png",
+    cardImage: "product-actual/titleist-pro-v1-01.webp",
+    variantImageRules: productPhotoCatalog.titleist.rules,
     detailImage: "detail-titleist.webp",
     galleryVideo: "product-videos/reball-titleist-rotation.mp4",
     galleryImages: [
+      ...actualPhotoSeries("titleist-pro-v1", 5, "타이틀리스트 PRO V1"),
+      ...actualPhotoSeries("titleist-pro-v1x", 5, "타이틀리스트 PRO V1X"),
       { image: "gallery/titleist-02.png", label: "타이틀리스트 PRO V1 정렬선" },
       { image: "gallery/titleist-05.png", label: "타이틀리스트 스탠딩 로고" },
       { image: "gallery/titleist-07.png", label: "타이틀리스트 스탠딩 좌측" },
@@ -186,11 +208,13 @@ export const products = [
     brandName: "브리지스톤",
     slug: "bridgestone-tour-b-lostball",
     name: "브리지스톤 로스트볼",
-    line: "투어 X / XS / E12 / 혼합",
-    copy: "투어 X, XS, E12, 혼합 옵션을 중심으로 직진성과 타구감 밸런스를 맞춘 구성입니다.",
-    price: 10900,
+    line: "TOUR B / E12 / 일반(JGB·스트레이트)",
+    copy: "TOUR B, E12, 일반 JGB·스트레이트 그룹을 등급과 구성별 실제 단가로 제공합니다.",
+    price: minimumCatalogPrice("bridgestone-tour-b-lostball"),
     colors: ["화이트", "혼합"],
-    models: ["투어 X", "XS", "E12", "혼합"],
+    models: uniquePriceBookValues("bridgestone-tour-b-lostball", "model"),
+    grades: uniquePriceBookValues("bridgestone-tour-b-lostball", "grade"),
+    packs: uniquePriceBookValues("bridgestone-tour-b-lostball", "pack"),
     image: "ball-bridgestone.png",
     cardImage: productPhotoCatalog.bridgestone.representative,
     variantImageRules: productPhotoCatalog.bridgestone.rules,
@@ -198,6 +222,7 @@ export const products = [
     galleryVideo: "product-videos/reball-bridgestone-rotation.mp4",
     galleryImages: [
       ...productPhotoCatalog.bridgestone.galleryImages,
+      ...actualPhotoSeries("bridgestone", 5, "브리지스톤"),
       { image: "gallery/bridgestone-01.png", label: "브리지스톤 TOUR B X 측면" },
       { image: "gallery/bridgestone-02.png", label: "브리지스톤 로고" },
       { image: "gallery/bridgestone-03.png", label: "브리지스톤 기본 정면" },
@@ -210,11 +235,13 @@ export const products = [
     brandName: "테일러메이드",
     slug: "taylormade-tp5-lostball",
     name: "테일러메이드 로스트볼",
-    line: "TP5 / TP5X / TP5 Pix / 투어 리스폰스 / 혼합",
-    copy: "TP5, TP5X, TP5 Pix, 투어 리스폰스, 혼합 옵션을 상황에 맞게 선택할 수 있습니다.",
-    price: 11900,
+    line: "TP5 / TP5 Pix / 투어 리스폰스",
+    copy: "TP5, TP5 Pix, 투어 리스폰스를 A+·A·B 등급과 실제 판매 구성으로 선택할 수 있습니다.",
+    price: minimumCatalogPrice("taylormade-tp5-lostball"),
     colors: ["화이트", "혼합"],
-    models: ["TP5", "TP5X", "TP5 Pix", "투어 리스폰스", "혼합"],
+    models: uniquePriceBookValues("taylormade-tp5-lostball", "model"),
+    grades: uniquePriceBookValues("taylormade-tp5-lostball", "grade"),
+    packs: uniquePriceBookValues("taylormade-tp5-lostball", "pack"),
     image: "ball-taylormade.png",
     cardImage: productPhotoCatalog.taylormade.representative,
     variantImageRules: productPhotoCatalog.taylormade.rules,
@@ -223,6 +250,7 @@ export const products = [
     galleryAnimation: "product-videos/reball-taylormade-rotation.webp",
     galleryImages: [
       ...productPhotoCatalog.taylormade.galleryImages,
+      ...actualPhotoSeries("taylormade", 5, "테일러메이드"),
       { image: "gallery/taylormade-01.png", label: "테일러메이드 TP5 정렬선" },
       { image: "gallery/taylormade-02.png", label: "테일러메이드 로고 정면" },
       { image: "gallery/taylormade-03.png", label: "테일러메이드 로고 우측" },
@@ -236,11 +264,13 @@ export const products = [
     brandName: "세인트나인",
     slug: "saintnine-lostball",
     name: "세인트나인 로스트볼",
-    line: "화이트 / 컬러",
-    copy: "화이트와 컬러 옵션 중심의 국내 친숙형 라인으로 가성비 연습 구성을 부담 없이 고를 수 있습니다.",
-    price: 8900,
+    line: "세인트나인 브랜드 그룹",
+    copy: "세인트나인 브랜드 그룹을 A+·A·B 등급과 10구·30구 구성으로 선별합니다.",
+    price: minimumCatalogPrice("saintnine-lostball"),
     colors: ["화이트", "컬러"],
-    models: ["화이트", "컬러"],
+    models: uniquePriceBookValues("saintnine-lostball", "model"),
+    grades: uniquePriceBookValues("saintnine-lostball", "grade"),
+    packs: uniquePriceBookValues("saintnine-lostball", "pack"),
     image: "ball-saintnine.png",
     cardImage: productPhotoCatalog.saintnine.representative,
     variantImageRules: productPhotoCatalog.saintnine.rules,
@@ -248,6 +278,7 @@ export const products = [
     galleryVideo: "product-videos/reball-saintnine-rotation.mp4",
     galleryImages: [
       ...productPhotoCatalog.saintnine.galleryImages,
+      ...actualPhotoSeries("saintnine", 5, "세인트나인"),
       { image: "gallery/saintnine-01.png", label: "세인트나인 로고" },
       { image: "gallery/saintnine-02.png", label: "세인트나인 캐릭터 좌측" },
       { image: "gallery/saintnine-03.png", label: "세인트나인 캐릭터 우측" },
@@ -261,11 +292,13 @@ export const products = [
     brandName: "볼빅",
     slug: "volvik-lostball",
     name: "볼빅 로스트볼",
-    line: "비비드 컬러 / 화이트 / 일반 컬러 / 360",
-    copy: "비비드 컬러, 화이트, 일반 컬러, 360 구성을 등급별로 선별합니다.",
-    price: 7900,
+    line: "볼빅 화이트 / 컬러 브랜드 그룹",
+    copy: "볼빅 화이트와 컬러 제품을 A+·A·B 등급별 실제 판매 구성으로 선별합니다.",
+    price: minimumCatalogPrice("volvik-lostball"),
     colors: ["컬러", "화이트"],
-    models: ["비비드 컬러", "화이트", "일반 컬러", "360"],
+    models: uniquePriceBookValues("volvik-lostball", "model"),
+    grades: uniquePriceBookValues("volvik-lostball", "grade"),
+    packs: uniquePriceBookValues("volvik-lostball", "pack"),
     image: "ball-volvik.png",
     cardImage: productPhotoCatalog.volvik.representative,
     variantImageRules: productPhotoCatalog.volvik.rules,
@@ -273,6 +306,17 @@ export const products = [
     galleryVideo: "product-videos/reball-volvik-rotation.mp4",
     galleryImages: [
       ...productPhotoCatalog.volvik.galleryImages,
+      ...actualPhotoSeries("volvik-white", 5, "볼빅 화이트"),
+      ...actualPhotoSeries("volvik-yellow", 4, "볼빅 옐로우"),
+      ...actualPhotoSeries("volvik-yellow-vivid", 4, "볼빅 옐로우 비비드"),
+      ...actualPhotoSeries("volvik-red", 4, "볼빅 레드"),
+      ...actualPhotoSeries("volvik-red-vivid", 4, "볼빅 레드 비비드"),
+      ...actualPhotoSeries("volvik-orange", 4, "볼빅 오렌지"),
+      ...actualPhotoSeries("volvik-orange-vivid", 4, "볼빅 오렌지 비비드"),
+      ...actualPhotoSeries("volvik-green", 4, "볼빅 그린"),
+      ...actualPhotoSeries("volvik-green-vivid", 4, "볼빅 그린 비비드"),
+      ...actualPhotoSeries("volvik-pink", 4, "볼빅 핑크"),
+      actualPhoto("volvik-color-a-plus.webp", "볼빅 A+ 컬러 실물"),
       { image: "gallery/volvik-01.png", label: "볼빅 VTU3 후면" },
       { image: "gallery/volvik-02.png", label: "볼빅 VTU3 측면" },
       { image: "gallery/volvik-03.png", label: "볼빅 VTU3 로고" },
@@ -288,11 +332,13 @@ export const products = [
     slug: "callaway-chrome-tour-lostball",
     aliasSlugs: ["callaway-lostball"],
     name: "캘러웨이 CHROME TOUR 로스트볼",
-    line: "CHROME TOUR / 트리플트랙 / ERC 소프트",
-    copy: "페어웨이에서 더 긴 비거리를 경험할 수 있는 캘러웨이 크롬투어 로스트볼 구성입니다.",
-    price: 11900,
+    line: "크롬 / ERC / 트리플트랙 그룹",
+    copy: "캘러웨이 크롬, ERC, 트리플트랙 그룹을 A+·A·B 등급과 실제 판매 구성으로 제공합니다.",
+    price: minimumCatalogPrice("callaway-chrome-tour-lostball"),
     colors: ["화이트", "옐로우", "트리플트랙"],
-    models: ["CHROME TOUR", "360 트리플트랙 화이트", "360 트리플트랙 옐로우", "ERC 소프트"],
+    models: uniquePriceBookValues("callaway-chrome-tour-lostball", "model"),
+    grades: uniquePriceBookValues("callaway-chrome-tour-lostball", "grade"),
+    packs: uniquePriceBookValues("callaway-chrome-tour-lostball", "pack"),
     image: "ball-callaway.png",
     cardImage: productPhotoCatalog.callaway.representative,
     variantImageRules: productPhotoCatalog.callaway.rules,
@@ -300,6 +346,7 @@ export const products = [
     galleryVideo: "callaway-rotation.mp4",
     galleryImages: [
       ...productPhotoCatalog.callaway.galleryImages,
+      ...actualPhotoSeries("callaway", 5, "캘러웨이"),
       { image: "gallery/callaway-01.png", label: "캘러웨이 CHROME TOUR 정면" },
       { image: "gallery/callaway-02.png", label: "캘러웨이 전면 트리플트랙" },
       { image: "gallery/callaway-03.png", label: "캘러웨이 로고 오른쪽" },
@@ -315,11 +362,13 @@ export const products = [
     brandName: "스릭슨",
     slug: "srixon-z-star-lostball",
     name: "스릭슨 로스트볼",
-    line: "Z-STAR / 반반볼",
-    copy: "Z-STAR와 반반볼 중심의 선별 라인으로 스핀 컨트롤과 실속 구성을 함께 제공합니다.",
-    price: 9900,
+    line: "Z-STAR / Z-STAR 반반 / Q-STAR 반반 / 일반",
+    copy: "Z-STAR와 반반볼, 일반 소프트필·Q·T 그룹을 등급과 구성별 실제 단가로 제공합니다.",
+    price: minimumCatalogPrice("srixon-z-star-lostball"),
     colors: ["화이트", "혼합"],
-    models: ["Z-STAR", "반반볼"],
+    models: uniquePriceBookValues("srixon-z-star-lostball", "model"),
+    grades: uniquePriceBookValues("srixon-z-star-lostball", "grade"),
+    packs: uniquePriceBookValues("srixon-z-star-lostball", "pack"),
     image: "ball-srixon.png",
     cardImage: productPhotoCatalog.srixon.representative,
     variantImageRules: productPhotoCatalog.srixon.rules,
@@ -327,6 +376,7 @@ export const products = [
     galleryVideo: "product-videos/reball-srixon-rotation.mp4",
     galleryImages: [
       ...productPhotoCatalog.srixon.galleryImages,
+      ...actualPhotoSeries("srixon", 5, "스릭슨"),
       { image: "gallery/srixon-01.png", label: "스릭슨 Z-STAR 측면" },
       { image: "gallery/srixon-02.png", label: "스릭슨 Z-STAR 후면" },
       { image: "gallery/srixon-03.png", label: "스릭슨 로고 정면" },
@@ -342,9 +392,11 @@ export const products = [
     name: "브랜드혼합 로스트볼",
     line: "화이트 / 컬러 혼합",
     copy: "브랜드 지정 없이 화이트 또는 컬러 계열로 실속 있게 구성한 혼합 라인입니다.",
-    price: 7500,
+    price: minimumCatalogPrice("brand-mix-lostball"),
     colors: ["화이트", "컬러"],
-    models: ["화이트", "컬러"],
+    models: uniquePriceBookValues("brand-mix-lostball", "model"),
+    grades: uniquePriceBookValues("brand-mix-lostball", "grade"),
+    packs: uniquePriceBookValues("brand-mix-lostball", "pack"),
     image: "ball-volvik.png",
     detailImage: "detail-volvik.webp",
     galleryImages: [
@@ -357,6 +409,30 @@ export const products = [
     accent: "#113A2A",
     stock: 70,
   },
+  {
+    brandSlug: "general",
+    brandName: "일반브랜드",
+    slug: "general-brand-lostball",
+    name: "일반브랜드 로스트볼",
+    line: "일반브랜드 화이트 / 컬러",
+    copy: "브랜드 지정 없이 화이트 또는 컬러를 등급별로 구성한 실속형 로스트볼입니다.",
+    price: minimumCatalogPrice("general-brand-lostball"),
+    colors: ["화이트", "컬러"],
+    models: uniquePriceBookValues("general-brand-lostball", "model"),
+    grades: uniquePriceBookValues("general-brand-lostball", "grade"),
+    packs: uniquePriceBookValues("general-brand-lostball", "pack"),
+    image: "product-actual/general-white-a-plus-01.webp",
+    cardImage: "product-actual/general-white-a-plus-01.webp",
+    detailImage: "detail-volvik.webp",
+    galleryImages: [
+      actualPhoto("general-white-a-plus-01.webp", "일반브랜드 화이트 A+ 실물 1"),
+      actualPhoto("general-white-a-plus-02.webp", "일반브랜드 화이트 A+ 실물 2"),
+      actualPhoto("general-color-a-plus-01.webp", "일반브랜드 컬러 A+ 실물 1"),
+      actualPhoto("general-color-a-plus-02.webp", "일반브랜드 컬러 A+ 실물 2"),
+    ],
+    accent: "#113A2A",
+    stock: 70,
+  },
 ];
 
 products.sort(
@@ -364,16 +440,6 @@ products.sort(
     brandMenu.findIndex(([slug]) => slug === left.brandSlug) -
     brandMenu.findIndex(([slug]) => slug === right.brandSlug)
 );
-
-export const gradeOptions = [
-  { id: "S", label: "S", delta: 1800, text: "새 볼에 가까운 최상급" },
-  { id: "A", label: "A", delta: 0, text: "실전 라운드용 우수급" },
-  { id: "B", label: "B", delta: -1800, text: "연습과 가성비 중심 실속급" },
-];
-export const packOptions = [
-  { id: "10구", qty: 10, multiplier: 1 },
-  { id: "30구", qty: 30, multiplier: 2.62 },
-];
 
 export const defaultNotifications = {
   order: false,
