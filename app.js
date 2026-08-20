@@ -81,6 +81,7 @@ import {
   defaultCoupons,
   defaultNotifications,
   defaultPosts,
+  gradeConditionGuide,
   gradeOptions,
   lostballNotice,
   noticeItems,
