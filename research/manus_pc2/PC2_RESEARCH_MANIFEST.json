@@ -1,0 +1,140 @@
+{
+  "project": "REBALLLOSTBALL × MANUS UNLIMITED — PC2 External Research Node",
+  "capture_date": "2026-08-23",
+  "generated_date": "2026-08-22",
+  "scope": "Public Korean lost-ball market research; no personal customer data retained.",
+  "data_quality": {
+    "price_policy": "Observed public price only; no estimates. EFFECTIVE_PRICE is blank where mandatory shipping was not observable.",
+    "review_policy": "Meaning-focused summaries only; purchaser identities/handles omitted.",
+    "seo_policy": "No unverified search-volume figures; SERP patterns are qualitative observations.",
+    "b2b_policy": "Publicly posted business contacts only; fit is potential-use prioritisation, not purchase intent."
+  },
+  "files": {
+    "01_COMPETITOR_PRODUCTS.csv": {
+      "rows": 55,
+      "columns": [
+        "SELLER",
+        "PLATFORM",
+        "PRODUCT_TITLE",
+        "URL",
+        "BRAND",
+        "MODEL",
+        "GRADE",
+        "GRADE_RAW",
+        "GRADE_NORMALIZED",
+        "BALL_COUNT",
+        "PRICE",
+        "DISCOUNT_PRICE",
+        "SHIPPING_FEE",
+        "FREE_SHIPPING_THRESHOLD",
+        "EFFECTIVE_PRICE",
+        "PRICE_PER_BALL",
+        "PRICE_PER_BALL_BASIS",
+        "REVIEW_COUNT",
+        "RATING",
+        "SALES_SIGNAL",
+        "DELIVERY_PROMISE",
+        "RETURN_POLICY_SIGNAL",
+        "PRODUCT_POSITIONING",
+        "CAPTURE_DATE",
+        "DUPLICATE_GROUP_ID",
+        "CONFLICT_FLAG",
+        "SOURCE_ID",
+        "DATA_CONFIDENCE"
+      ]
+    },
+    "01_COMPETITOR_PRODUCTS.xlsx": {
+      "sheets": [
+        "Products",
+        "Source Register",
+        "README"
+      ]
+    },
+    "02_REVIEW_VOC.csv": {
+      "rows": 6,
+      "columns": [
+        "REVIEW_SOURCE",
+        "SELLER",
+        "PRODUCT",
+        "RATING",
+        "REVIEW_DATE",
+        "REVIEW_SUMMARY",
+        "SENTIMENT",
+        "TOPIC",
+        "PAIN_POINT",
+        "DELIGHT_POINT",
+        "EXPECTATION_GAP",
+        "PURCHASE_CONTEXT",
+        "PRODUCT_GRADE",
+        "EVIDENCE_URL",
+        "SOURCE_ID"
+      ]
+    },
+    "02_VOC_CLUSTER_REPORT.xlsx": {
+      "sheets": [
+        "VOC Clusters",
+        "Coded Reviews",
+        "README"
+      ]
+    },
+    "03_SEO_KEYWORD_MAP.xlsx": {
+      "rows": 59,
+      "sheets": [
+        "Keyword Map",
+        "README"
+      ]
+    },
+    "04_COMPETITOR_UX_PATTERNS.xlsx": {
+      "rows": 5,
+      "sheets": [
+        "UX Patterns",
+        "README"
+      ]
+    },
+    "04_COMPETITOR_UX_SUMMARY.md": {
+      "pages": 1
+    },
+    "05_B2B_LEADS.xlsx": {
+      "rows": 8,
+      "sheets": [
+        "B2B Leads",
+        "README"
+      ]
+    },
+    "PC2_RESEARCH_EXECUTIVE_SUMMARY.md": {
+      "sections": [
+        "10 MOST IMPORTANT FINDINGS",
+        "WHAT PC1 SHOULD DO NEXT"
+      ]
+    },
+    "SOURCE_NOTES.md": {
+      "included": true
+    }
+  },
+  "source_register": {
+    "S1": "https://lostballkorea.com/category/%ED%83%80%EC%9D%B4%ED%8B%80%EB%A6%AC%EC%8A%A4%ED%8A%B8/43/",
+    "S2": "https://m.dealpang.com/goods/goods_list.php?cateCd=006001001002",
+    "S3": "https://www.coupang.com/vp/products/1176476168",
+    "S4": "https://www.coupang.com/vp/products/9103311391",
+    "S5": "https://lskorea.com/product/%EB%A1%9C%EC%8A%A4%ED%8A%B8%EB%B3%BC-%ED%83%80%EC%9D%B4%ED%8B%80%EB%A6%AC%EC%8A%A4%ED%8A%B8-pro-v1-10%EC%95%8C/30/",
+    "R1": "https://goodgolfball.com/article/%EC%83%81%ED%92%88%EC%82%AC%EC%9A%A9%ED%9B%84%EA%B8%B0/4/511/",
+    "R2": "https://crisiongolf.com/board/product2/popread.html?no=1434&board_no=4",
+    "R3": "https://easygolfzone.co.kr/article/%EC%83%81%ED%92%88%ED%8F%89/4/3494/",
+    "R4": "https://m.blog.naver.com/PostView.nhn?isHttpsRedirect=true&blogId=double_bogey&logNo=221001073774",
+    "R5": "https://blog.naver.com/tel0/223041632930?viewType=pc",
+    "D1": "https://choansangolf.com/",
+    "D2": "https://www.shillahotels.com/ko/theshilla/seoul/m/facilities/fitness/indoorgolfrange.do",
+    "D3": "https://www.banyantreeclub.com/mobile/facilities/view_facilities.asp?idx=5",
+    "D4": "https://www.golfroacademy.com/inquire",
+    "D5": "https://www.namboogolf.co.kr/Home/About",
+    "D6": "https://www.gmuc.co.kr/user/conn/golfReserve.do",
+    "D7": "https://fieldmentor.co.kr/",
+    "D8": "https://pnfwith.com/"
+  },
+  "limitations": [
+    "All marketplace values are a point-in-time public snapshot and may change.",
+    "No mandatory shipping fee was inferred where it was not visible.",
+    "VOC frequencies are directional, based on a small public-review convenience sample.",
+    "B2B candidates require consent/procurement validation before contact."
+  ]
+}
