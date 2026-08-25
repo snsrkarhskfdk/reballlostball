@@ -2,7 +2,6 @@ const SELECTOR = "[data-flight-transition]";
 const HERO_VIDEO = "/hero/intro/reball_intro_1.mp4";
 const HERO_POSTER = "./assets/figma/hero-poster.webp";
 const GRASS_PLATE = "/hero/flight/plates/grass_landing_plate.webp";
-const LOGO = "./assets/figma/reball-logo.webp";
 const DROP_FRAME_COUNT = 10;
 
 const clamp = (value, min = 0, max = 1) => Math.min(max, Math.max(min, value));
@@ -31,7 +30,7 @@ function sceneMarkup() {
       <div class="second-round-ui">
         <div class="second-round-kicker" aria-hidden="true">
           <span>REBALL / SECOND ROUND</span>
-          <b data-second-round-counter>01 / 04</b>
+          <b data-second-round-counter>01 / 03</b>
         </div>
 
         <div class="second-round-scenes" aria-live="off">
@@ -51,13 +50,6 @@ function sceneMarkup() {
             <p class="second-round-eyebrow">RE:CHECK</p>
             <h2>다시 씻고.<br />다시 보고.<br />다시 고릅니다.</h2>
             <p class="second-round-subcopy">세척과 검수, 등급 분류를 거쳐 다시 선택 가능한 공으로 만듭니다.</p>
-          </article>
-
-          <article class="second-round-copy second-round-copy--brand" data-second-round-copy="3" aria-hidden="true">
-            <img src="${LOGO}" class="second-round-logo" alt="" />
-            <p class="second-round-eyebrow">RE:BALL</p>
-            <h2>다시, 라운드로.</h2>
-            <p class="second-round-subcopy">좋은 공의 다음 라운드를 이어갑니다.</p>
           </article>
         </div>
 
@@ -101,6 +93,8 @@ function createHero(oldSection) {
   const reducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
   const compactViewport = window.matchMedia("(max-width: 760px)").matches;
 
+  section.style.height = reducedMotion ? "108svh" : compactViewport ? "290vh" : "390vh";
+
   const frames = Array.from({ length: DROP_FRAME_COUNT }, (_, index) => {
     const image = new Image();
     image.decoding = "async";
@@ -128,24 +122,24 @@ function createHero(oldSection) {
       copy.classList.toggle("is-active", active);
       copy.setAttribute("aria-hidden", active ? "false" : "true");
     });
-    counter.textContent = `${String(index + 1).padStart(2, "0")} / 04`;
+    counter.textContent = `${String(index + 1).padStart(2, "0")} / 03`;
   };
 
   const updateVisuals = (p) => {
-    const scene = p < 0.24 ? 0 : p < 0.48 ? 1 : p < 0.73 ? 2 : 3;
+    const scene = p < 0.27 ? 0 : p < 0.55 ? 1 : 2;
     setScene(scene);
 
-    const framePhase = smoothstep(0.40, 0.69, p);
+    const framePhase = smoothstep(0.38, 0.63, p);
     const frameIndex = Math.min(DROP_FRAME_COUNT - 1, Math.floor(framePhase * DROP_FRAME_COUNT));
     if (frameIndex !== lastFrameIndex) {
       lastFrameIndex = frameIndex;
       frame.src = frames[frameIndex]?.src || `/hero/drop/${String(frameIndex + 1).padStart(2, "0")}.webp`;
     }
 
-    const videoOpacity = 1 - smoothstep(0.50, 0.70, p);
-    const frameOpacity = smoothstep(0.36, 0.48, p) * (1 - smoothstep(0.68, 0.80, p));
-    const grassOpacity = smoothstep(0.68, 0.83, p);
-    const bridgeProgress = smoothstep(0.84, 0.98, p);
+    const videoOpacity = 1 - smoothstep(0.46, 0.62, p);
+    const frameOpacity = smoothstep(0.34, 0.46, p) * (1 - smoothstep(0.60, 0.72, p));
+    const grassOpacity = smoothstep(0.60, 0.75, p);
+    const bridgeProgress = smoothstep(0.72, 0.95, p);
     const mediaScale = 1 - bridgeProgress * (compactViewport ? 0.06 : 0.46);
     const mediaX = bridgeProgress * (compactViewport ? 0 : 23);
     const mediaY = bridgeProgress * (compactViewport ? -9 : 1.5);
@@ -168,10 +162,10 @@ function createHero(oldSection) {
     progressBar.style.transform = `scaleX(${p})`;
     bridge.setAttribute("aria-hidden", bridgeProgress > 0.58 ? "false" : "true");
 
-    document.body.classList.toggle("second-round-active", p < 0.89 && section.isConnected);
+    document.body.classList.toggle("second-round-active", p < 0.80 && section.isConnected);
 
     if (videoDuration > 0 && !reducedMotion) {
-      const scrub = clamp(p / 0.60);
+      const scrub = clamp(p / 0.55);
       const nextTime = scrub * Math.max(0, videoDuration - 0.04);
       if (Number.isFinite(nextTime) && Math.abs(video.currentTime - nextTime) > 0.025) {
         try { video.currentTime = nextTime; } catch {}
