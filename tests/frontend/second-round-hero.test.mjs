@@ -26,3 +26,12 @@ test("SECOND ROUND hero uses a pinned full-screen scroll stage", () => {
   assert.match(css, /\.second-round-hero\s*\{[^}]*height:\s*460vh/s);
   assert.match(css, /\.second-round-stage\s*\{[^}]*position:\s*sticky[^}]*height:\s*100svh/s);
 });
+
+test("SECOND ROUND ends after inspection without the poster-like fourth brand scene", () => {
+  const source = read("second-round-hero.mjs");
+  assert.match(source, /01 \/ 03/);
+  assert.match(source, /compactViewport \? "290vh" : "390vh"/);
+  assert.match(source, /bridgeProgress = smoothstep\(0\.72, 0\.95, p\)/);
+  assert.doesNotMatch(source, /data-second-round-copy="3"/);
+  assert.doesNotMatch(source, /다시, 라운드로\./);
+});
