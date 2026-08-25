@@ -23,15 +23,24 @@ test("SECOND ROUND hero scrubs media with scroll and remounts after SPA renders"
 
 test("SECOND ROUND hero uses a pinned full-screen scroll stage", () => {
   const css = read("second-round-hero.css");
-  assert.match(css, /\.second-round-hero\s*\{[^}]*height:\s*460vh/s);
+  assert.match(css, /\.second-round-hero\s*\{[^}]*height:\s*390vh/s);
   assert.match(css, /\.second-round-stage\s*\{[^}]*position:\s*sticky[^}]*height:\s*100svh/s);
 });
 
-test("SECOND ROUND ends after inspection without the poster-like fourth brand scene", () => {
+test("SECOND ROUND ends after inspection without a fourth poster scene", () => {
   const source = read("second-round-hero.mjs");
   assert.match(source, /01 \/ 03/);
   assert.match(source, /compactViewport \? "290vh" : "390vh"/);
-  assert.match(source, /bridgeProgress = smoothstep\(0\.72, 0\.95, p\)/);
   assert.doesNotMatch(source, /data-second-round-copy="3"/);
   assert.doesNotMatch(source, /다시, 라운드로\./);
+});
+
+test("SECOND ROUND clean landing contains no golf-hole landing plate", () => {
+  const source = read("second-round-hero.mjs");
+  const css = read("second-round-hero.css");
+  assert.match(source, /second-round-surface/);
+  assert.match(source, /surfaceOpacity = smoothstep/);
+  assert.match(css, /\.second-round-surface\s*\{/);
+  assert.doesNotMatch(source, /grass_landing_plate|GRASS_PLATE|second-round-grass/);
+  assert.doesNotMatch(css, /second-round-grass|grass_landing_plate/);
 });
