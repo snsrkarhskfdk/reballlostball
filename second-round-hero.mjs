@@ -1,7 +1,6 @@
 const SELECTOR = "[data-flight-transition]";
 const HERO_VIDEO = "/hero/intro/reball_intro_1.mp4";
 const HERO_POSTER = "./assets/figma/hero-poster.webp";
-const GRASS_PLATE = "/hero/flight/plates/grass_landing_plate.webp";
 const DROP_FRAME_COUNT = 10;
 
 const clamp = (value, min = 0, max = 1) => Math.min(max, Math.max(min, value));
@@ -22,7 +21,7 @@ function sceneMarkup() {
       <div class="second-round-media" data-second-round-media aria-hidden="true">
         <video class="second-round-video" data-second-round-video src="${HERO_VIDEO}" poster="${HERO_POSTER}" muted playsinline preload="auto"></video>
         <img class="second-round-frame" data-second-round-frame src="/hero/drop/01.webp" alt="" decoding="async" />
-        <img class="second-round-grass" data-second-round-grass src="${GRASS_PLATE}" alt="" decoding="async" />
+        <div class="second-round-surface" data-second-round-surface></div>
         <div class="second-round-shade"></div>
         <div class="second-round-grain"></div>
       </div>
@@ -138,21 +137,24 @@ function createHero(oldSection) {
 
     const videoOpacity = 1 - smoothstep(0.46, 0.62, p);
     const frameOpacity = smoothstep(0.34, 0.46, p) * (1 - smoothstep(0.60, 0.72, p));
-    const grassOpacity = smoothstep(0.60, 0.75, p);
-    const bridgeProgress = smoothstep(0.72, 0.95, p);
-    const mediaScale = 1 - bridgeProgress * (compactViewport ? 0.06 : 0.46);
-    const mediaX = bridgeProgress * (compactViewport ? 0 : 23);
-    const mediaY = bridgeProgress * (compactViewport ? -9 : 1.5);
-    const mediaRadius = bridgeProgress * 30;
+    const surfaceOpacity = smoothstep(0.62, 0.78, p);
+    const bridgeProgress = smoothstep(0.70, 0.94, p);
+    const copyExit = smoothstep(0.68, 0.80, p);
+    const shadeOpacity = 1 - smoothstep(0.58, 0.78, p);
+    const grainOpacity = Math.max(0.008, 0.10 * (1 - surfaceOpacity));
+    const mediaScale = 1 - bridgeProgress * (compactViewport ? 0.16 : 0.52);
+    const mediaX = bridgeProgress * (compactViewport ? 0 : 25.5);
+    const mediaY = bridgeProgress * (compactViewport ? -10 : 2.0);
+    const mediaRadius = bridgeProgress * (compactViewport ? 24 : 30);
 
     stage.style.setProperty("--sr-progress", p.toFixed(4));
     stage.style.setProperty("--sr-video-opacity", videoOpacity.toFixed(4));
     stage.style.setProperty("--sr-frame-opacity", frameOpacity.toFixed(4));
-    stage.style.setProperty("--sr-grass-opacity", grassOpacity.toFixed(4));
+    stage.style.setProperty("--sr-surface-opacity", surfaceOpacity.toFixed(4));
     stage.style.setProperty("--sr-bridge", bridgeProgress.toFixed(4));
-    stage.style.setProperty("--sr-copy-opacity", (1 - bridgeProgress).toFixed(4));
-    stage.style.setProperty("--sr-shade-opacity", (1 - bridgeProgress * 0.58).toFixed(4));
-    stage.style.setProperty("--sr-grain-opacity", Math.max(0.02, 0.11 - bridgeProgress * 0.08).toFixed(4));
+    stage.style.setProperty("--sr-copy-opacity", (1 - copyExit).toFixed(4));
+    stage.style.setProperty("--sr-shade-opacity", shadeOpacity.toFixed(4));
+    stage.style.setProperty("--sr-grain-opacity", grainOpacity.toFixed(4));
     stage.style.setProperty("--sr-bridge-shift", `${((1 - bridgeProgress) * -28).toFixed(2)}px`);
     stage.style.setProperty("--sr-bridge-mobile-shift", `${((1 - bridgeProgress) * 18).toFixed(2)}px`);
     stage.style.setProperty("--sr-media-scale", mediaScale.toFixed(4));
@@ -160,9 +162,9 @@ function createHero(oldSection) {
     stage.style.setProperty("--sr-media-y", `${mediaY.toFixed(3)}vh`);
     stage.style.setProperty("--sr-media-radius", `${mediaRadius.toFixed(2)}px`);
     progressBar.style.transform = `scaleX(${p})`;
-    bridge.setAttribute("aria-hidden", bridgeProgress > 0.58 ? "false" : "true");
+    bridge.setAttribute("aria-hidden", bridgeProgress > 0.52 ? "false" : "true");
 
-    document.body.classList.toggle("second-round-active", p < 0.80 && section.isConnected);
+    document.body.classList.toggle("second-round-active", p < 0.76 && section.isConnected);
 
     if (videoDuration > 0 && !reducedMotion) {
       const scrub = clamp(p / 0.55);
