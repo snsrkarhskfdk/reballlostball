@@ -101,6 +101,10 @@ export function normalizeServerOrder(payload) {
     status,
     paymentStatus: source.paymentStatus ?? source.payment_status ?? "ready",
     delivery: source.deliveryStatus ?? source.delivery_status ?? delivery,
+    shippingCarrier: String(source.shippingCarrier ?? source.shipping_carrier ?? ""),
+    trackingNumber: String(source.trackingNumber ?? source.tracking_number ?? ""),
+    shippedAt: source.shippedAt ?? source.shipped_at ?? null,
+    deliveredAt: source.deliveredAt ?? source.delivered_at ?? null,
     total: Number(source.totalKrw ?? source.total_krw ?? 0),
     customer: source.customer ?? {
       name: String(address.receiverName ?? address.receiver_name ?? "고객"),
