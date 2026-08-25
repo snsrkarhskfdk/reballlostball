@@ -28,7 +28,7 @@ function shouldCopyAsset(sourcePath) {
 await rm(outputDir, { recursive: true, force: true });
 await mkdir(outputDir, { recursive: true });
 
-for (const file of ["app.js", "styles.css"]) {
+for (const file of ["app.js", "styles.css", "second-round-hero.mjs", "second-round-hero.css"]) {
   await copyFile(file, `${outputDir}/${file}`);
 }
 const indexHtml = await readFile("index.html", "utf8");
