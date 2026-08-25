@@ -4,6 +4,10 @@ import { join, relative } from "node:path";
 
 const legacyNames = ["app-current.js", "index-current.html"];
 const shippingRoots = ["index.html", "app.js", "styles.css", "src", "scripts"];
+const intentionallyHistorical = new Set([
+  "scripts/check-legacy-entrypoints.mjs",
+  "scripts/generate-source-diff-report.mjs",
+]);
 const errors = [];
 const notes = [];
 
@@ -11,10 +15,9 @@ function walk(path) {
   if (!existsSync(path)) return [];
   const stat = statSync(path);
   if (stat.isFile()) return [path];
-  return readdirSync(path, { withFileTypes: true }).flatMap((entry) => {
-    if (entry.name === "check-legacy-entrypoints.mjs") return [];
-    return walk(join(path, entry.name));
-  });
+  return readdirSync(path, { withFileTypes: true }).flatMap((entry) =>
+    walk(join(path, entry.name))
+  );
 }
 
 function isTextCandidate(path) {
@@ -25,7 +28,11 @@ function sha256(path) {
   return createHash("sha256").update(readFileSync(path)).digest("hex");
 }
 
-const shippingFiles = shippingRoots.flatMap(walk).filter(isTextCandidate);
+const shippingFiles = shippingRoots
+  .flatMap(walk)
+  .filter(isTextCandidate)
+  .filter((file) => !intentionallyHistorical.has(relative(".", file).replaceAll("\\", "/")));
+
 for (const file of shippingFiles) {
   const source = readFileSync(file, "utf8");
   for (const legacy of legacyNames) {
