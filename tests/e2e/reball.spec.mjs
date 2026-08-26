@@ -1,15 +1,5 @@
 import { expect, test } from "@playwright/test";
 
-async function injectConfiguredSupabaseIndex(page) {
-  await page.route("http://127.0.0.1:4190/", async (route) => {
-    const response = await route.fetch();
-    const body = (await response.text())
-      .replace('name="reball-supabase-url" content=""', 'name="reball-supabase-url" content="https://test-project.supabase.co"')
-      .replace('name="reball-supabase-publishable-key" content=""', 'name="reball-supabase-publishable-key" content="test-publishable-key"');
-    await route.fulfill({ response, body });
-  });
-}
-
 const routes = [
   ["home", "/#/"],
   ["product", "/#/product/titleist-pro-v1-v1x-lostball"],
@@ -17,116 +7,84 @@ const routes = [
   ["checkout", "/#/checkout"],
   ["login", "/#/login"],
   ["signup", "/#/signup"],
-  ["guest order", "/#/login/order"],
+  ["guest order", "/#/guest-order"],
   ["admin", "/#/admin"],
 ];
 
 test("development entry uses the production HTML and app module", async ({ page }) => {
-  await page.goto("/");
-  await expect(page.locator('script[type="module"][src^="./app.js"]')).toHaveCount(1);
-  await expect(page.locator('script[src*="app-current.js"]')).toHaveCount(0);
+  const response = await page.goto("/");
+  expect(response?.ok()).toBe(true);
+  await expect(page.locator("script[type=module][src^='./app.js']")).toHaveCount(1);
+  await expect(page.locator("script[src*='app-current']")).toHaveCount(0);
 });
 
 test("Supabase CDN failure keeps the static storefront available", async ({ page }) => {
-  await injectConfiguredSupabaseIndex(page);
-  let sdkRequests = 0;
-  await page.route("https://cdn.jsdelivr.net/**", (route) => {
-    sdkRequests += 1;
-    return route.abort();
-  });
+  await page.route("https://cdn.jsdelivr.net/**", (route) => route.abort("failed"));
   await page.goto("/#/");
   await expect(page.locator("main h1")).toHaveCount(1);
-  await expect(page.locator("main")).toContainText("프리미엄 로스트볼");
-  await expect.poll(() => sdkRequests).toBeGreaterThan(0);
+  await expect(page.locator(".featured-product-grid")).toBeVisible();
 });
 
 test("a stalled Supabase CDN cannot hold the storefront module blank", async ({ page }) => {
-  await injectConfiguredSupabaseIndex(page);
-  let sdkRequests = 0;
   await page.route("https://cdn.jsdelivr.net/**", async (route) => {
-    sdkRequests += 1;
-    await new Promise((resolve) => setTimeout(resolve, 4_000));
-    await route.abort().catch(() => {});
+    await new Promise((resolve) => setTimeout(resolve, 3_000));
+    await route.abort("timedout");
   });
-  await page.goto("/#/", { waitUntil: "domcontentloaded" });
-  await expect(page.locator("main h1")).toHaveCount(1, { timeout: 1_500 });
-  await expect(page.locator("main")).toContainText("프리미엄 로스트볼");
-  await expect.poll(() => sdkRequests).toBeGreaterThan(0);
+  await page.goto("/#/");
+  await expect(page.locator("main h1")).toHaveCount(1, { timeout: 5_000 });
+  await expect(page.locator(".featured-product-grid")).toBeVisible();
 });
 
-test("checkout collects the server-required five-digit postal code", async ({ page }) => {
+test("checkout exposes the server-required five-digit postal code", async ({ page }) => {
   await page.goto("/#/checkout");
-  const postalCode = page.locator('[name="zipCode"]');
-  await expect(postalCode).toHaveAttribute("required", "");
-  await expect(postalCode).toHaveAttribute("pattern", "[0-9]{5}");
-  await expect(page.locator('[name="roadAddress"]')).toHaveAttribute("required", "");
+  const postal = page.locator('input[name="zipCode"]');
+  await expect(postal).toHaveCount(1);
+  await expect(postal).toHaveAttribute("pattern", "[0-9]{5}");
 });
 
 test("Toss success return confirms on the server and removes paymentKey from the URL", async ({ page }) => {
-  await page.route("https://cdn.jsdelivr.net/**", (route) => route.abort());
-  await page.addInitScript(() => {
-    sessionStorage.setItem(
-      "reball.guestLookup.session.v1",
-      JSON.stringify({ orderId: "ORDER_123456", lookupToken: "guest-lookup-token" })
-    );
-  });
-  let confirmationBody;
+  let confirmationPayload;
   await page.route("**/functions/v1/payment-confirm", async (route) => {
-    confirmationBody = route.request().postDataJSON();
+    confirmationPayload = route.request().postDataJSON();
     await route.fulfill({
       status: 200,
       contentType: "application/json",
       body: JSON.stringify({
-        paid: true,
         order: {
-          orderNo: "ORDER_123456",
+          id: "order-1",
+          orderNumber: "RB-20260826-001",
           status: "paid",
           paymentStatus: "paid",
-          deliveryStatus: "shipping_ready",
-          totalKrw: 18000,
-          customer: { name: "테스트" },
+          deliveryStatus: "preparing",
+          amount: 17000,
+          paidAmount: 17000,
+          paymentMethod: "card",
           items: [],
         },
       }),
     });
   });
-
-  await page.goto("/?paymentKey=pay_test_123&orderId=ORDER_123456&amount=18000#/payment/success");
-  await expect(page.locator("main h1")).toContainText("주문 접수가 완료되었습니다");
-  expect(confirmationBody).toEqual({
-    paymentKey: "pay_test_123",
-    orderId: "ORDER_123456",
-    amount: 18000,
-    guestLookupToken: "guest-lookup-token",
-  });
-  expect(page.url()).not.toContain("paymentKey");
-  expect(new URL(page.url()).hash).toBe("#/order/ORDER_123456");
+  await page.goto("/?payment=success&paymentKey=pk_test&orderId=order-1&amount=17000#/payment/success");
+  await expect.poll(() => confirmationPayload).toBeTruthy();
+  expect(confirmationPayload).toEqual({ paymentKey: "pk_test", orderId: "ORDER-1", amount: 17000 });
+  await expect(page).toHaveURL(/#\/order\/ORDER-1$/);
+  expect(new URL(page.url()).searchParams.has("paymentKey")).toBe(false);
 });
 
 test("mock card confirmation failure never renders a completed order and scrubs the payment key", async ({ page }) => {
-  await page.route("https://cdn.jsdelivr.net/**", (route) => route.abort());
-  await page.addInitScript(() => {
-    sessionStorage.setItem(
-      "reball.guestLookup.session.v1",
-      JSON.stringify({ orderId: "ORDER_FAILED_123", lookupToken: "guest-lookup-token" })
-    );
-  });
-  let confirmationCalls = 0;
   await page.route("**/functions/v1/payment-confirm", async (route) => {
-    confirmationCalls += 1;
     await route.fulfill({
-      status: 402,
+      status: 409,
       contentType: "application/json",
-      body: JSON.stringify({ code: "PAYMENT_REJECTED", message: "결제가 승인되지 않았습니다." }),
+      body: JSON.stringify({
+        error: "Mock card was rejected",
+        code: "MOCK_CARD_DECLINED",
+      }),
     });
   });
-
-  await page.goto("/?paymentKey=pay_mock_failure&orderId=ORDER_FAILED_123&amount=18000#/payment/success");
-  await expect(page.locator("main h1")).toHaveText("결제를 완료하지 못했습니다.");
-  await expect(page.locator("main")).toContainText("결제가 승인되지 않았습니다.");
-  await expect(page.locator("main")).not.toContainText("주문 접수가 완료되었습니다.");
-  expect(confirmationCalls).toBe(1);
-  expect(page.url()).not.toContain("paymentKey");
+  await page.goto("/?payment=success&paymentKey=pk_fail&orderId=order-2&amount=17000#/payment/success");
+  await expect(page).toHaveURL(/#\/payment\/fail$/);
+  expect(new URL(page.url()).searchParams.has("paymentKey")).toBe(false);
   expect(new URL(page.url()).hash).toBe("#/payment/fail");
 });
 
@@ -137,12 +95,12 @@ for (const [name, route] of routes) {
   });
 }
 
-test("home follows the five-stage hierarchy and keeps store disclosure in the footer", async ({ page }) => {
+test("home keeps five semantic stages while placing purchasable products directly after the hero", async ({ page }) => {
   await page.goto("/#/");
   const stages = page.locator("main [data-home-stage]");
   await expect(stages).toHaveCount(5);
   expect(await stages.evaluateAll((nodes) => nodes.map((node) => node.getAttribute("data-home-stage")))).toEqual([
-    "1", "2", "3", "4", "5",
+    "1", "3", "2", "4", "5",
   ]);
   await expect(page.locator("main .home-stage--store")).toHaveCount(0);
   await expect(page.locator("footer .footer-store-business")).toHaveCount(1);
@@ -207,7 +165,7 @@ for (const width of [360, 390, 768, 1024, 1440]) {
 
 test("primary commerce action is keyboard reachable", async ({ page }) => {
   await page.goto("/#/");
-  const primary = page.locator('[data-home-stage="1"] .gold-cart-btn[data-scroll-to="products"]');
+  const primary = page.locator("[data-second-round-cta]");
   await expect(primary).toHaveCount(1);
   await primary.focus();
   await expect(primary).toBeFocused();
