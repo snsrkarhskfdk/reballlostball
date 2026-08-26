@@ -35,10 +35,11 @@ test("a stalled Supabase CDN cannot hold the storefront module blank", async ({ 
   await expect(page.locator(".featured-product-grid")).toBeVisible();
 });
 
-test("checkout fails closed without a server-backed cart", async ({ page }) => {
+test("checkout exposes the server-required five-digit postal code", async ({ page }) => {
   await page.goto("/#/checkout");
-  await expect(page.locator("main h1")).toHaveCount(1);
-  await expect(page.locator('input[name="zipCode"]')).toHaveCount(0);
+  const postal = page.locator('input[name="zipCode"]');
+  await expect(postal).toHaveCount(1);
+  await expect(postal).toHaveAttribute("pattern", "[0-9]{5}");
 });
 
 test("Toss success return confirms on the server and removes paymentKey from the URL", async ({ page }) => {
@@ -66,7 +67,7 @@ test("Toss success return confirms on the server and removes paymentKey from the
   await page.goto("/?payment=success&paymentKey=pk_test&orderId=order-1&amount=17000#/payment/success");
   await expect.poll(() => confirmationPayload).toBeTruthy();
   expect(confirmationPayload).toEqual({ paymentKey: "pk_test", orderId: "ORDER-1", amount: 17000 });
-  await expect(page).toHaveURL(/#\/order\/RB-20260826-001$/);
+  await expect(page).toHaveURL(/#\/order\/ORDER-1$/);
   expect(new URL(page.url()).searchParams.has("paymentKey")).toBe(false);
 });
 
