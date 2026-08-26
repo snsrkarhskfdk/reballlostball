@@ -1,4 +1,5 @@
-/* WCAG contrast repairs discovered by the full Playwright + axe release gate. */
+/* WCAG contrast repairs discovered by the full Playwright + axe release gate.
+   Loaded after the main storefront styles so the release gate and production cascade match. */
 
 .home-stage--trust .home-stage-head > p,
 .home-stage--shipping .home-stage-head > p,
