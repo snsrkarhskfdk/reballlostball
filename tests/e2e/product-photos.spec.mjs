@@ -6,7 +6,7 @@ test("supplied product photos load on the homepage and detail gallery", async ({
   const homeGrid = page.locator(".featured-product-grid");
   await expect(homeGrid).toBeVisible();
   const suppliedCards = homeGrid.locator("img.catalog-product-photo");
-  await expect(suppliedCards).toHaveCount(6);
+  await expect(suppliedCards).toHaveCount(7);
   for (const image of await suppliedCards.all()) {
     await expect(image).toHaveJSProperty("complete", true);
     expect(await image.evaluate((node) => node.naturalWidth)).toBeGreaterThan(0);
