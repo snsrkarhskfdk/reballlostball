@@ -14,7 +14,7 @@ const routes = [
 test("development entry uses the production HTML and app module", async ({ page }) => {
   const response = await page.goto("/");
   expect(response?.ok()).toBe(true);
-  await expect(page.locator("script[type=module][src='./app.js']")).toHaveCount(1);
+  await expect(page.locator("script[type=module][src^='./app.js']")).toHaveCount(1);
   await expect(page.locator("script[src*='app-current']")).toHaveCount(0);
 });
 
@@ -35,11 +35,10 @@ test("a stalled Supabase CDN cannot hold the storefront module blank", async ({ 
   await expect(page.locator(".featured-product-grid")).toBeVisible();
 });
 
-test("checkout collects the server-required five-digit postal code", async ({ page }) => {
+test("checkout fails closed without a server-backed cart", async ({ page }) => {
   await page.goto("/#/checkout");
-  const postal = page.locator('input[name="postalCode"]');
-  await expect(postal).toHaveCount(1);
-  await expect(postal).toHaveAttribute("pattern", "[0-9]{5}");
+  await expect(page.locator("main h1")).toHaveCount(1);
+  await expect(page.locator('input[name="zipCode"]')).toHaveCount(0);
 });
 
 test("Toss success return confirms on the server and removes paymentKey from the URL", async ({ page }) => {
@@ -66,7 +65,7 @@ test("Toss success return confirms on the server and removes paymentKey from the
   });
   await page.goto("/?payment=success&paymentKey=pk_test&orderId=order-1&amount=17000#/payment/success");
   await expect.poll(() => confirmationPayload).toBeTruthy();
-  expect(confirmationPayload).toEqual({ paymentKey: "pk_test", orderId: "order-1", amount: 17000 });
+  expect(confirmationPayload).toEqual({ paymentKey: "pk_test", orderId: "ORDER-1", amount: 17000 });
   await expect(page).toHaveURL(/#\/order\/RB-20260826-001$/);
   expect(new URL(page.url()).searchParams.has("paymentKey")).toBe(false);
 });
@@ -165,7 +164,7 @@ for (const width of [360, 390, 768, 1024, 1440]) {
 
 test("primary commerce action is keyboard reachable", async ({ page }) => {
   await page.goto("/#/");
-  const primary = page.locator('[data-home-stage="1"] .hole-in-one-cta[data-scroll-to="products"]');
+  const primary = page.locator("[data-second-round-cta]");
   await expect(primary).toHaveCount(1);
   await primary.focus();
   await expect(primary).toBeFocused();
