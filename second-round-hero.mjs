@@ -59,13 +59,39 @@ function sceneMarkup() {
 
         <div class="second-round-bridge" data-second-round-bridge aria-hidden="true">
           <p>READY FOR YOUR ROUND</p>
-          <h2>당신의 다음 라운드를<br />고르세요.</h2>
-          <span>A+ · A · B 실제 상태와 확정 가격을 보고 선택할 수 있습니다.</span>
-          <button type="button" class="second-round-cta" data-second-round-cta>실제 재고 상품 보기 <b>↘</b></button>
+          <h2><span>당신의 다음 라운드를</span><span>고르세요.</span></h2>
+          <span class="second-round-bridge-body">A+ · A · B 실제 상태와 확정 가격을 보고 선택할 수 있습니다.</span>
+          <button type="button" class="second-round-cta" data-second-round-cta>실제 재고 상품 보기 <b>→</b></button>
         </div>
       </div>
     </div>
   `;
+}
+
+function promoteProductsAfterHero(section) {
+  const products = document.getElementById("products");
+  if (!products) return;
+
+  if (section.nextElementSibling !== products) section.after(products);
+
+  const productGrid = products.querySelector(".featured-product-grid");
+  const carousel = products.querySelector("[data-home-carousel]");
+  if (productGrid && carousel && carousel.previousElementSibling !== productGrid) {
+    products.insertBefore(productGrid, carousel);
+  }
+}
+
+function scrollToFirstProductCard(reducedMotion) {
+  const target =
+    document.querySelector("#products .featured-product-grid .product-card") ||
+    document.querySelector("#products .featured-product-grid") ||
+    document.getElementById("products");
+  if (!target) return;
+
+  const header = document.querySelector(".site-header");
+  const headerHeight = header?.getBoundingClientRect().height || 64;
+  const top = Math.max(0, window.scrollY + target.getBoundingClientRect().top - headerHeight - 18);
+  window.scrollTo({ top, behavior: reducedMotion ? "auto" : "smooth" });
 }
 
 function createHero(oldSection) {
@@ -80,6 +106,7 @@ function createHero(oldSection) {
   section.setAttribute("aria-label", "리볼 로스트볼, 공의 두 번째 라운드");
   section.innerHTML = sceneMarkup();
   oldSection.replaceWith(section);
+  promoteProductsAfterHero(section);
 
   const stage = section.querySelector("[data-second-round-stage]");
   const video = section.querySelector("[data-second-round-video]");
@@ -92,7 +119,7 @@ function createHero(oldSection) {
   const reducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
   const compactViewport = window.matchMedia("(max-width: 760px)").matches;
 
-  section.style.height = reducedMotion ? "108svh" : compactViewport ? "290vh" : "390vh";
+  section.style.height = reducedMotion ? "108svh" : compactViewport ? "270vh" : "360vh";
 
   const frames = Array.from({ length: DROP_FRAME_COUNT }, (_, index) => {
     const image = new Image();
@@ -136,35 +163,29 @@ function createHero(oldSection) {
     }
 
     const videoOpacity = 1 - smoothstep(0.46, 0.62, p);
-    const frameOpacity = smoothstep(0.34, 0.46, p) * (1 - smoothstep(0.60, 0.72, p));
-    const surfaceOpacity = smoothstep(0.62, 0.78, p);
-    const bridgeProgress = smoothstep(0.70, 0.94, p);
-    const copyExit = smoothstep(0.68, 0.80, p);
-    const shadeOpacity = 1 - smoothstep(0.58, 0.78, p);
-    const grainOpacity = Math.max(0.008, 0.10 * (1 - surfaceOpacity));
-    const mediaScale = 1 - bridgeProgress * (compactViewport ? 0.16 : 0.52);
-    const mediaX = bridgeProgress * (compactViewport ? 0 : 25.5);
-    const mediaY = bridgeProgress * (compactViewport ? -10 : 2.0);
-    const mediaRadius = bridgeProgress * (compactViewport ? 24 : 30);
+    const frameOpacity = smoothstep(0.34, 0.46, p) * (1 - smoothstep(0.58, 0.70, p));
+    const surfaceOpacity = smoothstep(0.58, 0.70, p);
+    const bridgeProgress = smoothstep(0.66, 0.90, p);
+    const copyExit = smoothstep(0.64, 0.74, p);
+    const shadeOpacity = 1 - smoothstep(0.56, 0.70, p);
+    const grainOpacity = Math.max(0.006, 0.09 * (1 - surfaceOpacity));
+    const mediaOpacity = 1 - smoothstep(0.66, 0.78, p);
 
     stage.style.setProperty("--sr-progress", p.toFixed(4));
     stage.style.setProperty("--sr-video-opacity", videoOpacity.toFixed(4));
     stage.style.setProperty("--sr-frame-opacity", frameOpacity.toFixed(4));
     stage.style.setProperty("--sr-surface-opacity", surfaceOpacity.toFixed(4));
+    stage.style.setProperty("--sr-media-opacity", mediaOpacity.toFixed(4));
     stage.style.setProperty("--sr-bridge", bridgeProgress.toFixed(4));
     stage.style.setProperty("--sr-copy-opacity", (1 - copyExit).toFixed(4));
     stage.style.setProperty("--sr-shade-opacity", shadeOpacity.toFixed(4));
     stage.style.setProperty("--sr-grain-opacity", grainOpacity.toFixed(4));
-    stage.style.setProperty("--sr-bridge-shift", `${((1 - bridgeProgress) * -28).toFixed(2)}px`);
-    stage.style.setProperty("--sr-bridge-mobile-shift", `${((1 - bridgeProgress) * 18).toFixed(2)}px`);
-    stage.style.setProperty("--sr-media-scale", mediaScale.toFixed(4));
-    stage.style.setProperty("--sr-media-x", `${mediaX.toFixed(3)}vw`);
-    stage.style.setProperty("--sr-media-y", `${mediaY.toFixed(3)}vh`);
-    stage.style.setProperty("--sr-media-radius", `${mediaRadius.toFixed(2)}px`);
+    stage.style.setProperty("--sr-bridge-shift", `${((1 - bridgeProgress) * -22).toFixed(2)}px`);
+    stage.style.setProperty("--sr-bridge-mobile-shift", `${((1 - bridgeProgress) * 14).toFixed(2)}px`);
     progressBar.style.transform = `scaleX(${p})`;
-    bridge.setAttribute("aria-hidden", bridgeProgress > 0.52 ? "false" : "true");
+    bridge.setAttribute("aria-hidden", bridgeProgress > 0.48 ? "false" : "true");
 
-    document.body.classList.toggle("second-round-active", p < 0.76 && section.isConnected);
+    document.body.classList.toggle("second-round-active", p < 0.68 && section.isConnected);
 
     if (videoDuration > 0 && !reducedMotion) {
       const scrub = clamp(p / 0.55);
@@ -214,9 +235,7 @@ function createHero(oldSection) {
   window.addEventListener("scroll", measure, { passive: true });
   window.addEventListener("resize", measure, { passive: true });
 
-  cta.addEventListener("click", () => {
-    document.getElementById("products")?.scrollIntoView({ behavior: reducedMotion ? "auto" : "smooth", block: "start" });
-  });
+  cta.addEventListener("click", () => scrollToFirstProductCard(reducedMotion));
 
   measure();
 
