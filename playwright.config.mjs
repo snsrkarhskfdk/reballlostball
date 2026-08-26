@@ -1,8 +1,7 @@
 import { defineConfig } from "@playwright/test";
 
-const browserExecutable =
-  process.env.PLAYWRIGHT_EXECUTABLE_PATH ??
-  "C:/Program Files/Google/Chrome/Application/chrome.exe";
+const browserExecutable = String(process.env.PLAYWRIGHT_EXECUTABLE_PATH ?? "").trim();
+const launchOptions = browserExecutable ? { executablePath: browserExecutable } : {};
 
 export default defineConfig({
   testDir: "./tests/e2e",
@@ -21,7 +20,7 @@ export default defineConfig({
     baseURL: "http://127.0.0.1:4190/",
     browserName: "chromium",
     headless: true,
-    launchOptions: { executablePath: browserExecutable },
+    launchOptions,
     trace: "retain-on-failure",
     screenshot: "only-on-failure",
   },
