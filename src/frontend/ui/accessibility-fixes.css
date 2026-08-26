@@ -1,0 +1,15 @@
+/* WCAG contrast repairs discovered by the full Playwright + axe release gate. */
+
+.home-stage--trust .home-stage-head > p,
+.home-stage--shipping .home-stage-head > p,
+#home-trust-title,
+#home-shipping-title {
+  color: var(--chalk) !important;
+}
+
+.detail-page summary > span,
+.detail-layout summary > span,
+.product-detail summary > span,
+summary > span {
+  color: var(--ink) !important;
+}
