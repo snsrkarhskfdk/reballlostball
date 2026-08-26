@@ -22,7 +22,15 @@ for (const [viewportName, viewport] of [
         ["serious", "critical"].includes(item.impact)
       );
       expect(
-        serious.map((item) => ({ id: item.id, impact: item.impact, nodes: item.nodes.length }))
+        serious.map((item) => ({
+          id: item.id,
+          impact: item.impact,
+          nodes: item.nodes.map((node) => ({
+            target: node.target,
+            html: node.html,
+            failureSummary: node.failureSummary,
+          })),
+        }))
       ).toEqual([]);
     });
   }
