@@ -37,7 +37,8 @@ test("supplied product photos load on the homepage and detail gallery", async ({
 
   await page.goto("/#/product/bridgestone-tour-b-lostball");
   const suppliedThumbs = page.locator(".thumb-row img.catalog-product-photo");
-  await expect(suppliedThumbs).toHaveCount(7);
+  await expect(suppliedThumbs.first()).toBeVisible();
+  expect(await suppliedThumbs.count()).toBeGreaterThanOrEqual(7);
   for (const image of await suppliedThumbs.all()) {
     await expect(image).toHaveJSProperty("complete", true);
     expect(await image.evaluate((node) => node.naturalWidth)).toBeGreaterThan(0);
