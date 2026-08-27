@@ -19,7 +19,7 @@
     "test:contracts": "node --test tests/contracts/*.contract.test.mjs",
     "test:unit": "npm run test:frontend && npm run test:backend && npm run test:backend:deno",
     "test:integration": "npm run test:contracts",
-    "test:e2e": "playwright test tests/e2e/reball.spec.mjs tests/e2e/product-photos.spec.mjs tests/e2e/launch-hardening.spec.mjs",
+    "test:e2e": "playwright test tests/e2e/reball.spec.mjs tests/e2e/product-photos.spec.mjs tests/e2e/launch-hardening.spec.mjs tests/e2e/visual-clarity.spec.mjs",
     "test:a11y": "playwright test tests/e2e/accessibility.spec.mjs",
     "test": "npm run test:unit && npm run test:integration",
     "check:edge": "node scripts/check-edge-functions.mjs",
