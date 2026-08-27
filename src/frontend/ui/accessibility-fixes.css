@@ -1,11 +1,27 @@
 /* WCAG contrast repairs discovered by the full Playwright + axe release gate.
    Loaded after the main storefront styles so the release gate and production cascade match. */
 
-.home-stage--trust .home-stage-head > p,
-.home-stage--shipping .home-stage-head > p,
+/* Home stages sit on the light paper surface. Keep every stage eyebrow and
+   heading on the dark brand palette instead of forcing chalk-white text. */
+.home-stage .home-stage-head > p,
+.home-stage .home-stage-head > div > p {
+  color: var(--turf) !important;
+}
+
+.home-stage .home-stage-head h2,
 #home-trust-title,
+#home-products-title,
 #home-shipping-title {
-  color: var(--chalk) !important;
+  color: var(--ink) !important;
+  text-shadow: none !important;
+}
+
+.home-stage--shipping .service-grid h3 {
+  color: var(--ink) !important;
+}
+
+.home-stage--shipping .service-grid p {
+  color: var(--text-muted-aa, #526158) !important;
 }
 
 .detail-page summary > span,
