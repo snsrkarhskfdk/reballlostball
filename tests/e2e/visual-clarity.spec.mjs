@@ -33,6 +33,13 @@ for (const viewport of [
     await page.emulateMedia({ reducedMotion: "reduce" });
     await page.goto("/#/");
 
+    const hero = page.locator(".second-round-hero");
+    await expect(hero).toBeVisible();
+    // Measure the bridge where the sticky SECOND ROUND stage actually occupies
+    // the viewport, not while it still sits below the regular site header.
+    await hero.evaluate((node) => node.scrollIntoView({ block: "start", behavior: "instant" }));
+    await page.waitForTimeout(80);
+
     const bridge = page.locator(".second-round-bridge");
     await expect(bridge).toBeVisible();
     await expect(bridge).toHaveAttribute("aria-hidden", "false");
@@ -51,6 +58,8 @@ for (const viewport of [
         bottom: rect.bottom,
         width: rect.width,
         height: rect.height,
+        clientHeight: node.clientHeight,
+        scrollHeight: node.scrollHeight,
         background: getComputedStyle(node).backgroundColor,
         ornamentContent: ornament?.content || "none",
         documentOverflow: document.documentElement.scrollWidth - window.innerWidth,
@@ -63,6 +72,8 @@ for (const viewport of [
     expect(geometry.bottom).toBeLessThanOrEqual(viewport.height + 1);
     expect(geometry.width).toBeGreaterThan(viewport.name === "desktop" ? 500 : 300);
     expect(geometry.height).toBeGreaterThan(250);
+    expect(geometry.clientHeight).toBeLessThanOrEqual(viewport.height);
+    expect(geometry.scrollHeight).toBeGreaterThanOrEqual(geometry.clientHeight);
     expect(geometry.background).toBe("rgba(255, 255, 255, 0.92)");
     expect(geometry.ornamentContent).not.toBe("none");
     expect(geometry.documentOverflow).toBeLessThanOrEqual(1);
