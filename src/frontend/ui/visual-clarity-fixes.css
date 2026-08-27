@@ -149,6 +149,7 @@
     bottom: 14px;
     left: 14px;
     width: auto;
+    min-height: 256px;
     max-height: calc(100svh - 28px);
     padding: 19px 18px 17px;
     overflow-y: auto;
