@@ -103,8 +103,16 @@ export function loadTossSdk(documentRef = document, { timeoutMs = TOSS_SDK_TIMEO
   return tossSdkPromise;
 }
 
+export function hasActivePaymentGesture(navigatorRef = globalThis.navigator) {
+  const activation = navigatorRef?.userActivation;
+  return !activation || activation.isActive !== false;
+}
+
 export async function requestTossPayment({ clientKey, customerKey, payment }) {
   if (!clientKey) throw new Error("토스페이먼츠 테스트 client key가 필요합니다.");
+  if (!hasActivePaymentGesture()) {
+    throw new Error("주문 접수가 완료되었습니다. 주문 화면의 토스 결제하기 버튼을 눌러 결제를 시작해 주세요.");
+  }
   const TossPayments = await loadTossSdk();
   if (typeof TossPayments !== "function") throw new Error("토스페이먼츠 SDK 초기화에 실패했습니다.");
   const client = TossPayments(clientKey);
