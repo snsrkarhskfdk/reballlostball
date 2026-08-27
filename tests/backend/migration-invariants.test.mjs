@@ -301,3 +301,101 @@ test("security-definer public RPCs are revoked then service-only granted", () =>
     assert.match(migration, new RegExp(`grant execute on function public\\.${name}\\([\\s\\S]+?to service_role`, "i"), `${name} lacks service grant`);
   }
 });
+
+// ---------------------------------------------------------------------------
+// Adversarial payment audit regressions (20260828 confirm/webhook race repair)
+// ---------------------------------------------------------------------------
+
+const raceRepair = readFileSync(
+  new URL("../../supabase/migrations/20260828043000_payment_confirm_webhook_race.sql", import.meta.url),
+  "utf8",
+);
+
+test("a provider webhook that lands before the browser callback cannot strand the payment", () => {
+  const claim = raceRepair.match(
+    /create or replace function public\.claim_payment_confirmation_v1[\s\S]+?\$\$;/i,
+  )?.[0] || "";
+  assert.ok(claim, "the repair migration must recreate claim_payment_confirmation_v1");
+
+  // A webhook re-queried as IN_PROGRESS moves the order to payment_auth_started before the
+  // browser returns. Re-confirming the SAME payment key has to stay possible, because
+  // prepare-payment only re-issues for 'payment_ready' and there is no other recovery path.
+  assert.match(
+    claim,
+    /v_order\.status = 'payment_auth_started'\s+and v_payment\.toss_payment_key is not null\s+and v_payment\.toss_payment_key <> p_payment_key then\s+raise exception using errcode = '55P03'/i,
+  );
+  assert.doesNotMatch(
+    claim,
+    /if v_order\.status = 'payment_auth_started' then\s+raise exception using errcode = '55P03'/i,
+  );
+  assert.match(claim, /v_order\.status not in \('payment_ready', 'payment_auth_started'\) then\s+raise exception using errcode = 'P0001'/i);
+
+  // The relaxed guard must not weaken the checks that run before it.
+  assert.match(claim, /v_order\.status in \('canceled', 'partially_canceled', 'refunded'\)[\s\S]+paymentTerminated/i);
+  assert.match(claim, /v_order\.status = 'cancel_requested' or exists[\s\S]+cancellationPending/i);
+  assert.match(claim, /operation = 'confirm'\s+and status in \('started', 'in_progress', 'unknown'\)\s+\) then\s+raise exception using errcode = '55P03'/i);
+  assert.match(claim, /reservation_expires_at <= now\(\)[\s\S]+jsonb_build_object\('expired', true\)/i);
+});
+
+test("an aborted or expired cancellation returns stock that a confirmation already consumed", () => {
+  const webhook = raceRepair.match(
+    /create or replace function public\.apply_payment_webhook_v1[\s\S]+?\$\$;/i,
+  )?.[0] || "";
+  assert.ok(webhook, "the repair migration must recreate apply_payment_webhook_v1");
+
+  assert.match(
+    webhook,
+    /v_status in \('ABORTED', 'EXPIRED'\)[\s\S]+?release_order_inventory\([\s\S]+?v_target_order = 'canceled',\s+v_status = 'EXPIRED'/i,
+  );
+  // Fulfilled orders must still never have their stock returned by a provider event.
+  assert.match(webhook, /v_order\.status not in \('paid', 'shipping_ready', 'shipped', 'delivered'\)/i);
+  assert.match(webhook, /v_status = 'CANCELED' and v_target_order = 'canceled'[\s\S]+?v_order\.status not in \('shipping_ready', 'shipped', 'delivered'\)/i);
+});
+
+test("repaired security-definer RPCs stay revoked and service-only", () => {
+  const repaired = [...raceRepair.matchAll(/create or replace function public\.([a-z0-9_]+)/gi)].map((match) => match[1]);
+  assert.ok(repaired.length >= 2);
+  for (const name of repaired) {
+    assert.match(raceRepair, new RegExp(`revoke all on function public\\.${name}\\(`, "i"), `${name} lacks revoke`);
+    assert.match(raceRepair, new RegExp(`grant execute on function public\\.${name}\\([\\s\\S]+?to service_role`, "i"), `${name} lacks service grant`);
+  }
+});
+
+test("a webhook worker never marks an event owned by another worker as failed", () => {
+  const webhookFunction = readFileSync(
+    new URL("../../supabase/functions/payment-webhook/index.ts", import.meta.url),
+    "utf8",
+  );
+  // eventId must only be captured after the processing lease is won, otherwise the shared
+  // catch block calls mark_payment_webhook_failed_v1 on the owning worker's event.
+  assert.match(
+    webhookFunction,
+    /if \(claim\.processing\) \{[\s\S]+?\}\s+eventId = cleanString\(claim\.eventId, 36\);/,
+  );
+  assert.doesNotMatch(
+    webhookFunction,
+    /eventId = cleanString\(claim\.eventId, 36\);[\s\S]{0,400}if \(claim\.processing\)/,
+  );
+  assert.match(webhookFunction, /if \(eventId\) \{\s+await rpc\("mark_payment_webhook_failed_v1"/);
+});
+
+test("the payment return page boots from a path redirect and reads the settled payment status", () => {
+  const indexHtml = readFileSync(new URL("../../index.html", import.meta.url), "utf8");
+  const hardening = readFileSync(
+    new URL("../../src/frontend/runtime/launch-hardening.mjs", import.meta.url),
+    "utf8",
+  );
+  const router = readFileSync(
+    new URL("../../src/frontend/core/router.mjs", import.meta.url),
+    "utf8",
+  );
+
+  // Both hosts rewrite unknown paths to index.html, so a TOSS_SUCCESS_URL of
+  // https://host/payment/success would otherwise resolve ./app.js to /payment/app.js.
+  assert.match(indexHtml, /<base href="\/"\s*\/?>/i);
+  assert.match(router, /pathname\.endsWith\("\/payment\/success"\)/);
+
+  // order.paymentStatus carries the payment_status enum, whose settled value is 'done'.
+  assert.match(hardening, /=== "paid" && String\(order\?\.paymentStatus \|\| ""\) === "done"/);
+  assert.doesNotMatch(hardening, /paymentStatus \|\| ""\) === "paid"/);
+});

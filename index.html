@@ -2,6 +2,13 @@
 <html lang="ko">
   <head>
     <meta charset="UTF-8" />
+    <!-- The site is served from the domain root on both hosts, and both rewrite unknown
+         paths to this document (vercel.json rewrites, Pages 404.html). Without an explicit
+         base, a Toss redirect to /payment/success would resolve the relative module sources
+         below against /payment/, where the host answers with text/html; the browser then
+         refuses to run them as modules, the SPA never boots, and payment-confirm is never
+         called. Change this if the site ever moves off the domain root. -->
+    <base href="/" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta
       name="description"

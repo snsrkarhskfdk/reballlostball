@@ -82,13 +82,15 @@ Deno.serve(async (req: Request) => {
       p_dedupe_key: dedupeKey,
       p_safe_payload: authoritative.safePayload,
     });
-    eventId = cleanString(claim.eventId, 36);
     if (claim.processed) return jsonResponse(req, { received: true, duplicate: true });
     // A 2xx while another worker owns the lease would tell Toss to stop retrying. Return a
     // retryable status so a crashed worker can be reclaimed after the database lease expires.
+    // eventId stays unset here on purpose: the error handler below must never mark an event
+    // failed that this worker does not own, or it would destroy the owning worker's lease.
     if (claim.processing) {
       throw new HttpError(503, "WEBHOOK_PROCESSING", "Webhook processing is already in progress", 60);
     }
+    eventId = cleanString(claim.eventId, 36);
     if (!eventId) throw new HttpError(500, "WEBHOOK_CLAIM_FAILED", "Webhook could not be claimed");
 
     const order = await rpc<Record<string, unknown>>("apply_payment_webhook_v1", {
