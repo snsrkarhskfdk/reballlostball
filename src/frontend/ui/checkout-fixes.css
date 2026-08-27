@@ -1,0 +1,100 @@
+/* Checkout containment and responsive repair.
+ * Keeps the summary card inside the viewport at desktop zoom/narrow windows
+ * and prevents long totals/buttons from forcing horizontal overflow.
+ */
+.checkout-layout--payment {
+  width: min(1180px, 100%);
+  max-width: 100%;
+  margin-inline: auto;
+  grid-template-columns: minmax(0, 1fr) minmax(280px, 320px);
+}
+
+.checkout-layout--payment > *,
+.checkout-main-card,
+.checkout-summary-card,
+.checkout-summary-card > *,
+.checkout-summary-row,
+.checkout-summary-total,
+.checkout-submit-btn,
+.checkout-submit-copy {
+  min-width: 0;
+  max-width: 100%;
+}
+
+.checkout-summary-card {
+  width: 100%;
+  overflow: hidden;
+}
+
+.checkout-summary-row,
+.checkout-summary-total {
+  width: 100%;
+  gap: 12px;
+}
+
+.checkout-summary-row > :first-child,
+.checkout-summary-total > :first-child {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.checkout-summary-row strong,
+.checkout-summary-total strong {
+  flex: 0 0 auto;
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+
+.checkout-summary-total strong {
+  font-size: clamp(26px, 3vw, 38px);
+}
+
+.checkout-submit-btn {
+  width: 100%;
+  padding-inline: 14px;
+  overflow: hidden;
+}
+
+.checkout-submit-copy {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  overflow: hidden;
+}
+
+.checkout-submit-copy b {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.checkout-summary-note {
+  display: block;
+  max-width: 100%;
+  overflow-wrap: anywhere;
+}
+
+@media (max-width: 1180px) {
+  .checkout-layout--payment {
+    grid-template-columns: 1fr;
+  }
+
+  .checkout-summary-card {
+    position: static;
+    top: auto;
+  }
+}
+
+@media (max-width: 720px) {
+  .checkout-layout--payment {
+    width: 100%;
+  }
+
+  .checkout-summary-total {
+    align-items: baseline;
+  }
+
+  .checkout-summary-total strong {
+    font-size: clamp(24px, 9vw, 34px);
+  }
+}
