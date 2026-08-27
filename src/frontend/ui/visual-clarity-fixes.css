@@ -65,6 +65,7 @@
 
 .second-round-bridge {
   z-index: 2;
+  box-sizing: border-box;
   width: min(700px, 54vw);
   padding: clamp(30px, 3.5vw, 50px);
   border: 1px solid rgba(20, 48, 31, 0.13);
@@ -135,8 +136,8 @@
   }
 
   .second-round-paper::after {
-    top: 22px;
-    right: 20px;
+    top: 18px;
+    right: 18px;
     bottom: auto;
     font-size: 8px;
     letter-spacing: 0.16em;
@@ -144,35 +145,71 @@
 
   .second-round-bridge {
     top: auto;
-    right: 18px;
-    bottom: 18px;
-    left: 18px;
+    right: 14px;
+    bottom: 14px;
+    left: 14px;
     width: auto;
-    padding: 24px 20px 22px;
-    border-radius: 22px;
-    transform: translate3d(0, var(--sr-bridge-mobile-shift), 0);
+    max-height: calc(100svh - 28px);
+    padding: 19px 18px 17px;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    scrollbar-width: thin;
+    border-radius: 20px;
+    transform: none;
   }
 
   .second-round-bridge p {
-    margin-bottom: 12px;
-    font-size: 9px;
+    margin-bottom: 9px;
+    font-size: 8.5px;
+    line-height: 1.35;
   }
 
   .second-round-bridge h2 {
-    font-size: clamp(36px, 10.5vw, 52px);
-    line-height: 1.04;
+    font-size: clamp(32px, 9.4vw, 46px);
+    line-height: 1.02;
   }
 
   .second-round-bridge-body {
     max-width: none;
-    margin-top: 16px;
-    font-size: 13px;
+    margin-top: 12px;
+    font-size: 12.5px;
+    line-height: 1.5;
   }
 
   .second-round-cta {
     width: 100%;
-    min-height: 48px;
-    margin-top: 20px;
+    min-height: 44px;
+    margin-top: 14px;
+    padding-inline: 16px;
+  }
+}
+
+@media (max-width: 380px), (max-height: 720px) and (max-width: 760px) {
+  .second-round-bridge {
+    right: 10px;
+    bottom: 10px;
+    left: 10px;
+    max-height: calc(100svh - 20px);
+    padding: 15px 16px 14px;
+  }
+
+  .second-round-bridge p {
+    margin-bottom: 7px;
+  }
+
+  .second-round-bridge h2 {
+    font-size: clamp(29px, 8.8vw, 39px);
+  }
+
+  .second-round-bridge-body {
+    margin-top: 9px;
+    font-size: 12px;
+    line-height: 1.42;
+  }
+
+  .second-round-cta {
+    min-height: 42px;
+    margin-top: 11px;
   }
 }
 
