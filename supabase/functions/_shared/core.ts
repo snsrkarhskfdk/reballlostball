@@ -185,18 +185,24 @@ export function normalizePaymentMethod(value: unknown): "card" | "transfer" | "v
 }
 
 export function normalizeItems(value: unknown): Array<{ variantId: string; quantity: number }> {
-  if (!Array.isArray(value) || value.length < 1 || value.length > 50) {
+  if (!Array.isArray(value) || value.length < 1 || value.length > 10) {
     throw new HttpError(400, "INVALID_ITEMS", "주문 상품을 확인해 주세요.");
   }
-  return value.map((raw) => {
+  const items = value.map((raw) => {
     const row = assertObject(raw, "주문 상품을 확인해 주세요.");
     const variantId = cleanString(row.variantId, 36).toLowerCase();
     const quantity = Number(row.quantity);
-    if (!isUuid(variantId) || !Number.isSafeInteger(quantity) || quantity < 1 || quantity > 99) {
+    if (!isUuid(variantId) || !Number.isSafeInteger(quantity) || quantity < 1 || quantity > 10) {
       throw new HttpError(400, "INVALID_ITEMS", "주문 상품을 확인해 주세요.");
     }
     return { variantId, quantity };
   });
+  const uniqueVariants = new Set(items.map((item) => item.variantId));
+  const totalUnits = items.reduce((sum, item) => sum + item.quantity, 0);
+  if (uniqueVariants.size !== items.length || totalUnits > 20) {
+    throw new HttpError(400, "INVALID_ITEMS", "주문 상품을 확인해 주세요.");
+  }
+  return items;
 }
 
 export function normalizeAddress(value: unknown): Record<string, string> {
@@ -223,24 +229,104 @@ export function tossAuthorizationHeader(secretKey: string): string {
   return `Basic ${btoa(`${secretKey}:`)}`;
 }
 
-const SENSITIVE_PAYMENT_KEYS = new Set([
-  "secret", "cardNumber", "accountNumber", "customerMobilePhone",
-  "customerEmail", "customerName", "checkout", "receipt",
-  "refundReceiveAccount", "holderName",
-]);
+const PROVIDER_PAYLOAD_SCHEMA = Object.freeze({
+  root: Object.freeze({
+    version: true,
+    paymentKey: true,
+    type: true,
+    orderId: true,
+    orderName: true,
+    mId: true,
+    currency: true,
+    method: true,
+    totalAmount: true,
+    balanceAmount: true,
+    status: true,
+    requestedAt: true,
+    approvedAt: true,
+    useEscrow: true,
+    lastTransactionKey: true,
+    transactionKey: true,
+    suppliedAmount: true,
+    vat: true,
+    cultureExpense: true,
+    taxFreeAmount: true,
+    taxExemptionAmount: true,
+    isPartialCancelable: true,
+    cancels: "cancel",
+    card: "card",
+    virtualAccount: "virtualAccount",
+    transfer: "transfer",
+    easyPay: "easyPay",
+    failure: "failure",
+  }),
+  cancel: Object.freeze({
+    cancelAmount: true,
+    cancelReason: true,
+    taxFreeAmount: true,
+    taxExemptionAmount: true,
+    refundableAmount: true,
+    easyPayDiscountAmount: true,
+    canceledAt: true,
+    transactionKey: true,
+    cancelStatus: true,
+    cancelRequestId: true,
+  }),
+  card: Object.freeze({
+    issuerCode: true,
+    acquirerCode: true,
+    approveNo: true,
+    installmentPlanMonths: true,
+    useCardPoint: true,
+    cardType: true,
+    ownerType: true,
+    acquireStatus: true,
+    isInterestFree: true,
+    interestPayer: true,
+    amount: true,
+  }),
+  virtualAccount: Object.freeze({
+    dueDate: true,
+    refundStatus: true,
+    expired: true,
+    settlementStatus: true,
+  }),
+  transfer: Object.freeze({ bankCode: true, settlementStatus: true }),
+  easyPay: Object.freeze({ provider: true, amount: true, discountAmount: true }),
+  failure: Object.freeze({ code: true }),
+}) as Record<string, Record<string, true | string>>;
 
-export function sanitizeProviderPayload(value: unknown, depth = 0): unknown {
-  if (depth > 8) return "[truncated]";
-  if (Array.isArray(value)) return value.slice(0, 100).map((entry) => sanitizeProviderPayload(entry, depth + 1));
-  if (!value || typeof value !== "object") {
-    return typeof value === "string" ? value.slice(0, 2000) : value;
+function safeProviderPrimitive(value: unknown): string | number | boolean | null | undefined {
+  if (value === null) return null;
+  if (typeof value === "string") return value.slice(0, 500);
+  if (typeof value === "number" && Number.isFinite(value)) return value;
+  if (typeof value === "boolean") return value;
+  return undefined;
+}
+
+function projectProviderPayload(value: unknown, scope: string): unknown {
+  const schema = PROVIDER_PAYLOAD_SCHEMA[scope];
+  if (!schema) return undefined;
+  if (Array.isArray(value)) {
+    return value.slice(0, 100)
+      .map((entry) => projectProviderPayload(entry, scope))
+      .filter((entry) => entry !== undefined);
   }
+  if (!value || typeof value !== "object") return undefined;
+  const source = value as Record<string, unknown>;
   const output: Record<string, unknown> = {};
-  for (const [key, entry] of Object.entries(value as Record<string, unknown>)) {
-    if (SENSITIVE_PAYMENT_KEYS.has(key)) continue;
-    output[key] = sanitizeProviderPayload(entry, depth + 1);
+  for (const [key, rule] of Object.entries(schema)) {
+    if (!Object.hasOwn(source, key)) continue;
+    const projected = rule === true
+      ? safeProviderPrimitive(source[key])
+      : projectProviderPayload(source[key], rule);
+    if (projected !== undefined) output[key] = projected;
   }
   return output;
+}
+
+export function sanitizeProviderPayload(value: unknown): unknown {
+  return projectProviderPayload(value, "root") || {};
 }
 
 export function providerStatus(value: unknown): string {

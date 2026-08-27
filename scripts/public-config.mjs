@@ -12,6 +12,8 @@ const VERCEL_PUBLIC_DEFAULTS = Object.freeze({
   "reball-supabase-url": "https://qbftalhhyfcndanrcwpy.supabase.co",
   "reball-supabase-publishable-key": "sb_publishable_K876i166RCGtBxdp3xRQZw_yJxPaKwL",
 });
+const PRODUCTION_SUPABASE_ORIGIN = VERCEL_PUBLIC_DEFAULTS["reball-supabase-url"];
+const PRODUCTION_SUPABASE_PROJECT_REF = new URL(PRODUCTION_SUPABASE_ORIGIN).hostname.split(".", 1)[0];
 
 function firstValue(env, names) {
   return names.map((name) => String(env[name] || "").trim()).find(Boolean) || "";
@@ -21,15 +23,21 @@ function escapeAttribute(value) {
   return String(value).replaceAll("&", "&amp;").replaceAll('"', "&quot;");
 }
 
-function validate(values, requireComplete) {
+function validate(values, requireComplete, allowLocal, projectRef) {
   const url = values["reball-supabase-url"];
   const key = values["reball-supabase-publishable-key"];
   if (Boolean(url) !== Boolean(key)) throw new Error("SUPABASE_URL과 publishable key는 함께 설정해야 합니다.");
   if (url) {
     const parsed = new URL(url);
-    if (parsed.protocol !== "https:" && !/^http:\/\/(?:127\.0\.0\.1|localhost)(?::\d+)?$/i.test(parsed.origin)) {
-      throw new Error("SUPABASE_URL은 HTTPS 또는 로컬 주소여야 합니다.");
+    const cleanRoot = !parsed.username && !parsed.password && parsed.pathname === "/" && !parsed.search && !parsed.hash;
+    const local = allowLocal
+      && parsed.protocol === "http:"
+      && new Set(["127.0.0.1", "localhost"]).has(parsed.hostname);
+    const approvedOrigin = projectRef ? `https://${projectRef}.supabase.co` : PRODUCTION_SUPABASE_ORIGIN;
+    if (!cleanRoot || (!local && parsed.origin !== approvedOrigin)) {
+      throw new Error("SUPABASE_URL은 승인된 프로젝트 origin 또는 로컬 주소여야 합니다.");
     }
+    values["reball-supabase-url"] = parsed.origin;
   }
   const provider = values["reball-captcha-provider"].toLowerCase();
   const siteKey = values["reball-captcha-site-key"];
@@ -45,13 +53,23 @@ function validate(values, requireComplete) {
 
 export function injectPublicConfig(html, env = process.env) {
   const isVercelBuild = Boolean(env.VERCEL || env.VERCEL_ENV || env.VERCEL_URL);
+  const projectRef = String(env.SUPABASE_PROJECT_REF || "").trim();
+  if (projectRef && !/^[a-z0-9]{20}$/.test(projectRef)) {
+    throw new Error("SUPABASE_PROJECT_REF 형식이 올바르지 않습니다.");
+  }
+  if (String(env.VERCEL_ENV || "").toLowerCase() === "production"
+      && projectRef
+      && projectRef !== PRODUCTION_SUPABASE_PROJECT_REF) {
+    throw new Error("Vercel production은 승인된 Supabase project ref만 사용할 수 있습니다.");
+  }
   const values = Object.fromEntries(
     Object.entries(META_ENV).map(([metaName, envNames]) => [
       metaName,
       firstValue(env, envNames) || (isVercelBuild ? VERCEL_PUBLIC_DEFAULTS[metaName] || "" : ""),
     ])
   );
-  validate(values, String(env.PUBLIC_CONFIG_REQUIRED || "").toLowerCase() === "true");
+  const allowLocal = !isVercelBuild && String(env.NODE_ENV || "development").toLowerCase() !== "production";
+  validate(values, String(env.PUBLIC_CONFIG_REQUIRED || "").toLowerCase() === "true", allowLocal, projectRef);
   let output = String(html);
   for (const [name, value] of Object.entries(values)) {
     const pattern = new RegExp(`(<meta\\s+name=["']${name}["']\\s+content=["'])[^"']*(["']\\s*\\/?>)`, "i");

@@ -44,6 +44,12 @@ test("catalog inputs contain only variant IDs and bounded quantities", () => {
   assert.deepEqual(items, [{ variantId: "123e4567-e89b-12d3-a456-426614174000", quantity: 2 }]);
   assert.throws(() => normalizeItems([{ variantId: "missing", quantity: 1 }]));
   assert.throws(() => normalizeItems([{ variantId: "123e4567-e89b-12d3-a456-426614174000", quantity: 0 }]));
+  assert.throws(() => normalizeItems([{ variantId: "123e4567-e89b-12d3-a456-426614174000", quantity: 11 }]));
+  assert.throws(() => normalizeItems([
+    { variantId: "123e4567-e89b-12d3-a456-426614174000", quantity: 10 },
+    { variantId: "123e4567-e89b-12d3-a456-426614174001", quantity: 10 },
+    { variantId: "123e4567-e89b-12d3-a456-426614174002", quantity: 1 },
+  ]));
 });
 
 test("shipping and payment method input normalization rejects malformed values", () => {

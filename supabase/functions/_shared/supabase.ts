@@ -1,4 +1,15 @@
-import { HttpError, cleanString } from "./core.ts";
+import { HttpError, cleanString, isExplicitNonProductionRuntime } from "./core.ts";
+
+const PRODUCTION_SUPABASE_ORIGIN = "https://qbftalhhyfcndanrcwpy.supabase.co";
+
+function configuredSupabaseOrigin(): string {
+  const projectRef = String(Deno.env.get("SUPABASE_PROJECT_REF") || "").trim();
+  if (!projectRef) return PRODUCTION_SUPABASE_ORIGIN;
+  if (!/^[a-z0-9]{20}$/.test(projectRef)) {
+    throw new HttpError(503, "SUPABASE_CONFIG_MISSING", "서비스 설정을 확인할 수 없습니다.");
+  }
+  return `https://${projectRef}.supabase.co`;
+}
 
 function parseJsonKey(envName: string): string {
   const raw = Deno.env.get(envName);
@@ -13,9 +24,22 @@ function parseJsonKey(envName: string): string {
 }
 
 export function supabaseUrl(): string {
-  const value = Deno.env.get("SUPABASE_URL") || "";
-  if (!/^https?:\/\//.test(value)) throw new HttpError(503, "SUPABASE_CONFIG_MISSING", "서비스 설정을 확인할 수 없습니다.");
-  return value.replace(/\/$/, "");
+  const value = String(Deno.env.get("SUPABASE_URL") || "").trim();
+  try {
+    const url = new URL(value);
+    const cleanRoot = !url.username && !url.password && url.pathname === "/" && !url.search && !url.hash;
+    const explicitNonProduction = isExplicitNonProductionRuntime();
+    const local = explicitNonProduction
+      && url.protocol === "http:"
+      && new Set(["localhost", "127.0.0.1"]).has(url.hostname);
+    const isolatedTestOrigin = explicitNonProduction && url.protocol === "https:" && url.hostname.endsWith(".test");
+    if (!cleanRoot || (!local && !isolatedTestOrigin && url.origin !== configuredSupabaseOrigin())) {
+      throw new Error("origin");
+    }
+    return url.origin;
+  } catch {
+    throw new HttpError(503, "SUPABASE_CONFIG_MISSING", "서비스 설정을 확인할 수 없습니다.");
+  }
 }
 
 export function publishableKey(): string {

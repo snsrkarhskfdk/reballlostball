@@ -19,10 +19,11 @@ GitHub PR #3 병합, Supabase migration 및 12개 Edge Function 배포, Vercel �
 | HG-07 Reconciliation·운영 큐 | worker 코드 준비, 운영 연결 미완료 | scheduler 주기, `PAYMENT_RECONCILE_SECRET`, 알람·담당자·manual-review 처리 절차 | 무감시 scheduler 운영 금지 |
 | HG-08 환불계좌 암호화 key 수명주기 | 코드 준비, 운영 key 미입력 | 32자 이상 고엔트로피 `PAYMENT_REFUND_DATA_KEY`, 백업·접근권한·rotation 정책 | 임시·재생성 key로 운영 취소 활성화 금지 |
 | HG-09 실제 결제수단 테스트 | 미승인·미실행 — 외부 게이트 유지 | Toss test key, 최소 금액, 결제수단, 환불 계좌, 테스트 책임자와 실제 실행 승인 | 카드·계좌이체·가상계좌·간편결제 실거래 및 live key 사용 금지 |
-| HG-10 GitHub commit/push | **성공** — deployed code head `4a81481df1d774f46ce8c58cf4f33a49c3d56f2c`, PR #3 MERGED, main `4347c9c6db7520092c5c40a70f087ee466823faa`; 중복 GitHub Pages 자동 workflow는 Vercel을 canonical host로 유지하기 위해 `disabled_manually` | 후속 운영 수정은 새 변경으로 추적 | 과거 commit을 현재 main head로 오인 금지 |
+| HG-10 GitHub commit/push | **성공** — deployed code head `4a81481df1d774f46ce8c58cf4f33a49c3d56f2c`, PR #3 MERGED, main `4347c9c6db7520092c5c40a70f087ee466823faa`; Vercel canonical 운영과 충돌하던 GitHub Pages 자동 workflow는 payment audit PR에서 제거 | audit PR 병합 전에는 원격 상태가 기존 main과 동일 | 과거 commit을 현재 main head로 오인 금지 |
 | HG-11 Vercel 운영 배포 | **성공** — Preview/Production READY 및 3개 alias 연결·smoke 통과 | Toss/CAPTCHA public config와 내부 Edge secret은 별도 게이트 | 배포 성공을 결제·인증 실연동 완료로 확대 표기 금지 |
 | HG-12 운영 도메인·정책 | 변경 없음 | DNS 및 확정 사업자·배송·환불 문구 변경 승인 | 운영 DNS/정책 문구 변경 금지 |
 | HG-13 실제 PostgreSQL/RLS·동시성 | 미실행 — 외부 통합 게이트 유지 | 연결된 실제 PostgreSQL에서 migration, 실제 JWT/RLS/RPC, 동시 주문·재고·승인/취소/webhook 경합 실행 | 로컬 parser·mock 결과를 실제 DB 통합 통과로 대체 금지 |
+| HG-14 payment audit 배포 순서 | `20260828010000_payment_audit_hardening.sql` 로컬 전체-chain 적용 성공, 원격 미적용 | DB migration → grant/RLS 확인 → 변경 Edge Functions → scheduler/manual-review smoke → Vercel 순으로 반영 | 새 RPC가 없는 backend에 audit frontend/worker를 먼저 배포 금지 |
 
 ## 외부 실행 결과
 

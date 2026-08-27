@@ -26,7 +26,10 @@ import {
 import {
   createIdempotencyKey,
   createOrderRequest,
+  getOrderRequest,
   lookupGuestOrderRequest,
+  MAX_ORDER_LINE_QUANTITY,
+  MAX_ORDER_TOTAL_QUANTITY,
   normalizeServerOrder,
   orderLinePayload,
 } from "./src/frontend/commerce/order-client.mjs";
@@ -750,7 +753,7 @@ async function loadAccountData(user, options = {}) {
         .order("id", { ascending: true }),
       supabase
         .from("orders")
-        .select("id, order_no, status, payment_status, payment_method, total_krw, created_at, address_snapshot")
+        .select("id, order_no, status, payment_status, payment_method, total_krw, created_at, address_snapshot, shipping_carrier, tracking_number, shipped_at, delivered_at")
         .order("created_at", { ascending: false }),
       supabase
         .from("order_items")
@@ -1414,6 +1417,11 @@ function mapOrderRecord(row, items = []) {
     status: translateOrderStatus(row.status),
     paymentStatus: translatePaymentStatus(row.payment_status),
     delivery: translateDeliveryStatus(row.status),
+    shippingCarrier: stringOrEmpty(row.shipping_carrier),
+    trackingCompany: stringOrEmpty(row.shipping_carrier),
+    trackingNumber: stringOrEmpty(row.tracking_number),
+    shippedAt: row.shipped_at ?? null,
+    deliveredAt: row.delivered_at ?? null,
     total: Number(row.total_krw ?? 0),
     customer: {
       name: stringOrEmpty(state.viewer?.name),
@@ -3192,18 +3200,18 @@ function addToCart(slug, quantity = 1, options = {}) {
     showToast(error.message);
     return false;
   }
-  const key = variant.id;
   const existing = state.cart.find((item) => item.variantId === variant.id);
-
-  if (existing) {
-    try {
-      existing.quantity = assertOrderableQuantity(variant, existing.quantity + safeQuantity);
-    } catch (error) {
-      showToast(error.message);
-      return false;
-    }
-  } else {
-    state.cart.push(cartItemFromVariant(product, variant, safeQuantity));
+  try {
+    const nextCart = existing
+      ? state.cart.map((item) => item.variantId === variant.id
+          ? { ...item, quantity: assertOrderableQuantity(variant, item.quantity + safeQuantity) }
+          : item)
+      : [...state.cart, cartItemFromVariant(product, variant, safeQuantity)];
+    orderLinePayload(nextCart);
+    state.cart = nextCart;
+  } catch (error) {
+    showToast(error.message);
+    return false;
   }
 
   saveCartState();
@@ -3302,7 +3310,6 @@ function renderCheckoutMainSection() {
         <div class="checkout-method-grid">
           ${renderCheckoutMethod("card", "카드 결제", shopIcons.cardPay, true)}
           ${renderCheckoutMethod("transfer", "계좌이체", icons.bank)}
-          ${renderCheckoutMethod("virtual", "가상계좌", icons.receipt)}
           ${renderCheckoutMethod("easy", "간편결제", icons.bolt)}
         </div>
       </div>
@@ -3310,7 +3317,7 @@ function renderCheckoutMainSection() {
         ${renderCheckoutPolicyCard(
           icons.bank,
           paymentProfile.transferLabel,
-          `${businessProfile.settlementBank} ${businessProfile.settlementAccount}<br />예금주 ${businessProfile.settlementHolder}`,
+          "카드·계좌이체·간편결제는 토스페이먼츠 결제창에서 안전하게 진행됩니다.",
           `배송비 ${money.format(shippingPolicy.baseFee)}원 / ${money.format(shippingPolicy.freeThreshold)}원 이상 무료 / 제주·도서산간 ${money.format(shippingPolicy.islandExtra)}원 추가`
         )}
         ${renderCheckoutPolicyCard(
@@ -3361,7 +3368,7 @@ function renderCheckoutSummarySection(deliveryFee, finalAmount) {
         <span class="checkout-submit-copy">${icons.lock}<b>${state.checkoutBusy ? "서버에서 주문 확인 중" : "주문 접수하기"}</b></span>
         ${icons.chevron}
       </button>
-      <small class="checkout-summary-note">주문 금액은 서버에서 다시 계산되며, 주문 생성 후 토스페이먼츠 결제창으로 이동합니다.</small>
+      <small class="checkout-summary-note">주문 금액은 서버에서 다시 계산됩니다. 한 주문은 옵션별 최대 ${MAX_ORDER_LINE_QUANTITY}개, 총 ${MAX_ORDER_TOTAL_QUANTITY}개까지 가능하며 주문 생성 후 토스페이먼츠 결제창으로 이동합니다.</small>
     </aside>
   `;
 }
@@ -3469,6 +3476,8 @@ async function requestTossPaymentForOrder(orderId) {
 
 function renderPaymentReturnStatus({ kind = "processing", orderId = "", message = "" } = {}) {
   const isProcessing = kind === "processing";
+  const canRetryPayment = kind === "fail";
+  const isTerminal = kind === "terminal";
   layout(`
     <section class="complete-page payment-return-page" aria-live="polite">
       <div class="complete-icon">${isProcessing ? icons.lock : icons.close}</div>
@@ -3476,11 +3485,45 @@ function renderPaymentReturnStatus({ kind = "processing", orderId = "", message 
       <p>${escapeHtml(isProcessing ? "창을 닫거나 뒤로 이동하지 말고 잠시만 기다려 주세요." : message || "결제 정보를 확인한 뒤 다시 시도해 주세요.")}</p>
       ${orderId ? `<dl><div><dt>주문번호</dt><dd>${escapeHtml(orderId)}</dd></div></dl>` : ""}
       <div class="complete-actions">
-        ${!isProcessing && orderId ? `<button class="primary-btn" type="button" data-payment-retry="${escapeHtml(orderId)}">결제 다시 시도</button>` : ""}
+        ${isProcessing && orderId ? `<button class="secondary-btn" type="button" data-payment-status-refresh="${escapeHtml(orderId)}">결제 상태 다시 확인</button>` : ""}
+        ${canRetryPayment && orderId ? `<button class="primary-btn" type="button" data-payment-retry="${escapeHtml(orderId)}">결제 다시 시도</button>` : ""}
+        ${isTerminal ? '<button class="primary-btn" type="button" data-route="/">새 주문 시작</button>' : ""}
         ${!isProcessing ? '<button class="secondary-btn" type="button" data-route="/">홈으로 이동</button>' : ""}
       </div>
     </section>
   `);
+}
+
+async function pollPendingPaymentOrder(orderId) {
+  const guestLookup = loadGuestLookupSession(globalThis.sessionStorage);
+  const delays = [0, 750, 1500, 3000];
+  for (const delay of delays) {
+    if (delay) await new Promise((resolve) => globalThis.setTimeout(resolve, delay));
+    try {
+      const payload = await getOrderRequest({
+        baseUrl: SUPABASE_URL,
+        anonKey: SUPABASE_KEY,
+        accessToken: state.authSession?.access_token || "",
+      }, orderId, guestLookup?.orderId === orderId ? guestLookup.lookupToken : "");
+      const order = normalizeServerOrder(payload);
+      if (!order) continue;
+      const paymentStatus = String(order.paymentStatus || "").toLowerCase();
+      const orderStatus = String(order.status || "").toLowerCase();
+      const resolved = new Set([
+        "done", "waiting_for_deposit", "partial_canceled", "canceled", "failed", "expired",
+      ]).has(paymentStatus) && orderStatus !== "cancel_requested";
+      if (!resolved) continue;
+      state.orders = [order, ...state.orders.filter((item) => item.id !== order.id)];
+      state.paymentRequestState = paymentStatus === "done" ? "paid" : paymentStatus;
+      replacePaymentReturnUrl(`/order/${encodeURIComponent(order.id)}`);
+      renderRoute();
+      showToast(paymentStatus === "done" ? "결제가 완료되었습니다." : "결제 처리 상태가 갱신되었습니다.");
+      return true;
+    } catch {
+      // A bounded later attempt may recover from a transient lookup failure.
+    }
+  }
+  return false;
 }
 
 async function handlePaymentReturn() {
@@ -3488,14 +3531,22 @@ async function handlePaymentReturn() {
   if (!kind) return false;
   const params = paymentReturnParams();
   const orderId = String(params.get("orderId") || "").trim().toUpperCase();
+  const safeOrderId = /^[A-Z0-9_-]{6,64}$/.test(orderId) ? orderId : "";
 
   if (kind === "fail") {
-    replacePaymentReturnUrl("/payment/fail");
+    const pending = params.get("pending") === "1";
+    const terminal = params.get("terminal") === "1";
+    replacePaymentReturnUrl(`/payment/fail?${new URLSearchParams({
+      ...(safeOrderId ? { orderId: safeOrderId } : {}),
+      ...(pending ? { pending: "1" } : {}),
+      ...(terminal ? { terminal: "1" } : {}),
+    })}`);
     renderPaymentReturnStatus({
-      kind: "fail",
-      orderId: /^[A-Z0-9_-]{6,64}$/.test(orderId) ? orderId : "",
+      kind: pending ? "processing" : terminal ? "terminal" : "fail",
+      orderId: safeOrderId,
       message: "결제가 취소되었거나 승인되지 않았습니다. 결제수단을 확인하고 다시 시도해 주세요.",
     });
+    if (pending && safeOrderId) await pollPendingPaymentOrder(safeOrderId);
     return true;
   }
 
@@ -3518,18 +3569,37 @@ async function handlePaymentReturn() {
     const order = normalizeServerOrder(result);
     if (!order) throw new Error("결제 완료 주문을 확인하지 못했습니다.");
     state.orders = [order, ...state.orders.filter((item) => item.id !== order.id)];
-    state.paymentRequestState = result.paid ? "paid" : "waiting_for_deposit";
+    const paid = result.paid === true
+      || String(order.status || "").toLowerCase() === "paid"
+      || String(order.paymentStatus || "").toLowerCase() === "done";
+    state.paymentRequestState = paid ? "paid" : "waiting_for_deposit";
     replacePaymentReturnUrl(`/order/${encodeURIComponent(order.id)}`);
     renderRoute();
-    showToast(result.paid ? "결제가 완료되었습니다." : "가상계좌 입금 안내를 확인해 주세요.");
+    showToast(paid ? "결제가 완료되었습니다." : "결제 상태를 확인해 주세요.");
   } catch (error) {
-    state.paymentRequestState = "error";
-    replacePaymentReturnUrl("/payment/fail");
+    const terminal = new Set([
+      "PAYMENT_REJECTED",
+      "PAYMENT_NOT_COMPLETED",
+      "ORDER_EXPIRED",
+      "PAYMENT_RETRY_REQUIRES_NEW_ORDER",
+    ]).has(String(error?.code || ""));
+    // Confirmation response loss, internal errors, cancellation races, and
+    // unrecognized provider outcomes are ambiguous. Fail closed on the
+    // authoritative order lookup; only the explicit terminal allowlist may
+    // invite a new order.
+    const pending = !terminal;
+    state.paymentRequestState = pending ? "processing" : "error";
+    replacePaymentReturnUrl(`/payment/fail?${new URLSearchParams({
+      ...(safeOrderId ? { orderId: safeOrderId } : {}),
+      ...(pending ? { pending: "1" } : {}),
+      ...(terminal ? { terminal: "1" } : {}),
+    })}`);
     renderPaymentReturnStatus({
-      kind: "fail",
-      orderId: /^[A-Z0-9_-]{6,64}$/.test(orderId) ? orderId : "",
+      kind: pending ? "processing" : "terminal",
+      orderId: safeOrderId,
       message: error?.message || "결제 승인 결과를 확인하지 못했습니다. 같은 주문으로 다시 확인해 주세요.",
     });
+    if (pending && safeOrderId) await pollPendingPaymentOrder(safeOrderId);
   }
   return true;
 }
@@ -3543,7 +3613,7 @@ function renderOrder(orderId) {
 
   const guestLookup = loadGuestLookupSession(globalThis.sessionStorage);
   const guestLookupNotice = guestLookup?.orderId === order.id
-    ? `<aside class="order-lookup-token" aria-label="비회원 주문 조회 정보"><strong>비회원 주문 조회 토큰</strong><code>${escapeHtml(guestLookup.lookupToken)}</code><span>이 토큰은 이 브라우저 세션에서만 보관됩니다. 안전한 곳에 별도로 보관해 주세요.</span></aside>`
+    ? `<aside class="order-lookup-token" aria-label="비회원 주문 조회 정보"><strong>비회원 주문 조회 토큰</strong><code>••••••••••••${escapeHtml(guestLookup.lookupToken.slice(-6))}</code><span>조회 토큰은 화면에 전체 노출하지 않습니다. 필요할 때 복사해 안전한 곳에 보관하세요.</span></aside>`
     : "";
   const retryablePayment = ["payment_ready", "ready", "결제 대기"]
     .includes(String(order.paymentStatus || order.status || "").toLowerCase());
@@ -3564,7 +3634,7 @@ function renderOrder(orderId) {
         <div><dt>주문상태</dt><dd>${escapeHtml(orderStatusLabel)}</dd></div>
         <div><dt>결제상태</dt><dd>${escapeHtml(paymentStatusLabel)}</dd></div>
         <div><dt>배송상태</dt><dd>${escapeHtml(deliveryStatusLabel)}</dd></div>
-        <div><dt>택배사</dt><dd>${escapeHtml(order.trackingCompany || "아직 등록되지 않았습니다.")}</dd></div>
+        <div><dt>택배사</dt><dd>${escapeHtml(order.shippingCarrier || order.trackingCompany || "아직 등록되지 않았습니다.")}</dd></div>
         <div><dt>송장번호</dt><dd>${escapeHtml(order.trackingNumber || "아직 등록되지 않았습니다.")}</dd></div>
         <div><dt>결제금액</dt><dd>₩${money.format(order.total)}</dd></div>
       </dl>
@@ -4990,7 +5060,7 @@ function renderPrivacy() {
         list: [
           "회원가입·로그인: 로그인 아이디, 이메일, 소셜 로그인 식별자(카카오·네이버) 및 닉네임",
           "주문·배송: 주문자명, 휴대전화번호, 배송지 주소, 배송 요청사항",
-          "결제: 결제수단 정보(카드·계좌이체·가상계좌·간편결제), 결제 승인 내역",
+          "결제: 결제수단 정보(카드·계좌이체·간편결제), 결제 승인 내역",
           "자동 수집: 접속 로그, 쿠키, 서비스 이용 기록",
         ],
       },
@@ -7615,6 +7685,7 @@ function bindPageEvents() {
       const matchedOrder = normalizeServerOrder(result);
       if (!matchedOrder) throw new Error("주문 정보를 찾을 수 없습니다.");
       state.orders = [matchedOrder, ...state.orders.filter((order) => order.id !== matchedOrder.id)];
+      saveGuestLookupSession(globalThis.sessionStorage, { orderId: matchedOrder.id, lookupToken });
       routeTo(`/order/${matchedOrder.id}`);
     } catch (error) {
       showToast(error.message || "주문 정보를 찾을 수 없습니다.");
@@ -7662,7 +7733,17 @@ function bindPageEvents() {
       const key = node.dataset.qtyKey;
       const delta = Number(node.dataset.qtyDelta);
       const item = state.cart.find((entry) => entry.key === key);
-      if (item) item.quantity = Math.min(item.stock, Math.max(1, item.quantity + delta));
+      if (item) {
+        const nextQuantity = Math.min(item.stock, MAX_ORDER_LINE_QUANTITY, Math.max(1, item.quantity + delta));
+        const nextCart = state.cart.map((entry) => entry.key === key ? { ...entry, quantity: nextQuantity } : entry);
+        try {
+          orderLinePayload(nextCart);
+          state.cart = nextCart;
+        } catch (error) {
+          showToast(error.message);
+          return;
+        }
+      }
       saveCartState();
       renderCart();
     });
@@ -7692,6 +7773,18 @@ function bindPageEvents() {
           node.disabled = false;
           node.removeAttribute("aria-busy");
         }
+      }
+    });
+  });
+  document.querySelectorAll("[data-payment-status-refresh]").forEach((node) => {
+    node.addEventListener("click", async () => {
+      node.disabled = true;
+      node.setAttribute("aria-busy", "true");
+      const resolved = await pollPendingPaymentOrder(String(node.dataset.paymentStatusRefresh || ""));
+      if (!resolved && node.isConnected) {
+        node.disabled = false;
+        node.removeAttribute("aria-busy");
+        showToast("아직 결제 처리 중입니다. 잠시 후 다시 확인해 주세요.");
       }
     });
   });
@@ -8175,10 +8268,13 @@ function renderRoute() {
   if (base === "checkout") return renderCheckout();
   if (base === "order") return renderOrder(a);
   if (base === "payment") {
-    const orderId = String(paymentReturnParams().get("orderId") || "").trim().toUpperCase();
-    if (a === "success") return renderPaymentReturnStatus({ kind: "processing", orderId });
+    const params = paymentReturnParams();
+    const orderId = String(params.get("orderId") || "").trim().toUpperCase();
+    if (a === "success" || params.get("pending") === "1") {
+      return renderPaymentReturnStatus({ kind: "processing", orderId });
+    }
     return renderPaymentReturnStatus({
-      kind: "fail",
+      kind: params.get("terminal") === "1" ? "terminal" : "fail",
       orderId: /^[A-Z0-9_-]{6,64}$/.test(orderId) ? orderId : "",
       message: "결제를 완료하지 못했습니다. 결제 정보를 확인한 뒤 다시 시도해 주세요.",
     });

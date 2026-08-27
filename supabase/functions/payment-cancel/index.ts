@@ -53,6 +53,8 @@ Deno.serve(async (req: Request) => {
     }
     if (!user && !guestTokenHash) throw new HttpError(403, "ORDER_ACCESS_DENIED", "주문을 확인할 수 없습니다.");
     await enforceRateLimit(req, "payment_cancel", `${user?.id || guestTokenHash}:${orderNo}`, 8, 900, 900);
+    // Configuration failures must not leave a claimed cancellation blocking fulfillment.
+    const provider = paymentProvider();
 
     attemptKey = `cancel_${await sha256Hex(`${orderNo}:${requestId}`)}`;
     const requestHash = await sha256Hex(stableStringify({ orderNo, reason, refundAccountFingerprint }));
@@ -83,10 +85,15 @@ Deno.serve(async (req: Request) => {
     let safePayload: Record<string, unknown> = {};
     if (claim.localOnly !== true) {
       const paymentKey = cleanString(claim.paymentKey, 200);
-      if (!paymentKey || cancelAmount < 1) throw new HttpError(409, "PAYMENT_NOT_CANCELABLE", "결제를 취소할 수 없습니다.");
+      const expectedAmount = Number(claim.totalKrw);
+      if (!paymentKey || cancelAmount < 1 || !Number.isSafeInteger(expectedAmount) || expectedAmount < 1) {
+        throw new HttpError(409, "PAYMENT_NOT_CANCELABLE", "결제를 취소할 수 없습니다.");
+      }
       try {
-        const result = await paymentProvider().cancel({
+        const result = await provider.cancel({
           paymentKey,
+          orderId: orderNo,
+          amount: expectedAmount,
           cancelReason: reason,
           cancelAmount,
           idempotencyKey: attemptKey,
@@ -94,6 +101,11 @@ Deno.serve(async (req: Request) => {
           refundReceiveAccount: refundReceiveAccount || undefined,
         });
         const normalized = normalizedProviderResult(result);
+        if (normalized.paymentKey !== paymentKey
+            || normalized.orderId !== orderNo
+            || normalized.amount !== expectedAmount) {
+          throw new ProviderError(502, "CANCEL_PROVIDER_MISMATCH", "Cancellation response did not match the claimed payment", false, result);
+        }
         if (normalized.status !== "CANCELED"
             || normalized.canceledAmount < canceledAmountBefore + cancelAmount) {
           // This endpoint requests the entire remaining balance. A partial provider result

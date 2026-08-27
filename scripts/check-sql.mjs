@@ -3,7 +3,7 @@ import { parse } from "pgsql-parser";
 
 const migrationDir = "supabase/migrations";
 const migrationNames = (await readdir(migrationDir))
-  .filter((name) => /^202607.*\.sql$/i.test(name))
+  .filter((name) => name.endsWith(".sql"))
   .sort();
 let statementCount = 0;
 

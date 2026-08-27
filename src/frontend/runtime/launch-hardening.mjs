@@ -14,11 +14,6 @@ const orderSnapshots = new Map();
 const loadingOrders = new Map();
 let hardenQueued = false;
 
-// Keep the visible payment contract aligned with the currently applied Toss MID.
-paymentProfile.methods.splice(0, paymentProfile.methods.length, "카드", "계좌이체", "간편결제");
-paymentProfile.transferLabel = "토스페이먼츠 결제 안내";
-shippingPolicy.maxLeadTime = "결제일로부터 최대 7일";
-
 function accessTokenFromStorage() {
   try {
     const raw = localStorage.getItem(AUTH_STORAGE_KEY);
@@ -86,10 +81,21 @@ function setInlineStatus(anchor, message, tone = "info") {
   node.textContent = message;
 }
 
+function preparedPaymentIsFresh(prepared) {
+  const rawExpiry = String(prepared?.reservationExpiresAt || "").trim();
+  if (!rawExpiry) return true;
+  const expiry = Date.parse(rawExpiry);
+  return Number.isFinite(expiry) && expiry > Date.now() + 30_000;
+}
+
 async function primePayment(orderId) {
   const safeOrderId = String(orderId || "").trim().toUpperCase();
   if (!/^[A-Z0-9_-]{6,64}$/.test(safeOrderId)) throw new Error("주문번호를 확인해 주세요.");
-  if (preparedPayments.has(safeOrderId)) return preparedPayments.get(safeOrderId);
+  if (preparedPayments.has(safeOrderId)) {
+    const cached = preparedPayments.get(safeOrderId);
+    if (preparedPaymentIsFresh(cached)) return cached;
+    preparedPayments.delete(safeOrderId);
+  }
   if (preparingPayments.has(safeOrderId)) return preparingPayments.get(safeOrderId);
 
   const lookup = guestLookupFor(safeOrderId);
@@ -108,6 +114,7 @@ async function primePayment(orderId) {
     if (!prepared?.payment || !prepared?.clientKey || !prepared?.customerKey) {
       throw new Error("결제 준비 정보를 확인할 수 없습니다.");
     }
+    if (!preparedPaymentIsFresh(prepared)) throw new Error("주문의 결제 가능 시간이 만료되었습니다.");
     preparedPayments.set(safeOrderId, prepared);
     return prepared;
   }).finally(() => preparingPayments.delete(safeOrderId));
@@ -120,6 +127,10 @@ function requestPreparedPayment(orderId) {
   const safeOrderId = String(orderId || "").trim().toUpperCase();
   const prepared = preparedPayments.get(safeOrderId);
   if (!prepared) throw new Error("결제 준비가 아직 끝나지 않았습니다.");
+  if (!preparedPaymentIsFresh(prepared)) {
+    preparedPayments.delete(safeOrderId);
+    throw new Error("주문의 결제 가능 시간이 만료되었습니다.");
+  }
   if (typeof globalThis.TossPayments !== "function") throw new Error("토스페이먼츠 결제 모듈을 불러오지 못했습니다.");
   const client = globalThis.TossPayments(prepared.clientKey);
   const checkout = client.payment({ customerKey: prepared.customerKey });
@@ -147,9 +158,9 @@ function decoratePaymentRetry(button) {
     })
     .catch((error) => {
       if (!button.isConnected) return;
-      button.disabled = true;
+      button.disabled = false;
       button.removeAttribute("aria-busy");
-      button.textContent = "현재 결제할 수 없습니다";
+      button.textContent = "결제 준비 다시 시도";
       setInlineStatus(button, error?.message || "결제 준비 상태를 확인해 주세요.", "error");
     });
 }
@@ -211,7 +222,10 @@ function maskGuestToken(root, orderId) {
 }
 
 function canCustomerCancel(order) {
-  return String(order?.status || "") === "paid" && String(order?.paymentStatus || "") === "paid";
+  const status = String(order?.status || "");
+  const paymentStatus = String(order?.paymentStatus || "");
+  return (status === "paid" && paymentStatus === "done")
+    || (status === "partially_canceled" && paymentStatus === "partial_canceled");
 }
 
 function installCancelAction(root, orderId, order) {
@@ -388,6 +402,16 @@ async function cancelPayment(orderId, button) {
     const order = result?.order;
     if (order && typeof order === "object") orderSnapshots.set(safeOrderId, order);
     const root = button.closest(".complete-page") || document;
+    if (result?.partial || result?.retryRequiresNewKey) {
+      if (result?.retryRequiresNewKey) delete button.dataset.cancelIdempotencyKey;
+      button.disabled = false;
+      button.removeAttribute("aria-busy");
+      button.textContent = "남은 금액 취소 다시 시도";
+      updateDefinitionField(root, "주문상태", "부분 취소");
+      updateDefinitionField(root, "결제상태", "부분 환불");
+      setInlineStatus(button, "일부 금액만 취소되었습니다. 남은 결제 금액은 다시 취소할 수 있습니다.", "warning");
+      return;
+    }
     updateDefinitionField(root, "주문상태", "주문 취소");
     updateDefinitionField(root, "결제상태", "환불 완료");
     button.remove();
@@ -428,11 +452,19 @@ document.addEventListener("click", (event) => {
       paymentButton.textContent = "토스 결제 준비 중…";
       primePayment(orderId)
         .then(() => {
+          if (!paymentButton.isConnected) return;
           paymentButton.disabled = false;
+          paymentButton.removeAttribute("aria-busy");
           paymentButton.textContent = "토스 결제하기";
           setInlineStatus(paymentButton, "준비가 완료되었습니다. 결제 버튼을 한 번 더 눌러주세요.");
         })
-        .catch((error) => setInlineStatus(paymentButton, error?.message || "결제 준비에 실패했습니다.", "error"));
+        .catch((error) => {
+          if (!paymentButton.isConnected) return;
+          paymentButton.disabled = false;
+          paymentButton.removeAttribute("aria-busy");
+          paymentButton.textContent = "결제 준비 다시 시도";
+          setInlineStatus(paymentButton, error?.message || "결제 준비에 실패했습니다.", "error");
+        });
       return;
     }
     try {

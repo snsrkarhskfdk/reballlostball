@@ -166,7 +166,13 @@
 7. 두 transaction을 동시에 실행해 재고 음수, lock timeout, deadlock, 중복 재고 복구가 없는지 확인한다.
 8. 승인·취소·webhook 순서 역전, 무진전 partial, stale worker, 8회 초과 manual-review, 가상계좌 환불 암호문 수명주기를 실제 transaction으로 검증한다.
 
-Docker 엔진 부재로 위 실제 DB 검증은 현재 로컬에서 수행되지 않았다.
+Docker 엔진 부재로 위 실제 DB 검증은 당시 로컬에서 수행되지 않았다.
+
+### Payment audit addendum — 2026-08-28
+
+현재 audit PR은 forward migration `20260828010000_payment_audit_hardening.sql`을 추가한다. 이 migration은 로컬 Supabase에서 `0001`부터 전체 순서로 적용 성공했지만 원격에는 아직 적용하지 않았으므로, 위의 2026-07-11 원격 적용 기록과 혼동하지 않는다.
+
+운영 반영 순서는 반드시 **DB forward migration → revoke/grant·RLS 확인 → 변경된 Edge Functions 배포 → reconciliation scheduler·manual-review smoke → frontend/Vercel promotion** 순서다. backend version 또는 새 RPC 확인이 실패하면 frontend promotion을 중단한다. 특히 새 `reconcile-payments`는 이 migration의 fenced manual-review RPC에 의존한다.
 
 ## 6. Edge Functions와 환경변수
 
@@ -333,7 +339,7 @@ GitHub 작업을 승인받은 경우에도 `git add -A`를 사용하지 않는�
 | main merge SHA | `4347c9c6db7520092c5c40a70f087ee466823faa` |
 | push | `origin/fix/reball-production-readiness` 성공 |
 | 실제 PR | `https://github.com/snsrkarhskfdk/reballlostball/pull/3` (MERGED) |
-| GitHub Pages workflow | Vercel을 canonical host로 유지하기 위해 `disabled_manually` (workflow 파일 보존) |
+| GitHub Pages workflow | Vercel을 canonical host로 고정하기 위해 payment audit PR에서 중복 자동 workflow 제거 |
 | PR 본문 | `docs/repair/PR_BODY_DRAFT.md` 준비 |
 | Supabase migration/Functions | versions `20260711055444`, `20260711055557` 성공; 12개 `ACTIVE`/smoke 성공 |
 | Vercel final Preview | `dpl_9V2WFwQCmA3ryPn56TFzouVUXPv1` READY — `https://reballlostball-7wrgzlgb2-thechangcnds-projects.vercel.app` |

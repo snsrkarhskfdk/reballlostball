@@ -39,6 +39,7 @@ type NormalizedProviderPayment = ReturnType<typeof normalizedProviderResult>;
 type AppliedProviderState = "applied" | "processed" | "busy";
 
 const MAX_CANCEL_RECONCILE_ATTEMPTS = 8;
+const MAX_PAYMENT_RECONCILE_ATTEMPTS = 12;
 
 async function finish(job: ReconcileJob, nextSeconds: number, errorCode: string | null = null): Promise<void> {
   await rpc("complete_payment_reconciliation_v1", {
@@ -55,8 +56,17 @@ function cancelBackoffSeconds(attempts: number): number {
 
 async function markCancellationReview(job: ReconcileJob, errorCode: string): Promise<void> {
   await rpc("mark_payment_cancellation_review_v1", {
-    p_order_no: job.orderNo,
+    p_payment_id: job.paymentId,
+    p_lease_token: job.leaseToken,
     p_idempotency_key: job.cancelAttemptKey,
+    p_error_code: errorCode,
+  });
+}
+
+async function markConfirmationReview(job: ReconcileJob, errorCode: string): Promise<void> {
+  await rpc("mark_payment_confirmation_review_v1", {
+    p_payment_id: job.paymentId,
+    p_lease_token: job.leaseToken,
     p_error_code: errorCode,
   });
 }
@@ -120,11 +130,12 @@ Deno.serve(async (req: Request) => {
     const body = await readJson(req, 4 * 1024);
     const requestedLimit = Number(body.limit ?? 10);
     const limit = Number.isSafeInteger(requestedLimit) ? Math.max(1, Math.min(25, requestedLimit)) : 10;
+    // Fail before acquiring any database lease when provider credentials are invalid.
+    const provider = paymentProvider();
     const jobs = await rpc<ReconcileJob[]>("claim_payment_reconciliation_v1", {
       p_limit: limit,
       p_lease_seconds: 300,
     });
-    const provider = paymentProvider();
     let reconciled = 0;
     let deferred = 0;
     let failed = 0;
@@ -145,9 +156,12 @@ Deno.serve(async (req: Request) => {
         }
 
         const cancelAttempts = Number(job.cancelReconcileAttempts) || 0;
+        const paymentAttempts = (Number(job.paymentReconcileAttempts) || 0) + 1;
         if (new Set(["READY", "IN_PROGRESS"]).has(authoritative.status)) {
           if (job.hasActiveCancel && cancelAttempts >= MAX_CANCEL_RECONCILE_ATTEMPTS) {
             await markCancellationReview(job, "CANCELLATION_PROVIDER_NOT_SETTLED");
+          } else if (!job.hasActiveCancel && paymentAttempts >= MAX_PAYMENT_RECONCILE_ATTEMPTS) {
+            await markConfirmationReview(job, "PAYMENT_PROVIDER_NOT_SETTLED");
           } else {
             await finish(job, 120);
           }
@@ -191,6 +205,8 @@ Deno.serve(async (req: Request) => {
           try {
             const retried = normalizedProviderResult(await provider.cancel({
               paymentKey,
+              orderId: orderNo,
+              amount,
               cancelReason,
               cancelAmount,
               idempotencyKey: attemptKey,
@@ -263,8 +279,11 @@ Deno.serve(async (req: Request) => {
           ? error.code
           : "RECONCILE_PROVIDER_ERROR";
         const cancelAttempts = Number(job.cancelReconcileAttempts) || 0;
+        const paymentAttempts = (Number(job.paymentReconcileAttempts) || 0) + 1;
         if (job.hasActiveCancel && cancelAttempts >= MAX_CANCEL_RECONCILE_ATTEMPTS) {
           await markCancellationReview(job, code).catch(() => undefined);
+        } else if (!job.hasActiveCancel && paymentAttempts >= MAX_PAYMENT_RECONCILE_ATTEMPTS) {
+          await markConfirmationReview(job, code).catch(() => undefined);
         } else {
           await finish(job, job.hasActiveCancel ? cancelBackoffSeconds(cancelAttempts) : 300, code).catch(() => undefined);
         }

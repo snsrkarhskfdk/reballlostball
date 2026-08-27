@@ -41,6 +41,7 @@ export const shippingPolicy = {
   islandExtra: 2000,
   cutoffTime: "오후 3시",
   averageLeadTime: "1~2일",
+  maxLeadTime: "결제일로부터 최대 7일",
   simpleReturnFee: 7000,
   simpleReturnWindow: "수령 후 7일 이내",
   defectWindow: "제품 문제 발생 시 30일 이내",
@@ -77,10 +78,10 @@ export const storeGalleryPhotos = [
   },
 ];
 
-export const paymentProfile = {
-  methods: ["카드", "계좌이체", "가상계좌", "간편결제"],
-  transferLabel: "계좌이체 입금 계좌",
-};
+export const paymentProfile = Object.freeze({
+  methods: Object.freeze(["카드", "계좌이체", "간편결제"]),
+  transferLabel: "토스페이먼츠 결제 안내",
+});
 
 export const lostballNotice = [
   "본 상품은 수거·세척·선별 과정을 거친 로스트볼(중고 골프공)입니다.",

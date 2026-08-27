@@ -97,7 +97,7 @@ begin
     end if;
     update public.orders set status='shipping_ready', updated_at=now() where id=p_order_id;
   elsif p_target_status = 'shipped' then
-    if v_order.status not in ('paid','shipping_ready','shipped') then
+    if v_order.status not in ('shipping_ready','shipped') then
       raise exception using errcode = '22023', message = 'order cannot be shipped';
     end if;
     if v_carrier is null or length(v_carrier)>40 or v_tracking is null

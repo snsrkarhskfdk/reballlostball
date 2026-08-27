@@ -9,7 +9,12 @@ async function postJson(fetchImpl, url, body, headers = {}) {
     body: JSON.stringify(body),
   });
   const payload = await response.json().catch(() => ({}));
-  if (!response.ok) throw new Error(payload?.message || "결제 준비에 실패했습니다.");
+  if (!response.ok) {
+    const error = new Error(payload?.message || "결제 준비에 실패했습니다.");
+    error.code = String(payload?.code || "");
+    error.status = response.status;
+    throw error;
+  }
   return payload;
 }
 

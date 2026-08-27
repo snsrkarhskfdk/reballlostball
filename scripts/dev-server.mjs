@@ -54,6 +54,15 @@ function createStaticServer() {
   return createServer((request, response) => {
     const target = resolveRequestPath(request.url ?? "/");
 
+    if (target && !existsSync(target) && extname(target) === "") {
+      response.writeHead(200, {
+        "Content-Type": mimeTypes[".html"],
+        "Cache-Control": "no-store",
+      });
+      response.end(configuredIndexHtml);
+      return;
+    }
+
     if (!target || !existsSync(target)) {
       response.writeHead(404, { "Content-Type": "text/plain; charset=utf-8" });
       response.end("Not found");

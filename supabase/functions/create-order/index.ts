@@ -16,11 +16,13 @@ import {
   readJson,
   safeLog,
 } from "../_shared/http.ts";
-import { assertMockPaymentProviderAllowed } from "../_shared/payments.ts";
+import { assertMockPaymentProviderAllowed, paymentProvider } from "../_shared/payments.ts";
+import { configuredPaymentCallbackUrl, configuredTossClientKey } from "../_shared/payment-config.ts";
 import { enforceRateLimit } from "../_shared/security.ts";
 import { rpc, sessionUser } from "../_shared/supabase.ts";
 
 const serviceDatabase = { rpc };
+const CONTRACTED_PAYMENT_METHODS = new Set(["card", "transfer", "easy_pay"]);
 
 Deno.serve(async (req: Request) => {
   if (req.method === "OPTIONS") {
@@ -43,6 +45,9 @@ Deno.serve(async (req: Request) => {
     const items = normalizeItems(body.items).map(({ variantId, quantity }) => ({ variantId, quantity }));
     const address = normalizeAddress(body.address ?? body.customer);
     const paymentMethod = normalizePaymentMethod(body.paymentMethod);
+    if (!CONTRACTED_PAYMENT_METHODS.has(paymentMethod)) {
+      throw new HttpError(400, "UNSUPPORTED_PAYMENT_METHOD", "지원하지 않는 결제수단입니다.");
+    }
     await enforceRateLimit(req, "commerce_create_order", user?.id || idempotencyKey, 12, 900, 900);
 
     const providerName = cleanString(Deno.env.get("PAYMENT_PROVIDER") || "toss_payments", 40);
@@ -50,6 +55,14 @@ Deno.serve(async (req: Request) => {
       throw new HttpError(503, "PAYMENT_CONFIG_MISSING", "결제 설정을 확인할 수 없습니다.");
     }
     if (providerName === "mock") assertMockPaymentProviderAllowed();
+    paymentProvider();
+    if (providerName === "toss_payments") configuredTossClientKey();
+    const successUrl = providerName === "toss_payments"
+      ? configuredPaymentCallbackUrl("TOSS_SUCCESS_URL", "/payment/success")
+      : "";
+    const failUrl = providerName === "toss_payments"
+      ? configuredPaymentCallbackUrl("TOSS_FAIL_URL", "/payment/fail")
+      : "";
 
     const fingerprint = await sha256Hex(stableStringify({ items, address, paymentMethod, providerName, profileId: user?.id || null }));
     let guestLookupToken: string | null = null;
@@ -73,15 +86,13 @@ Deno.serve(async (req: Request) => {
       p_payment_provider: providerName,
       p_guest_token_hash: guestTokenHash,
     });
-    const successUrl = Deno.env.get("TOSS_SUCCESS_URL") || "";
-    const failUrl = Deno.env.get("TOSS_FAIL_URL") || "";
     const tossMethod = {
       card: "CARD",
       transfer: "TRANSFER",
       virtual_account: "VIRTUAL_ACCOUNT",
       easy_pay: "CARD",
     }[paymentMethod];
-    const payment = providerName === "toss_payments" && successUrl && failUrl
+    const payment = providerName === "toss_payments"
       ? {
           customerKey: user?.id || `guest_${guestTokenHash?.slice(0, 40)}`,
           payment: {

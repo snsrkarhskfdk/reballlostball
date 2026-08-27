@@ -5,6 +5,12 @@ const PAYMENT_CONTRACT_COPY = "카드·계좌이체·간편결제는 토스페�
 function ensurePaymentContractNotice(root = document) {
   const checkout = root.querySelector(".checkout-main-card");
   if (!checkout || checkout.querySelector("[data-toss-payment-contract-note]")) return;
+  const existing = [...checkout.querySelectorAll("p")]
+    .find((node) => node.textContent?.trim() === PAYMENT_CONTRACT_COPY);
+  if (existing) {
+    existing.dataset.tossPaymentContractNote = "true";
+    return;
+  }
   const note = document.createElement("p");
   note.dataset.tossPaymentContractNote = "true";
   note.className = "launch-max-delivery-note";
