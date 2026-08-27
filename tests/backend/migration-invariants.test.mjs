@@ -7,6 +7,11 @@ const migration = readFileSync(
   "utf8",
 );
 
+const shippingMigration = readFileSync(
+  new URL("../../supabase/migrations/20260828010000_payment_audit_hardening.sql", import.meta.url),
+  "utf8",
+);
+
 test("browser roles cannot write trusted order/payment state", () => {
   assert.match(migration, /drop policy if exists orders_self_insert/i);
   assert.match(migration, /revoke insert, update, delete on public\.orders[\s\S]+from anon, authenticated/i);
@@ -125,11 +130,15 @@ test("test-only payment and CAPTCHA paths fail closed when DENO_ENV is absent", 
     new URL("../../supabase/functions/prepare-payment/index.ts", import.meta.url),
     "utf8",
   );
+  const paymentConfig = readFileSync(
+    new URL("../../supabase/functions/_shared/payment-config.ts", import.meta.url),
+    "utf8",
+  );
   assert.match(core, /\["development", "dev", "local", "test"\]/i);
   assert.match(payments, /assertMockPaymentProviderAllowed[\s\S]+!isExplicitNonProductionRuntime\(\)/i);
   assert.match(security, /mode === "test" && isExplicitNonProductionRuntime\(\)/i);
-  assert.match(prepare, /isExplicitNonProductionRuntime\(\) && url\.protocol === "http:"/i);
-  for (const source of [payments, security, prepare]) {
+  assert.match(paymentConfig, /isExplicitNonProductionRuntime\(\)[\s\S]+url\.protocol === "http:"/i);
+  for (const source of [payments, security, prepare, paymentConfig]) {
     assert.doesNotMatch(source, /DENO_ENV[\s\S]{0,80}!={1,2}[\s\S]{0,40}production/i);
   }
 });
@@ -280,8 +289,8 @@ test("manual-review cancellations remain fulfillment blockers and stale workers 
   const cancelFailure = migration.match(
     /create or replace function public\.fail_payment_cancellation_v1[\s\S]+?\$\$;/i,
   )?.[0] || "";
-  const manualReview = migration.match(
-    /create or replace function public\.mark_payment_cancellation_review_v1[\s\S]+?\$\$;/i,
+  const manualReview = shippingMigration.match(
+    /create function public\.mark_payment_cancellation_review_v1[\s\S]+?\$function\$;/i,
   )?.[0] || "";
 
   for (const body of [confirmation, webhook]) {
@@ -291,6 +300,13 @@ test("manual-review cancellations remain fulfillment blockers and stale workers 
   assert.match(cancelFailure, /select \* into v_attempt[\s\S]+for update[\s\S]+status not in \('started', 'in_progress', 'unknown'\)[\s\S]+stale/i);
   assert.match(cancelFailure, /not v_other_blocking[\s\S]+set status = v_to_status/i);
   assert.match(manualReview, /select \* into v_attempt[\s\S]+for update[\s\S]+not found or v_attempt\.status not in[\s\S]+stale/i);
+  assert.match(manualReview, /reconcile_lease_token is distinct from p_lease_token/i);
+  assert.match(manualReview, /reconcile_lease_until <= now\(\)/i);
+  assert.ok(
+    manualReview.indexOf("from public.orders") < manualReview.indexOf("from public.payments where id = p_payment_id for update"),
+    "cancellation manual-review RPC must lock order before payment",
+  );
+  assert.match(shippingMigration, /mark_payment_cancellation_review_v1\(uuid, uuid, text, text\)[\s\S]+to service_role/i);
 });
 
 test("security-definer public RPCs are revoked then service-only granted", () => {
@@ -300,4 +316,54 @@ test("security-definer public RPCs are revoked then service-only granted", () =>
     assert.match(migration, new RegExp(`revoke all on function public\\.${name}\\(`, "i"), `${name} lacks revoke`);
     assert.match(migration, new RegExp(`grant execute on function public\\.${name}\\([\\s\\S]+?to service_role`, "i"), `${name} lacks service grant`);
   }
+});
+
+test("shipping state machine cannot skip shipping_ready", () => {
+  const shippingFunction = shippingMigration.match(
+    /create or replace function public\.admin_update_shipping_v1[\s\S]+?\$function\$;/i,
+  )?.[0] || "";
+  const shippedBranch = shippingFunction.match(
+    /elsif p_target_status = 'shipped' then([\s\S]+?)else/i,
+  )?.[1] || "";
+  assert.ok(shippedBranch, "shipped transition branch is missing");
+  assert.match(shippedBranch, /v_order\.status not in \('shipping_ready','shipped'\)/i);
+  assert.doesNotMatch(shippedBranch, /'paid'/i);
+  assert.match(shippingFunction, /payment_status not in \('done', 'partial_canceled'\)[\s\S]+settled payment is required for shipping/i);
+});
+
+test("terminal payment truth stops unshipped fulfillment and flags post-shipment review", () => {
+  const guard = shippingMigration.match(
+    /create or replace function private\.stop_fulfillment_after_terminal_payment_v1[\s\S]+?\$function\$;/i,
+  )?.[0] || "";
+  assert.match(guard, /new\.payment_status not in \('canceled', 'failed', 'expired'\)/i);
+  assert.match(guard, /new\.status = 'shipping_ready'[\s\S]+release_order_inventory[\s\S]+status = 'canceled'/i);
+  assert.match(guard, /new\.status in \('shipped', 'delivered'\)[\s\S]+post_fulfillment_payment_manual_review/i);
+  assert.match(shippingMigration, /after update of payment_status on public\.orders[\s\S]+stop_fulfillment_after_terminal_payment_v1/i);
+});
+
+test("authoritative settlement can recover before callback and consumes reservations", () => {
+  const transition = shippingMigration.match(
+    /create or replace function private\.valid_order_transition[\s\S]+?\$function\$;/i,
+  )?.[0] || "";
+  assert.match(transition, /when 'payment_ready'[\s\S]+?'paid'[\s\S]+?'partially_canceled'/i);
+  assert.match(transition, /when 'payment_auth_started'[\s\S]+?'partially_canceled'/i);
+  assert.match(transition, /when 'waiting_for_deposit'[\s\S]+?'partially_canceled'/i);
+  assert.match(shippingMigration, /after update of payment_status on public\.orders/i);
+  assert.match(shippingMigration, /new\.payment_status in \('done', 'partial_canceled'\)[\s\S]+consume_order_inventory/i);
+});
+
+test("general payment reconciliation has a fenced manual-review stop", () => {
+  const review = shippingMigration.match(
+    /create or replace function public\.mark_payment_confirmation_review_v1[\s\S]+?\$function\$;/i,
+  )?.[0] || "";
+  assert.match(review, /reconcile_lease_token is distinct from p_lease_token/i);
+  assert.match(review, /reconcile_lease_until <= now\(\)/i);
+  assert.match(review, /status = 'manual_review'/i);
+  assert.match(review, /next_reconcile_at = null/i);
+  assert.match(shippingMigration, /grant execute on function public\.mark_payment_confirmation_review_v1[\s\S]+to service_role/i);
+  assert.ok(
+    review.indexOf("from public.orders") < review.indexOf("from public.payments where id = p_payment_id for update"),
+    "manual-review RPC must lock order before payment",
+  );
+  assert.match(shippingMigration, /new\.payment_status[\s\S]+superseded_by_cancellation[\s\S]+status = 'manual_review'/i);
 });

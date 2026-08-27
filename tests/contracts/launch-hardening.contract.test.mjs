@@ -3,6 +3,8 @@ import test from "node:test";
 import { read } from "./helpers.mjs";
 
 const index = read("index.html");
+const app = read("app.js");
+const content = read("src/frontend/catalog/content.mjs");
 const runtime = read("src/frontend/runtime/launch-hardening.mjs");
 const toss = read("src/frontend/payments/toss-client.mjs");
 
@@ -15,7 +17,8 @@ test("launch hardening runs before the storefront entry", () => {
 });
 
 test("checkout contract hides uncontracted virtual accounts and manual transfer account copy", () => {
-  assert.match(runtime, /paymentProfile\.methods\.splice[\s\S]*"카드"[\s\S]*"계좌이체"[\s\S]*"간편결제"/);
+  assert.match(content, /methods:\s*Object\.freeze\(\["카드", "계좌이체", "간편결제"\]\)/);
+  assert.doesNotMatch(app, /renderCheckoutMethod\("virtual"/);
   assert.match(runtime, /input\[name=["']payment["']\]\[value=["']virtual/);
   assert.match(runtime, /토스페이먼츠 결제 안내/);
   assert.match(runtime, /카드·계좌이체·간편결제는 토스페이먼츠 결제창/);

@@ -24,11 +24,15 @@ import {
 import { rpc } from "../../supabase/functions/_shared/supabase.ts";
 import { handler as adminMembersHandler } from "./edge-handlers/admin-members.ts";
 import { handler as authAssistHandler } from "./edge-handlers/auth-assist.ts";
+import { handler as createOrderHandler } from "./edge-handlers/create-order.ts";
 import { handler as getOrderHandler } from "./edge-handlers/get-order.ts";
 import { handler as guestOrderLookupHandler } from "./edge-handlers/guest-order-lookup.ts";
 import { handler as loginHandler } from "./edge-handlers/login-with-identifier.ts";
+import { handler as paymentCancelHandler } from "./edge-handlers/payment-cancel.ts";
 import { handler as paymentConfirmHandler } from "./edge-handlers/payment-confirm.ts";
 import { handler as paymentWebhookHandler } from "./edge-handlers/payment-webhook.ts";
+import { handler as preparePaymentHandler } from "./edge-handlers/prepare-payment.ts";
+import { handler as reconcilePaymentsHandler } from "./edge-handlers/reconcile-payments.ts";
 import { handler as signupHandler } from "./edge-handlers/signup-with-login-id.ts";
 
 function assert(condition: unknown, message: string): asserts condition {
@@ -63,17 +67,71 @@ const EDGE_ENV = {
 const edgeHandlers = new Map<string, EdgeHandler>([
   ["admin-members", adminMembersHandler],
   ["auth-assist", authAssistHandler],
+  ["create-order", createOrderHandler],
   ["get-order", getOrderHandler],
   ["guest-order-lookup", guestOrderLookupHandler],
   ["login-with-identifier", loginHandler],
+  ["payment-cancel", paymentCancelHandler],
   ["payment-confirm", paymentConfirmHandler],
   ["payment-webhook", paymentWebhookHandler],
+  ["prepare-payment", preparePaymentHandler],
+  ["reconcile-payments", reconcilePaymentsHandler],
   ["signup-with-login-id", signupHandler],
 ]);
+
+Deno.test("production Supabase origin is pinned before any credentialed fetch", async () => {
+  for (const url of [
+    "https://evil.example",
+    "http://qbftalhhyfcndanrcwpy.supabase.co",
+    "https://user:pass@qbftalhhyfcndanrcwpy.supabase.co",
+    "https://qbftalhhyfcndanrcwpy.supabase.co/rest/v1",
+  ]) {
+    let fetched = false;
+    await withEnvironment({
+      DENO_ENV: "production",
+      SUPABASE_URL: url,
+      SUPABASE_SERVICE_ROLE_KEY: "service-key-must-not-leave",
+      SUPABASE_SECRET_KEYS: null,
+    }, async () => {
+      await withFetchMock(() => {
+        fetched = true;
+        throw new Error("credentialed fetch escaped origin validation");
+      }, async () => {
+        let rejected = false;
+        try {
+          await rpc("payment_origin_probe", {});
+        } catch {
+          rejected = true;
+        }
+        assert(rejected, `${url} was accepted as production Supabase origin`);
+      });
+    });
+    assert(!fetched, `${url} was fetched before origin validation`);
+  }
+
+  let stagingFetched = false;
+  await withEnvironment({
+    DENO_ENV: "production",
+    SUPABASE_PROJECT_REF: "abcdefghijklmnopqrst",
+    SUPABASE_URL: "https://abcdefghijklmnopqrst.supabase.co",
+    SUPABASE_SERVICE_ROLE_KEY: "staging-service-key",
+    SUPABASE_SECRET_KEYS: null,
+  }, async () => {
+    await withFetchMock((request) => {
+      stagingFetched = true;
+      assert(request.url.startsWith("https://abcdefghijklmnopqrst.supabase.co/"), "staging request escaped its project ref");
+      return jsonResult({ ok: true });
+    }, async () => {
+      await rpc("payment_origin_probe", {});
+    });
+  });
+  assert(stagingFetched, "explicit staging project ref could not reach its pinned origin");
+});
 
 Deno.test("Supabase secret API keys stay in apikey while legacy service JWTs retain Bearer auth", async () => {
   const secretKey = "sb_" + "secret_test-service-key";
   await withEnvironment({
+    DENO_ENV: "test",
     SUPABASE_URL: "https://supabase.test",
     SUPABASE_SECRET_KEYS: JSON.stringify({ default: secretKey }),
     SUPABASE_SERVICE_ROLE_KEY: "legacy-value-must-not-win",
@@ -95,6 +153,7 @@ Deno.test("Supabase secret API keys stay in apikey while legacy service JWTs ret
 
   const legacyJwt = "eyJhbGciOiJIUzI1NiJ9.eyJyb2xlIjoic2VydmljZV9yb2xlIn0.signature";
   await withEnvironment({
+    DENO_ENV: "test",
     SUPABASE_URL: "https://supabase.test",
     SUPABASE_SECRET_KEYS: null,
     SUPABASE_SERVICE_ROLE_KEY: legacyJwt,
@@ -151,6 +210,222 @@ function rpcOnlyResponder(
   };
 }
 
+Deno.test("create-order rejects uncontracted virtual-account requests before reserving stock", async () => {
+  const handler = await edgeHandler("create-order");
+  let createOrderCalled = false;
+  const responder = rpcOnlyResponder(async (name) => {
+    if (name === "consume_edge_rate_limit_v1") {
+      return { allowed: true, retryAfter: 0 };
+    }
+    if (name === "expire_order_reservations_v1") return [];
+    if (name === "create_order_v1") {
+      createOrderCalled = true;
+      return {
+        orderNo: "RB-MOCK-VIRTUAL",
+        orderName: "테스트 주문",
+        totalKrw: 18_000,
+      };
+    }
+    throw new Error(`Unexpected RPC in virtual-account rejection: ${name}`);
+  });
+
+  await withEdgeMocks(responder, async () => {
+    const result = await invokeJson(
+      handler,
+      "create-order",
+      {
+        items: [{ variantId: "00000000-0000-4000-8000-000000000001", quantity: 1 }],
+        customer: {
+          receiverName: "테스트 고객",
+          receiverPhone: "01012345678",
+          zipCode: "06236",
+          roadAddress: "서울특별시 강남구 테헤란로 1",
+          detailAddress: "101호",
+        },
+        paymentMethod: "virtual_account",
+      },
+      { "idempotency-key": "order_virtual_rejected_123456" },
+    );
+    assert(
+      result.response.status === 400,
+      `uncontracted virtual account returned ${result.response.status}`,
+    );
+    assert(
+      result.payload.code === "UNSUPPORTED_PAYMENT_METHOD",
+      "uncontracted virtual account had the wrong public error",
+    );
+  });
+  assert(!createOrderCalled, "uncontracted virtual account reserved stock");
+});
+
+Deno.test("create-order validates complete Toss configuration before reserving stock", async () => {
+  const handler = await edgeHandler("create-order");
+  let createOrderCalled = false;
+  const responder = rpcOnlyResponder(async (name) => {
+    if (name === "consume_edge_rate_limit_v1") return { allowed: true, retryAfter: 0 };
+    if (name === "expire_order_reservations_v1") return [];
+    if (name === "create_order_v1") {
+      createOrderCalled = true;
+      return { orderNo: "RB-CONFIG-ORDER", totalKrw: 18_000 };
+    }
+    throw new Error(`Unexpected RPC in create-order config preflight: ${name}`);
+  });
+
+  await withEdgeMocks(responder, async () => {
+    const result = await invokeJson(handler, "create-order", {
+      items: [{ variantId: "00000000-0000-4000-8000-000000000001", quantity: 1 }],
+      customer: {
+        receiverName: "테스트 고객",
+        receiverPhone: "01012345678",
+        zipCode: "06236",
+        roadAddress: "서울특별시 강남구 테헤란로 1",
+        detailAddress: "101호",
+      },
+      paymentMethod: "card",
+    }, { "idempotency-key": "order_config_preflight_123456" });
+    assert(result.response.status === 503, `missing Toss secret returned ${result.response.status}`);
+    assert(result.payload.code === "PAYMENT_CONFIG_MISSING", "missing Toss config had wrong error");
+  }, {
+    PAYMENT_PROVIDER: "toss_payments",
+    APP_ORIGIN: "https://shop.example",
+    TOSS_SUCCESS_URL: "https://shop.example/payment/success",
+    TOSS_FAIL_URL: "https://shop.example/payment/fail",
+    TOSS_CLIENT_KEY: "test_ck_create_order_preflight",
+    TOSS_SECRET_KEY: null,
+    TOSS_PAYMENTS_SECRET_KEY: null,
+  });
+  assert(!createOrderCalled, "incomplete Toss configuration reserved inventory");
+
+  await withEdgeMocks(responder, async () => {
+    const result = await invokeJson(handler, "create-order", {
+      items: [{ variantId: "00000000-0000-4000-8000-000000000001", quantity: 1 }],
+      customer: {
+        receiverName: "테스트 고객",
+        receiverPhone: "01012345678",
+        zipCode: "06236",
+        roadAddress: "서울특별시 강남구 테헤란로 1",
+        detailAddress: "101호",
+      },
+      paymentMethod: "card",
+    }, { "idempotency-key": "order_key_mode_mismatch_123456" });
+    assert(result.response.status === 503, `mixed Toss key modes returned ${result.response.status}`);
+    assert(result.payload.code === "PAYMENT_CONFIG_MISSING", "mixed Toss key modes had wrong error");
+  }, {
+    PAYMENT_PROVIDER: "toss_payments",
+    APP_ORIGIN: "https://shop.example",
+    TOSS_SUCCESS_URL: "https://shop.example/payment/success",
+    TOSS_FAIL_URL: "https://shop.example/payment/fail",
+    TOSS_CLIENT_KEY: "test_ck_create_order_mismatch",
+    TOSS_SECRET_KEY: "live_sk_create_order_mismatch",
+    TOSS_PAYMENTS_SECRET_KEY: null,
+  });
+  assert(!createOrderCalled, "mixed Toss key modes reserved inventory");
+});
+
+Deno.test("prepare-payment refuses legacy virtual-account orders", async () => {
+  const handler = await edgeHandler("prepare-payment");
+  const responder = rpcOnlyResponder(async (name) => {
+    if (name === "consume_edge_rate_limit_v1") {
+      return { allowed: true, retryAfter: 0 };
+    }
+    if (name === "get_order_v1") {
+      return {
+        orderNo: "RB-MOCK-VIRTUAL",
+        orderName: "테스트 주문",
+        totalKrw: 18_000,
+        status: "payment_ready",
+        paymentStatus: "ready",
+        paymentProvider: "mock",
+        paymentMethod: "virtual_account",
+      };
+    }
+    throw new Error(`Unexpected RPC in legacy virtual-account rejection: ${name}`);
+  });
+
+  await withEdgeMocks(responder, async () => {
+    const result = await invokeJson(handler, "prepare-payment", {
+      orderId: "RB-MOCK-VIRTUAL",
+      guestLookupToken: "guest-lookup-token-for-payment",
+    });
+    assert(
+      result.response.status === 400,
+      `legacy virtual account returned ${result.response.status}`,
+    );
+    assert(
+      result.payload.code === "UNSUPPORTED_PAYMENT_METHOD",
+      "legacy virtual account had the wrong public error",
+    );
+  });
+});
+
+Deno.test("prepare-payment pins callback URLs to the configured shop origin and exact paths", async () => {
+  const handler = await edgeHandler("prepare-payment");
+  const responder = rpcOnlyResponder(async (name) => {
+    if (name === "consume_edge_rate_limit_v1") return { allowed: true, retryAfter: 0 };
+    if (name === "get_order_v1") {
+      return {
+        orderNo: "RB-MOCK-CALLBACK",
+        orderName: "테스트 주문",
+        totalKrw: 18_000,
+        status: "payment_ready",
+        paymentStatus: "ready",
+        paymentProvider: "mock",
+        paymentMethod: "card",
+      };
+    }
+    throw new Error(`Unexpected RPC in callback validation: ${name}`);
+  });
+
+  await withEdgeMocks(responder, async () => {
+    const result = await invokeJson(handler, "prepare-payment", {
+      orderId: "RB-MOCK-CALLBACK",
+      guestLookupToken: "guest-lookup-token-for-payment",
+    });
+    assert(result.response.status === 503, `foreign callback returned ${result.response.status}`);
+    assert(result.payload.code === "PAYMENT_CONFIG_MISSING", "foreign callback URL was accepted");
+  }, {
+    APP_ORIGIN: "https://shop.example",
+    TOSS_SUCCESS_URL: "https://evil.example/payment/success",
+    TOSS_FAIL_URL: "https://shop.example/payment/fail",
+  });
+});
+
+Deno.test("prepare-payment accepts the public Toss client key alias used by the build", async () => {
+  const handler = await edgeHandler("prepare-payment");
+  const responder = rpcOnlyResponder(async (name) => {
+    if (name === "consume_edge_rate_limit_v1") return { allowed: true, retryAfter: 0 };
+    if (name === "get_order_v1") {
+      return {
+        orderNo: "RB-TOSS-ALIAS",
+        orderName: "테스트 주문",
+        totalKrw: 18_000,
+        status: "payment_ready",
+        paymentStatus: "ready",
+        paymentProvider: "toss_payments",
+        paymentMethod: "card",
+      };
+    }
+    throw new Error(`Unexpected RPC in key alias test: ${name}`);
+  });
+
+  await withEdgeMocks(responder, async () => {
+    const result = await invokeJson(handler, "prepare-payment", {
+      orderId: "RB-TOSS-ALIAS",
+      guestLookupToken: "guest-lookup-token-for-payment",
+    });
+    assert(result.response.status === 200, `TOSS_CLIENT_KEY alias returned ${result.response.status}`);
+    assert(result.payload.clientKey === "test_ck_alias_key", "client key alias was not returned");
+  }, {
+    APP_ORIGIN: "https://shop.example",
+    TOSS_SUCCESS_URL: "https://shop.example/payment/success",
+    TOSS_FAIL_URL: "https://shop.example/payment/fail",
+    TOSS_CLIENT_KEY: "test_ck_alias_key",
+    TOSS_PAYMENTS_CLIENT_KEY: null,
+    TOSS_SECRET_KEY: "test_sk_alias_key",
+    TOSS_PAYMENTS_SECRET_KEY: null,
+  });
+});
+
 Deno.test("mock provider covers success, failure, virtual account, cancel, and partial ledger", async () => {
   const previousProvider = Deno.env.get("PAYMENT_PROVIDER");
   const previousEnvironment = Deno.env.get("DENO_ENV");
@@ -203,6 +478,8 @@ Deno.test("mock provider covers success, failure, virtual account, cancel, and p
     const canceled = normalizedProviderResult(
       await provider.cancel({
         paymentKey: "mock-success-key",
+        orderId: "RB-MOCK-SUCCESS",
+        amount: 18_000,
         cancelReason: "test cancellation",
         cancelAmount: 18000,
         idempotencyKey: "cancel_mock_success_123456",
@@ -252,6 +529,20 @@ Deno.test("mock payments fail closed unless the runtime is explicitly non-produc
       rejected = error instanceof Error && error.message.includes("outside explicit non-production");
     }
     assert(rejected, "production enabled the mock payment provider");
+  });
+  await withEnvironment({
+    PAYMENT_PROVIDER: "toss_payments",
+    DENO_ENV: "production",
+    TOSS_SECRET_KEY: "test_sk_provider_origin_guard",
+    TOSS_PAYMENTS_API_URL: "https://evil.example",
+  }, async () => {
+    let rejected = false;
+    try {
+      paymentProvider();
+    } catch (error) {
+      rejected = error instanceof Error && error.message.includes("payment provider API URL");
+    }
+    assert(rejected, "production allowed Toss credentials to be sent to a foreign API origin");
   });
 });
 
@@ -355,6 +646,124 @@ Deno.test("virtual-account refund details are validated, encrypted, and redacted
   assert(rejected, "hyphenated refund account was accepted");
 });
 
+Deno.test("provider audit payload uses a strict allowlist for payment PII", () => {
+  const sanitized = sanitizeProviderPayload({
+    paymentKey: "pk_safe",
+    orderId: "RB-SAFE-001",
+    totalAmount: 18_000,
+    status: "DONE",
+    customerName: "홍길동",
+    customerEmail: "person@example.com",
+    customerMobilePhone: "01012345678",
+    customerIdentityNumber: "9001011234567",
+    card: { number: "433012******1234", issuerCode: "11", approveNo: "12345678" },
+    virtualAccount: {
+      accountNumber: "12345678901234",
+      depositorName: "홍길동",
+      customerName: "홍길동",
+      dueDate: "2026-08-29T00:00:00+09:00",
+    },
+    cashReceipt: { receiptKey: "receipt-secret", url: "https://receipt.example/private" },
+    cashReceipts: [{ receiptKey: "receipt-secret-2" }],
+    receipt: { url: "https://receipt.example/private-2" },
+    checkout: { url: "https://checkout.example/private" },
+  }) as Record<string, unknown>;
+  const serialized = JSON.stringify(sanitized);
+  for (const secret of [
+    "홍길동",
+    "person@example.com",
+    "01012345678",
+    "9001011234567",
+    "433012",
+    "12345678901234",
+    "receipt-secret",
+    "checkout.example",
+  ]) {
+    assert(!serialized.includes(secret), `safe provider payload leaked ${secret}`);
+  }
+  assertEqual(sanitized, {
+    paymentKey: "pk_safe",
+    orderId: "RB-SAFE-001",
+    totalAmount: 18_000,
+    status: "DONE",
+    card: { issuerCode: "11", approveNo: "12345678" },
+    virtualAccount: { dueDate: "2026-08-29T00:00:00+09:00" },
+  }, "safe provider fields were not projected deterministically");
+});
+
+Deno.test("payment-cancel rejects a provider response for a different payment", async () => {
+  const handler = await edgeHandler("payment-cancel");
+  let finalized = false;
+  let failed = false;
+  const responder = rpcOnlyResponder(async (name) => {
+    if (name === "consume_edge_rate_limit_v1") return { allowed: true, retryAfter: 0 };
+    if (name === "claim_payment_cancellation_v1") {
+      return {
+        orderNo: "RB-CANCEL-MATCH-001",
+        status: "cancel_requested",
+        paymentStatus: "done",
+        paymentMethod: "card",
+        attemptStatus: "started",
+        paymentKey: "pk_cancel_expected",
+        totalKrw: 18_000,
+        cancelAmount: 18_000,
+        canceledAmountBefore: 0,
+        localOnly: false,
+      };
+    }
+    if (name === "fail_payment_cancellation_v1") {
+      failed = true;
+      return { ok: true };
+    }
+    if (name === "finalize_payment_cancellation_v1") {
+      finalized = true;
+      return { status: "canceled" };
+    }
+    throw new Error(`Unexpected RPC in cancel provider mismatch: ${name}`);
+  });
+
+  await withEdgeMocks(responder, async () => {
+    const result = await invokeJson(handler, "payment-cancel", {
+      orderId: "RB-CANCEL-MATCH-001",
+      guestLookupToken: "guest-lookup-token-for-payment",
+      reason: "고객 요청",
+      mockScenario: "mismatch",
+    }, { "idempotency-key": "cancel_provider_match_123456" });
+    assert(result.response.status === 502, `mismatched cancellation returned ${result.response.status}`);
+    assert(result.payload.code === "CANCELLATION_RESULT_UNKNOWN", "wrong mismatch error was exposed");
+  });
+  assert(failed, "mismatched cancellation did not enter reconciliation");
+  assert(!finalized, "mismatched provider response finalized the cancellation");
+});
+
+Deno.test("payment-cancel validates provider configuration before claiming an attempt", async () => {
+  const handler = await edgeHandler("payment-cancel");
+  let claimCalled = false;
+  const responder = rpcOnlyResponder(async (name) => {
+    if (name === "consume_edge_rate_limit_v1") return { allowed: true, retryAfter: 0 };
+    if (name === "claim_payment_cancellation_v1") {
+      claimCalled = true;
+      return { attemptStatus: "started" };
+    }
+    throw new Error(`Unexpected RPC in cancellation config preflight: ${name}`);
+  });
+
+  await withEdgeMocks(responder, async () => {
+    const result = await invokeJson(handler, "payment-cancel", {
+      orderId: "RB-CANCEL-CONFIG-001",
+      guestLookupToken: "guest-lookup-token-for-payment",
+      reason: "고객 요청",
+    }, { "idempotency-key": "cancel_config_preflight_123456" });
+    assert(result.response.status === 503, `missing cancellation config returned ${result.response.status}`);
+    assert(result.payload.code === "PAYMENT_CONFIG_MISSING", "missing cancellation config had wrong error");
+  }, {
+    PAYMENT_PROVIDER: "toss_payments",
+    TOSS_SECRET_KEY: null,
+    TOSS_PAYMENTS_SECRET_KEY: null,
+  });
+  assert(!claimCalled, "provider configuration failure claimed a cancellation attempt");
+});
+
 Deno.test("payment-confirm HTTP flow handles mock success once and returns the idempotent result on retry", async () => {
   const handler = await edgeHandler("payment-confirm");
   const claims: Record<string, unknown>[] = [];
@@ -419,6 +828,8 @@ Deno.test("payment-confirm HTTP flow handles mock success once and returns the i
       retry.payload.duplicate === true,
       "second confirmation was not identified as duplicate",
     );
+    assert(retry.payload.paid === true, "duplicate DONE confirmation omitted paid=true");
+    assert(retry.payload.waitingForDeposit === false, "duplicate card confirmation was marked as waiting");
   });
 
   assert(
@@ -437,6 +848,155 @@ Deno.test("payment-confirm HTTP flow handles mock success once and returns the i
     claims[0].p_request_hash === claims[1].p_request_hash,
     "identical confirmation retries did not derive a stable request hash",
   );
+});
+
+Deno.test("payment-confirm validates provider configuration before claiming an attempt", async () => {
+  const handler = await edgeHandler("payment-confirm");
+  let claimCalled = false;
+  const responder = rpcOnlyResponder(async (name) => {
+    if (name === "consume_edge_rate_limit_v1") return { allowed: true, retryAfter: 0 };
+    if (name === "claim_payment_confirmation_v1") {
+      claimCalled = true;
+      return {
+        totalKrw: 18_000,
+        paymentMethod: "card",
+        attemptStatus: "started",
+        status: "payment_auth_started",
+        paymentStatus: "in_progress",
+      };
+    }
+    throw new Error(`Unexpected RPC in pre-claim configuration test: ${name}`);
+  });
+
+  await withEdgeMocks(responder, async () => {
+    const result = await invokeJson(handler, "payment-confirm", {
+      paymentKey: "pk_missing_configuration",
+      orderId: "RB-CONFIG-001",
+      amount: 18_000,
+      guestLookupToken: "guest-lookup-token-for-payment",
+    });
+    assert(result.response.status === 503, `missing provider config returned ${result.response.status}`);
+    assert(result.payload.code === "PAYMENT_CONFIG_MISSING", "missing provider config had wrong error");
+  }, {
+    PAYMENT_PROVIDER: "toss_payments",
+    TOSS_SECRET_KEY: null,
+    TOSS_PAYMENTS_SECRET_KEY: null,
+  });
+  assert(!claimCalled, "provider configuration failure mutated the confirmation attempt");
+});
+
+Deno.test("reconciliation sends a repeatedly unresolved confirmation to manual review", async () => {
+  const handler = await edgeHandler("reconcile-payments");
+  let completed = false;
+  let manualReview = false;
+  const paymentId = "00000000-0000-4000-8000-000000000201";
+  const leaseToken = "00000000-0000-4000-8000-000000000202";
+  const responder = rpcOnlyResponder(async (name) => {
+    if (name === "claim_payment_reconciliation_v1") {
+      return [{
+        paymentId,
+        leaseToken,
+        orderNo: "RB-REVIEW-001",
+        paymentKey: "pk_reconcile_review",
+        amount: 18_000,
+        orderStatus: "payment_auth_started",
+        paymentStatus: "in_progress",
+        paymentMethod: "card",
+        hasActiveCancel: false,
+        paymentReconcileAttempts: 11,
+      }];
+    }
+    if (name === "complete_payment_reconciliation_v1") {
+      completed = true;
+      return null;
+    }
+    if (name === "mark_payment_confirmation_review_v1") {
+      manualReview = true;
+      return { manualReview: true };
+    }
+    throw new Error(`Unexpected RPC in reconciliation review: ${name}`);
+  }, (request) => {
+    if (request.url === "https://api.tosspayments.com/v1/payments/pk_reconcile_review") {
+      return jsonResult({
+        paymentKey: "pk_reconcile_review",
+        orderId: "RB-REVIEW-001",
+        totalAmount: 18_000,
+        status: "READY",
+      });
+    }
+    throw new Error(`Unexpected provider request in reconciliation review: ${request.url}`);
+  });
+
+  const schedulerSecret = "reconcile-test-secret-at-least-32-bytes";
+  await withEdgeMocks(responder, async () => {
+    const result = await invokeJson(handler, "reconcile-payments", {}, {
+      "x-reball-reconcile-secret": schedulerSecret,
+    });
+    assert(result.response.status === 200, `reconciliation review returned ${result.response.status}`);
+  }, {
+    PAYMENT_PROVIDER: "toss_payments",
+    TOSS_SECRET_KEY: "test_sk_reconciliation_review_key",
+    TOSS_PAYMENTS_API_URL: null,
+    PAYMENT_RECONCILE_SECRET: schedulerSecret,
+  });
+  assert(manualReview, "unresolved confirmation was not escalated to manual review");
+  assert(!completed, "unresolved confirmation was scheduled forever instead of stopping");
+});
+
+Deno.test("cancellation manual review carries the active reconciliation lease fence", async () => {
+  const handler = await edgeHandler("reconcile-payments");
+  const paymentId = "00000000-0000-4000-8000-000000000211";
+  const leaseToken = "00000000-0000-4000-8000-000000000212";
+  let reviewBody: Record<string, unknown> | null = null;
+  const responder = rpcOnlyResponder(async (name, body) => {
+    if (name === "claim_payment_reconciliation_v1") {
+      return [{
+        paymentId,
+        leaseToken,
+        orderNo: "RB-CANCEL-REVIEW-001",
+        paymentKey: "pk_cancel_reconcile_review",
+        amount: 18_000,
+        orderStatus: "cancel_requested",
+        paymentStatus: "done",
+        paymentMethod: "card",
+        hasActiveCancel: true,
+        cancelAttemptKey: "cancel_review_attempt_123456",
+        cancelReconcileAttempts: 8,
+      }];
+    }
+    if (name === "mark_payment_cancellation_review_v1") {
+      reviewBody = body;
+      return { manualReview: true };
+    }
+    throw new Error(`Unexpected RPC in cancellation review: ${name}`);
+  }, (request) => {
+    if (request.url === "https://api.tosspayments.com/v1/payments/pk_cancel_reconcile_review") {
+      return jsonResult({
+        paymentKey: "pk_cancel_reconcile_review",
+        orderId: "RB-CANCEL-REVIEW-001",
+        totalAmount: 18_000,
+        status: "READY",
+      });
+    }
+    throw new Error(`Unexpected provider request in cancellation review: ${request.url}`);
+  });
+
+  const schedulerSecret = "cancel-review-secret-at-least-32-bytes";
+  await withEdgeMocks(responder, async () => {
+    const result = await invokeJson(handler, "reconcile-payments", {}, {
+      "x-reball-reconcile-secret": schedulerSecret,
+    });
+    assert(result.response.status === 200, `cancellation review returned ${result.response.status}`);
+  }, {
+    PAYMENT_PROVIDER: "toss_payments",
+    TOSS_SECRET_KEY: "test_sk_cancellation_review_key",
+    TOSS_PAYMENTS_API_URL: null,
+    PAYMENT_RECONCILE_SECRET: schedulerSecret,
+  });
+  const recorded = reviewBody as Record<string, unknown> | null;
+  assert(recorded?.p_payment_id === paymentId, "cancellation review omitted payment identity");
+  assert(recorded?.p_lease_token === leaseToken, "cancellation review omitted the active lease token");
+  assert(recorded?.p_idempotency_key === "cancel_review_attempt_123456", "cancellation review omitted attempt identity");
 });
 
 Deno.test("payment-confirm HTTP flow rejects a tampered amount before provider finalization", async () => {
@@ -656,6 +1216,28 @@ Deno.test("virtual-account webhook moves waiting to deposited and makes a duplic
     ["WAITING_FOR_DEPOSIT", "DONE"],
     "duplicate webhook re-applied a payment transition",
   );
+});
+
+Deno.test("unimplemented CANCEL_STATUS_CHANGED is rejected without claiming an ambiguous event", async () => {
+  const handler = await edgeHandler("payment-webhook");
+  let claimed = false;
+  const responder = rpcOnlyResponder(async (name) => {
+    if (name === "claim_payment_webhook_v1") claimed = true;
+    throw new Error(`Unexpected RPC for unsupported cancellation webhook: ${name}`);
+  });
+  await withEdgeMocks(responder, async () => {
+    const result = await invokeJson(handler, "payment-webhook", {
+      eventType: "CANCEL_STATUS_CHANGED",
+      data: {
+        transactionKey: "cancel-transaction-without-payment-identity",
+        cancelStatus: "DONE",
+        cancelAmount: 9_000,
+      },
+    });
+    assert(result.response.status === 400, `unsupported cancellation webhook returned ${result.response.status}`);
+    assert(result.payload.code === "UNSUPPORTED_WEBHOOK", "ambiguous cancellation webhook was not rejected explicitly");
+  });
+  assert(!claimed, "ambiguous cancellation webhook reached the database claim boundary");
 });
 
 Deno.test("get-order HTTP boundary returns self/CS/owner orders and denies other or non-CS operational actors", async () => {

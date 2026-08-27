@@ -16,7 +16,9 @@ Deno.serve(async (req: Request) => {
   try {
     const body = await readJson(req, 256 * 1024);
     const eventType = cleanString(body.eventType || (body.transactionKey ? "DEPOSIT_CALLBACK" : ""), 100).toUpperCase();
-    if (!new Set(["PAYMENT_STATUS_CHANGED", "DEPOSIT_CALLBACK", "CANCEL_STATUS_CHANGED"]).has(eventType)) {
+    // CANCEL_STATUS_CHANGED carries a Cancel object without a payment identity.
+    // Do not register it until a persisted transactionKey correlation exists.
+    if (!new Set(["PAYMENT_STATUS_CHANGED", "DEPOSIT_CALLBACK"]).has(eventType)) {
       throw new HttpError(400, "UNSUPPORTED_WEBHOOK", "Unsupported webhook event");
     }
 

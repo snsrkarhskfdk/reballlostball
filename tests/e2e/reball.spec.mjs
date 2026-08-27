@@ -78,14 +78,19 @@ test("mock card confirmation failure never renders a completed order and scrubs 
       contentType: "application/json",
       body: JSON.stringify({
         error: "Mock card was rejected",
-        code: "MOCK_CARD_DECLINED",
+        code: "PAYMENT_REJECTED",
       }),
     });
   });
   await page.goto("/?payment=success&paymentKey=pk_fail&orderId=order-2&amount=17000#/payment/success");
-  await expect(page).toHaveURL(/#\/payment\/fail$/);
+  await expect(page).toHaveURL(/#\/payment\/fail\?orderId=ORDER-2&terminal=1$/);
   expect(new URL(page.url()).searchParams.has("paymentKey")).toBe(false);
-  expect(new URL(page.url()).hash).toBe("#/payment/fail");
+  const hashParams = new URLSearchParams(new URL(page.url()).hash.split("?", 2)[1]);
+  expect(hashParams.has("paymentKey")).toBe(false);
+  expect(hashParams.get("orderId")).toBe("ORDER-2");
+  expect(hashParams.get("terminal")).toBe("1");
+  await expect(page.locator("[data-payment-retry]")).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "새 주문 시작" })).toBeVisible();
 });
 
 for (const [name, route] of routes) {

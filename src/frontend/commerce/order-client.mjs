@@ -2,6 +2,10 @@ function endpoint(baseUrl, name) {
   return `${String(baseUrl).replace(/\/$/, "")}/functions/v1/${name}`;
 }
 
+export const MAX_ORDER_LINES = 10;
+export const MAX_ORDER_LINE_QUANTITY = 10;
+export const MAX_ORDER_TOTAL_QUANTITY = 20;
+
 async function requestJson(fetchImpl, url, { anonKey, accessToken, body, headers = {} }) {
   const response = await fetchImpl(url, {
     method: "POST",
@@ -35,14 +39,29 @@ export function createIdempotencyKey(cryptoRef = globalThis.crypto) {
 
 export function orderLinePayload(cart) {
   if (!Array.isArray(cart) || !cart.length) throw new Error("주문할 상품이 없습니다.");
-  return cart.map((item) => {
+  if (cart.length > MAX_ORDER_LINES) {
+    throw new Error(`한 주문에는 최대 ${MAX_ORDER_LINES}개 옵션만 담을 수 있습니다.`);
+  }
+  const seenVariantIds = new Set();
+  let totalQuantity = 0;
+  const lines = cart.map((item) => {
     const variantId = String(item?.variantId ?? item?.variant?.id ?? "").trim();
     const quantity = Number(item?.quantity);
     if (!variantId || !Number.isInteger(quantity) || quantity < 1) {
       throw new Error("주문 상품 정보가 올바르지 않습니다.");
     }
+    if (seenVariantIds.has(variantId)) throw new Error("같은 상품 옵션이 중복되었습니다.");
+    if (quantity > MAX_ORDER_LINE_QUANTITY) {
+      throw new Error(`상품 옵션별 수량은 최대 ${MAX_ORDER_LINE_QUANTITY}개입니다.`);
+    }
+    seenVariantIds.add(variantId);
+    totalQuantity += quantity;
     return { variantId, quantity };
   });
+  if (totalQuantity > MAX_ORDER_TOTAL_QUANTITY) {
+    throw new Error(`한 주문의 총수량은 최대 ${MAX_ORDER_TOTAL_QUANTITY}개입니다.`);
+  }
+  return lines;
 }
 
 export function createOrderRequest(config, payload) {
@@ -63,6 +82,17 @@ export function lookupGuestOrderRequest(config, payload) {
     anonKey: config.anonKey,
     accessToken: "",
     body: payload,
+  });
+}
+
+export function getOrderRequest(config, orderId, guestLookupToken = "") {
+  return requestJson(config.fetchImpl ?? fetch, endpoint(config.baseUrl, "get-order"), {
+    anonKey: config.anonKey,
+    accessToken: config.accessToken,
+    body: {
+      orderNo: orderId,
+      ...(guestLookupToken ? { guestLookupToken } : {}),
+    },
   });
 }
 

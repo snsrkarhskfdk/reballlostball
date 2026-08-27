@@ -638,9 +638,9 @@ set search_path = ''
 as $$
   select p_from = p_to or case p_from
     when 'draft' then p_to in ('payment_ready', 'canceled')
-    when 'payment_ready' then p_to in ('payment_auth_started', 'payment_failed', 'canceled')
-    when 'payment_auth_started' then p_to in ('waiting_for_deposit', 'paid', 'payment_failed', 'canceled')
-    when 'waiting_for_deposit' then p_to in ('paid', 'payment_failed', 'canceled')
+    when 'payment_ready' then p_to in ('payment_auth_started', 'waiting_for_deposit', 'paid', 'payment_failed', 'canceled', 'partially_canceled')
+    when 'payment_auth_started' then p_to in ('waiting_for_deposit', 'paid', 'payment_failed', 'canceled', 'partially_canceled')
+    when 'waiting_for_deposit' then p_to in ('paid', 'payment_failed', 'canceled', 'partially_canceled')
     when 'payment_failed' then p_to in ('payment_ready', 'canceled')
     when 'paid' then p_to in ('waiting_for_deposit', 'cancel_requested', 'canceled', 'partially_canceled', 'refunded', 'shipping_ready')
     when 'cancel_requested' then p_to in ('paid', 'waiting_for_deposit', 'canceled', 'partially_canceled')

@@ -16,6 +16,23 @@ test("주문 line payload는 variantId와 quantity만 허용한다", () => {
     [{ variantId: "v-1", quantity: 2 }]
   );
   assert.throws(() => orderLinePayload([{ slug: "fake", quantity: 1 }]), /올바르지 않습니다/);
+  assert.throws(() => orderLinePayload([{ variantId: "v-1", quantity: 11 }]), /최대 10개/);
+  assert.throws(
+    () => orderLinePayload([
+      { variantId: "v-1", quantity: 10 },
+      { variantId: "v-2", quantity: 10 },
+      { variantId: "v-3", quantity: 1 },
+    ]),
+    /총수량은 최대 20개/,
+  );
+  assert.throws(
+    () => orderLinePayload([{ variantId: "v-1", quantity: 1 }, { variantId: "v-1", quantity: 1 }]),
+    /중복/,
+  );
+  assert.throws(
+    () => orderLinePayload(Array.from({ length: 11 }, (_, index) => ({ variantId: `v-${index}`, quantity: 1 }))),
+    /최대 10개 옵션/,
+  );
 });
 
 test("create-order는 클라이언트 총액 없이 서버 endpoint를 호출한다", async () => {

@@ -116,8 +116,9 @@ test("payment prepare/confirm never trusts success URL and confirms DONE server-
   assertNoMatch(prepare.source, /\bbody\.(?:amount|orderName|order_name|total)\b/i, `${prepare.name} must use server order ID/name/amount, not browser values.`);
 
   const confirm = edgeByCapability("Confirm payment", [/(?:confirm|approve).*payment|payment.*(?:confirm|approve)/i], [/paymentKey/i, /orderId/i, /amount/i]);
-  assertMatch(confirm.source, /api\.tosspayments\.com\/v1\/payments\/confirm/i, `${confirm.name} must call Toss's server confirm endpoint.`);
-  assertMatch(confirm.source, /TOSS_SECRET_KEY/, `${confirm.name} must authenticate with the server-only Toss secret.`);
+  assertMatch(sharedEdgeSource, /api\.tosspayments\.com[\s\S]+\/v1\/payments\/confirm/i, `${confirm.name} must call Toss's server confirm endpoint.`);
+  assertMatch(sharedEdgeSource, /TOSS_SECRET_KEY/, `${confirm.name} must authenticate with the server-only Toss secret.`);
+  assertMatch(confirm.source, /paymentProvider\s*\(\s*\)/, `${confirm.name} must use the shared fail-closed provider.`);
   assertMatch(confirm.source, /paymentKey[\s\S]{0,2000}orderId[\s\S]{0,2000}amount/i, `${confirm.name} must validate paymentKey, orderId, and amount.`);
   assertMatch(confirm.source, /(?:expected|order|db)[_\w.\s\[\]'"?]*(?:amount|total)[\s\S]{0,500}(?:!==|!=|===|=|eq)/i, `${confirm.name} must compare amount to the DB order.`);
   assertMatch(confirm.source, /['"]DONE['"]/i, `${confirm.name} may mark paid only for Toss DONE.`);

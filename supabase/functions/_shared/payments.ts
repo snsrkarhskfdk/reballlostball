@@ -42,7 +42,7 @@ export interface PaymentProvider {
   name: "toss_payments" | "mock";
   confirm(input: { paymentKey: string; orderId: string; amount: number; idempotencyKey: string; scenario?: string }): Promise<ProviderPayment>;
   get(paymentKey: string): Promise<ProviderPayment>;
-  cancel(input: { paymentKey: string; cancelReason: string; cancelAmount?: number; idempotencyKey: string; scenario?: string; refundReceiveAccount?: RefundReceiveAccount }): Promise<ProviderPayment>;
+  cancel(input: { paymentKey: string; orderId: string; amount: number; cancelReason: string; cancelAmount?: number; idempotencyKey: string; scenario?: string; refundReceiveAccount?: RefundReceiveAccount }): Promise<ProviderPayment>;
 }
 
 export type PaymentConfirmationDisposition = "success" | "reconcile" | "terminal_failure";
@@ -97,7 +97,24 @@ class TossPaymentsProvider implements PaymentProvider {
   private readonly authorization: string;
 
   constructor() {
-    this.baseUrl = (Deno.env.get("TOSS_PAYMENTS_API_URL") || "https://api.tosspayments.com").replace(/\/$/, "");
+    const configuredBaseUrl = String(
+      Deno.env.get("TOSS_PAYMENTS_API_URL") || "https://api.tosspayments.com",
+    ).trim();
+    let parsedBaseUrl: URL;
+    try {
+      parsedBaseUrl = new URL(configuredBaseUrl);
+    } catch {
+      throw new HttpError(503, "PAYMENT_CONFIG_MISSING", "Invalid payment provider API URL");
+    }
+    const official = parsedBaseUrl.origin === "https://api.tosspayments.com";
+    const localTest = isExplicitNonProductionRuntime()
+      && new Set(["localhost", "127.0.0.1"]).has(parsedBaseUrl.hostname)
+      && new Set(["http:", "https:"]).has(parsedBaseUrl.protocol);
+    if ((!official && !localTest) || parsedBaseUrl.username || parsedBaseUrl.password
+        || parsedBaseUrl.pathname !== "/" || parsedBaseUrl.search || parsedBaseUrl.hash) {
+      throw new HttpError(503, "PAYMENT_CONFIG_MISSING", "Invalid payment provider API URL");
+    }
+    this.baseUrl = parsedBaseUrl.origin;
     this.authorization = tossAuthorizationHeader(Deno.env.get("TOSS_SECRET_KEY") || Deno.env.get("TOSS_PAYMENTS_SECRET_KEY") || "");
   }
 
@@ -125,7 +142,7 @@ class TossPaymentsProvider implements PaymentProvider {
     });
   }
 
-  cancel(input: { paymentKey: string; cancelReason: string; cancelAmount?: number; idempotencyKey: string; refundReceiveAccount?: RefundReceiveAccount }): Promise<ProviderPayment> {
+  cancel(input: { paymentKey: string; orderId: string; amount: number; cancelReason: string; cancelAmount?: number; idempotencyKey: string; refundReceiveAccount?: RefundReceiveAccount }): Promise<ProviderPayment> {
     const body: Record<string, unknown> = { cancelReason: input.cancelReason };
     if (Number.isSafeInteger(input.cancelAmount) && Number(input.cancelAmount) > 0) body.cancelAmount = input.cancelAmount;
     if (input.refundReceiveAccount) body.refundReceiveAccount = input.refundReceiveAccount;
@@ -169,12 +186,15 @@ class MockPaymentProvider implements PaymentProvider {
     return { paymentKey, status: waiting ? "WAITING_FOR_DEPOSIT" : "DONE" };
   }
 
-  async cancel(input: { paymentKey: string; cancelReason: string; cancelAmount?: number; idempotencyKey: string; scenario?: string; refundReceiveAccount?: RefundReceiveAccount }): Promise<ProviderPayment> {
+  async cancel(input: { paymentKey: string; orderId: string; amount: number; cancelReason: string; cancelAmount?: number; idempotencyKey: string; scenario?: string; refundReceiveAccount?: RefundReceiveAccount }): Promise<ProviderPayment> {
     const scenario = this.scenario(input.scenario);
     if (scenario === "timeout") throw new ProviderError(502, "MOCK_TIMEOUT", "Mock cancellation response is unknown", false);
     if (scenario === "failure") throw new ProviderError(400, "MOCK_CANCEL_REJECTED", "Mock cancellation rejected", true);
+    const mismatch = scenario === "mismatch";
     return {
-      paymentKey: input.paymentKey,
+      paymentKey: mismatch ? "pk_unrelated_payment" : input.paymentKey,
+      orderId: mismatch ? "RB-UNRELATED-ORDER" : input.orderId,
+      totalAmount: mismatch ? input.amount + 1 : input.amount,
       status: "CANCELED",
       cancels: [{ cancelAmount: input.cancelAmount || 0, cancelReason: input.cancelReason }],
     };

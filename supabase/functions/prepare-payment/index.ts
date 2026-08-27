@@ -1,4 +1,4 @@
-import { HttpError, cleanString, isExplicitNonProductionRuntime, sha256Hex } from "../_shared/core.ts";
+import { HttpError, cleanString, sha256Hex } from "../_shared/core.ts";
 import {
   assertAllowedOrigin,
   jsonResponse,
@@ -8,19 +8,11 @@ import {
   safeLog,
 } from "../_shared/http.ts";
 import { assertMockPaymentProviderAllowed } from "../_shared/payments.ts";
+import { configuredPaymentCallbackUrl, configuredTossClientKey } from "../_shared/payment-config.ts";
 import { enforceRateLimit } from "../_shared/security.ts";
 import { rpc, sessionUser } from "../_shared/supabase.ts";
 
-function safeConfiguredUrl(name: string): string {
-  const value = Deno.env.get(name) || "";
-  try {
-    const url = new URL(value);
-    if (url.protocol !== "https:" && !(isExplicitNonProductionRuntime() && url.protocol === "http:")) throw new Error("protocol");
-    return url.toString();
-  } catch {
-    throw new HttpError(503, "PAYMENT_CONFIG_MISSING", "결제 설정을 확인할 수 없습니다.");
-  }
-}
+const CONTRACTED_PAYMENT_METHODS = new Set(["card", "transfer", "easy_pay"]);
 
 Deno.serve(async (req: Request) => {
   if (req.method === "OPTIONS") {
@@ -48,25 +40,31 @@ Deno.serve(async (req: Request) => {
     if (order.status !== "payment_ready") {
       throw new HttpError(409, "ORDER_NOT_PAYMENT_READY", "현재 결제할 수 없는 주문입니다.");
     }
-    if (order.paymentProvider === "mock") assertMockPaymentProviderAllowed();
-    const clientKey = Deno.env.get("TOSS_PAYMENTS_CLIENT_KEY") || "";
-    if (order.paymentProvider === "toss_payments" && !/^(test|live)_(g?ck)_/.test(clientKey)) {
-      throw new HttpError(503, "PAYMENT_CONFIG_MISSING", "결제 설정을 확인할 수 없습니다.");
+    if (!CONTRACTED_PAYMENT_METHODS.has(String(order.paymentMethod))) {
+      throw new HttpError(400, "UNSUPPORTED_PAYMENT_METHOD", "지원하지 않는 결제수단입니다.");
     }
+    const reservationExpiresAt = cleanString(order.reservationExpiresAt, 80);
+    const reservationExpiry = Date.parse(reservationExpiresAt);
+    if (reservationExpiresAt && (!Number.isFinite(reservationExpiry) || reservationExpiry <= Date.now() + 30_000)) {
+      throw new HttpError(409, "ORDER_EXPIRED", "주문의 결제 가능 시간이 만료되었습니다.");
+    }
+    if (order.paymentProvider === "mock") assertMockPaymentProviderAllowed();
+    const clientKey = order.paymentProvider === "toss_payments" ? configuredTossClientKey() : "";
     const method = {
       card: "CARD",
       transfer: "TRANSFER",
       virtual_account: "VIRTUAL_ACCOUNT",
       easy_pay: "CARD",
     }[String(order.paymentMethod)] || "CARD";
-    const successUrl = safeConfiguredUrl("TOSS_SUCCESS_URL");
-    const failUrl = safeConfiguredUrl("TOSS_FAIL_URL");
+    const successUrl = configuredPaymentCallbackUrl("TOSS_SUCCESS_URL", "/payment/success");
+    const failUrl = configuredPaymentCallbackUrl("TOSS_FAIL_URL", "/payment/fail");
     return jsonResponse(req, {
       orderId: order.orderNo,
       orderName: order.orderName,
       amount: order.totalKrw,
       paymentMethod: order.paymentMethod,
       provider: order.paymentProvider,
+      reservationExpiresAt: reservationExpiresAt || null,
       clientKey: order.paymentProvider === "toss_payments" ? clientKey : null,
       successUrl,
       failUrl,

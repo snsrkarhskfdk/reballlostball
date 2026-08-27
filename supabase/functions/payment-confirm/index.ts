@@ -23,8 +23,6 @@ import {
 import { enforceRateLimit } from "../_shared/security.ts";
 import { rpc, sessionUser } from "../_shared/supabase.ts";
 
-const TOSS_CONFIRM_ENDPOINT = "https://api.tosspayments.com/v1/payments/confirm";
-
 Deno.serve(async (req: Request) => {
   if (req.method === "OPTIONS") {
     try { return optionsResponse(req); } catch (error) { return publicErrorResponse(req, error); }
@@ -50,6 +48,8 @@ Deno.serve(async (req: Request) => {
     }
     if (!user && !guestTokenHash) throw new HttpError(403, "ORDER_ACCESS_DENIED", "주문을 확인할 수 없습니다.");
     await enforceRateLimit(req, "payment_confirm", `${user?.id || guestTokenHash}:${orderNo}`, 12, 900, 900);
+    // Validate provider credentials before the database claim mutates an attempt.
+    const provider = paymentProvider();
 
     const paymentKeyHash = await sha256Hex(paymentKey);
     attemptKey = `confirm_${await sha256Hex(`${orderNo}:${paymentKeyHash}`)}`;
@@ -71,7 +71,13 @@ Deno.serve(async (req: Request) => {
       throw new HttpError(409, "ORDER_CANCELLATION_PENDING", "취소 처리 중인 주문입니다.");
     }
     if (claim.alreadyFinalized === true || claim.attemptStatus === "succeeded") {
-      return jsonResponse(req, { order: claim, duplicate: true });
+      const paymentStatus = String(claim.paymentStatus || "");
+      return jsonResponse(req, {
+        order: claim,
+        duplicate: true,
+        paid: paymentStatus === "done",
+        waitingForDeposit: paymentStatus === "waiting_for_deposit",
+      });
     }
     if (claim.attemptStatus === "failed") {
       throw new HttpError(409, "PAYMENT_RETRY_REQUIRES_NEW_ORDER", "실패한 주문은 재고를 다시 확인한 뒤 새 주문으로 결제해 주세요.");
@@ -82,12 +88,6 @@ Deno.serve(async (req: Request) => {
       throw new HttpError(409, "PAYMENT_AMOUNT_MISMATCH", "결제 금액이 주문과 일치하지 않습니다.");
     }
 
-    const provider = paymentProvider();
-    if (provider.name === "toss_payments"
-        && !Deno.env.get("TOSS_SECRET_KEY")
-        && !Deno.env.get("TOSS_PAYMENTS_SECRET_KEY")) {
-      throw new HttpError(503, "PAYMENT_CONFIG_MISSING", `결제 설정을 확인할 수 없습니다: ${TOSS_CONFIRM_ENDPOINT}`);
-    }
     let payment;
     try {
       payment = await provider.confirm({
