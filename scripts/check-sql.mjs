@@ -3,7 +3,9 @@ import { parse } from "pgsql-parser";
 
 const migrationDir = "supabase/migrations";
 const migrationNames = (await readdir(migrationDir))
-  .filter((name) => /^202607.*\.sql$/i.test(name))
+  // Every dated production migration, not just the first month of them. A narrower
+  // prefix silently skipped later repairs, so new payment SQL shipped unparsed.
+  .filter((name) => /^2026\d{4}.*\.sql$/i.test(name))
   .sort();
 let statementCount = 0;
 

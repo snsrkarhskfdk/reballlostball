@@ -210,8 +210,11 @@ function maskGuestToken(root, orderId) {
   if (span) span.textContent = "조회 토큰은 화면에 전체 노출하지 않습니다. 필요할 때 복사해 안전한 곳에 보관하세요.";
 }
 
+// order.status uses the order_status enum ('paid'); order.paymentStatus uses the
+// payment_status enum, whose settled value is 'done'. 'paid' is not a payment_status
+// member, so comparing against it here never matched a real server response.
 function canCustomerCancel(order) {
-  return String(order?.status || "") === "paid" && String(order?.paymentStatus || "") === "paid";
+  return String(order?.status || "") === "paid" && String(order?.paymentStatus || "") === "done";
 }
 
 function installCancelAction(root, orderId, order) {
