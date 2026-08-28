@@ -106,17 +106,40 @@ async function applyAuthoritativeState(
   return "applied";
 }
 
-function assertSchedulerSecret(req: Request): void {
-  const expected = Deno.env.get("PAYMENT_RECONCILE_SECRET") || "";
-  const supplied = req.headers.get("x-reball-reconcile-secret") || "";
-  if (expected.length < 32) throw new HttpError(503, "RECONCILE_NOT_CONFIGURED", "Payment reconciliation is not configured");
-  if (!constantTimeEqual(expected, supplied)) throw new HttpError(403, "RECONCILE_DENIED", "Payment reconciliation access denied");
+async function assertSchedulerSecret(req: Request): Promise<void> {
+  const supplied = cleanString(req.headers.get("x-reball-reconcile-secret"), 512);
+  if (supplied.length < 32) {
+    throw new HttpError(403, "RECONCILE_DENIED", "Payment reconciliation access denied");
+  }
+
+  // Preserve the environment-variable path for local/test deployments, but production can
+  // authenticate entirely from a Vault-backed digest. The plaintext Vault secret never leaves
+  // Postgres except as the one request header emitted by pg_net.
+  const expectedEnv = Deno.env.get("PAYMENT_RECONCILE_SECRET") || "";
+  if (expectedEnv.length >= 32) {
+    if (!constantTimeEqual(expectedEnv, supplied)) {
+      throw new HttpError(403, "RECONCILE_DENIED", "Payment reconciliation access denied");
+    }
+    return;
+  }
+
+  const expectedHash = cleanString(
+    await rpc<string | null>("payment_reconcile_scheduler_secret_hash_v1", {}),
+    64,
+  ).toLowerCase();
+  if (!/^[0-9a-f]{64}$/.test(expectedHash)) {
+    throw new HttpError(503, "RECONCILE_NOT_CONFIGURED", "Payment reconciliation is not configured");
+  }
+  const suppliedHash = await sha256Hex(supplied);
+  if (!constantTimeEqual(expectedHash, suppliedHash)) {
+    throw new HttpError(403, "RECONCILE_DENIED", "Payment reconciliation access denied");
+  }
 }
 
 Deno.serve(async (req: Request) => {
   try {
     if (req.method !== "POST") throw new HttpError(405, "METHOD_NOT_ALLOWED", "POST required");
-    assertSchedulerSecret(req);
+    await assertSchedulerSecret(req);
     const body = await readJson(req, 4 * 1024);
     const requestedLimit = Number(body.limit ?? 10);
     const limit = Number.isSafeInteger(requestedLimit) ? Math.max(1, Math.min(25, requestedLimit)) : 10;
