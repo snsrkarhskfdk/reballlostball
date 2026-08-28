@@ -1,11 +1,40 @@
 /* WCAG contrast repairs discovered by the full Playwright + axe release gate.
    Loaded after the main storefront styles so the release gate and production cascade match. */
 
-.home-stage--trust .home-stage-head > p,
-.home-stage--shipping .home-stage-head > p,
+/* These storefront stages are regular paper sections. Give them their own
+   opaque surface instead of inheriting the SECOND ROUND body's dark background.
+   This keeps headings readable both on-screen and while the hero scroll state
+   temporarily leaves body.second-round-active in place. */
+.home-stage--trust,
+.home-stage--products,
+.home-stage--shipping {
+  position: relative;
+  z-index: 2;
+  background: var(--paper, #f7f6f1) !important;
+  color: var(--ink, #14301f);
+}
+
+.home-stage .home-stage-head > p,
+.home-stage .home-stage-head > div > p {
+  color: var(--turf, #2e5c3f) !important;
+  opacity: 1 !important;
+}
+
+.home-stage .home-stage-head h2,
 #home-trust-title,
+#home-products-title,
 #home-shipping-title {
-  color: var(--chalk) !important;
+  color: var(--ink, #14301f) !important;
+  opacity: 1 !important;
+  text-shadow: none !important;
+}
+
+.home-stage--shipping .service-grid h3 {
+  color: var(--ink, #14301f) !important;
+}
+
+.home-stage--shipping .service-grid p {
+  color: var(--text-muted-aa, #526158) !important;
 }
 
 .detail-page summary > span,
