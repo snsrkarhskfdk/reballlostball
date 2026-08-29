@@ -82,21 +82,20 @@ function renderRecoveredOrder(card, order, lookupToken) {
 }
 
 async function recover(orderId, card, lookup) {
-  if (!SUPABASE_URL || !SUPABASE_KEY || !lookup?.lookupToken) return;
+  if (!lookup?.lookupToken) return;
   if (inFlight.has(orderId)) return inFlight.get(orderId);
   card.dataset.guestOrderRecovery = "loading";
   const heading = card.querySelector("h1");
   if (heading) heading.textContent = "주문 정보를 다시 불러오는 중입니다.";
 
   const promise = lookupGuestOrderRequest(
-    { baseUrl: SUPABASE_URL, anonKey: SUPABASE_KEY },
+    { baseUrl: SUPABASE_URL || location.origin, anonKey: SUPABASE_KEY },
     { orderId, lookupToken: lookup.lookupToken }
   ).then((payload) => {
     if (currentOrderId() !== orderId) return;
     const order = normalizeServerOrder(payload);
     if (!order || order.id !== orderId) throw new Error("주문 정보를 확인할 수 없습니다.");
-    const currentCard = missingOrderCard(orderId) || card;
-    if (currentCard?.isConnected) renderRecoveredOrder(currentCard, order, lookup.lookupToken);
+    if (card?.isConnected) renderRecoveredOrder(card, order, lookup.lookupToken);
   }).catch(() => {
     if (!card.isConnected) return;
     card.dataset.guestOrderRecovery = "failed";
@@ -113,7 +112,7 @@ function inspect() {
   const orderId = currentOrderId();
   if (!orderId) return;
   const card = missingOrderCard(orderId);
-  if (!card || card.dataset.guestOrderRecovery === "loading") return;
+  if (!card || ["loading", "failed"].includes(card.dataset.guestOrderRecovery || "")) return;
   const lookup = loadGuestLookupSession(globalThis.sessionStorage);
   if (!lookup || String(lookup.orderId || "").toUpperCase() !== orderId || !lookup.lookupToken) return;
   recover(orderId, card, lookup);
