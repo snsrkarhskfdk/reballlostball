@@ -19,7 +19,7 @@ body.second-round-active .site-header {
 .second-round-hero {
   position: relative;
   width: 100%;
-  height: 360vh;
+  height: 280vh;
   margin: 0;
   background: #07120c;
   isolation: isolate;
@@ -29,14 +29,9 @@ body.second-round-active .site-header {
   --sr-progress: 0;
   --sr-video-opacity: 1;
   --sr-frame-opacity: 0;
-  --sr-surface-opacity: 0;
-  --sr-media-opacity: 1;
-  --sr-bridge: 0;
   --sr-copy-opacity: 1;
   --sr-shade-opacity: 1;
   --sr-grain-opacity: .1;
-  --sr-bridge-shift: -22px;
-  --sr-bridge-mobile-shift: 14px;
   position: sticky;
   top: 0;
   width: 100%;
@@ -47,32 +42,16 @@ body.second-round-active .site-header {
   background: #07120c;
 }
 
-.second-round-paper {
-  position: absolute;
-  inset: 0;
-  z-index: 0;
-  background:
-    radial-gradient(110% 72% at 76% 18%, rgba(221, 229, 218, .55), rgba(221, 229, 218, 0) 58%),
-    linear-gradient(180deg, #faf8f1 0%, #f6f4ec 62%, #f7f6f1 100%);
-  opacity: var(--sr-bridge);
-}
-
 .second-round-media {
   position: absolute;
   inset: 0;
   z-index: 1;
   overflow: hidden;
-  border-radius: 0;
   background: #07120c;
-  opacity: var(--sr-media-opacity);
-  transform: none;
-  box-shadow: none;
-  will-change: opacity;
 }
 
 .second-round-video,
 .second-round-frame,
-.second-round-surface,
 .second-round-shade,
 .second-round-grain {
   position: absolute;
@@ -99,16 +78,6 @@ body.second-round-active .site-header {
   z-index: 1;
   opacity: var(--sr-frame-opacity);
   filter: saturate(.9) contrast(1.05) brightness(.9);
-}
-
-.second-round-surface {
-  z-index: 2;
-  opacity: var(--sr-surface-opacity);
-  background:
-    radial-gradient(85% 70% at 78% 18%, rgba(255, 255, 255, .88) 0%, rgba(255, 255, 255, .32) 36%, rgba(255, 255, 255, 0) 68%),
-    radial-gradient(70% 58% at 18% 82%, rgba(238, 234, 220, .55), rgba(238, 234, 220, 0) 68%),
-    linear-gradient(142deg, #f4f1e8 0%, #e7e9df 44%, #d6ded5 100%);
-  pointer-events: none;
 }
 
 .second-round-shade {
@@ -247,83 +216,20 @@ body.second-round-active .site-header {
   letter-spacing: .18em;
 }
 
-.second-round-bridge {
-  position: absolute;
-  left: clamp(28px, 7vw, 110px);
-  top: 50%;
-  width: min(620px, 52vw);
-  color: #14301f;
-  opacity: var(--sr-bridge);
-  transform: translate3d(var(--sr-bridge-shift), -50%, 0);
-}
-
-.second-round-bridge p {
-  margin: 0 0 14px;
-  color: #2e5c3f;
-  font-family: var(--font-data, "Space Grotesk", sans-serif);
-  font-size: 10px;
-  font-weight: 650;
-  letter-spacing: .17em;
-}
-
-.second-round-bridge h2 {
-  margin: 0;
-  color: #14301f;
-  font-size: clamp(38px, 4.2vw, 64px);
-  font-weight: 680;
-  line-height: 1.02;
-  letter-spacing: -.052em;
-}
-
-.second-round-bridge h2 span {
-  display: block;
-  white-space: nowrap;
-}
-
-.second-round-bridge-body {
-  display: block;
-  max-width: 440px;
-  margin-top: 20px;
-  color: rgba(20,48,31,.62);
-  font-size: 14px;
-  line-height: 1.65;
-}
-
+/* No final landing card, ornament, paper transition, or CTA. Once the pinned
+   sequence finishes, the normal storefront begins immediately. */
+.second-round-paper,
+.second-round-surface,
+.second-round-bridge,
 .second-round-cta {
-  pointer-events: auto;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  gap: 14px;
-  min-height: 44px;
-  margin-top: 26px;
-  padding: 0 18px;
-  border: 1px solid rgba(20,48,31,.12);
-  border-radius: 999px;
-  background: #14301f;
-  color: #fff;
-  font-size: 12px;
-  font-weight: 720;
-  letter-spacing: -.01em;
-  box-shadow: none;
-  transition: transform 180ms ease, background 180ms ease;
-}
-
-.second-round-cta:hover {
-  transform: translateY(-1px);
-  background: #2e5c3f;
-}
-
-.second-round-cta b {
-  font-size: 14px;
-  font-weight: 500;
+  display: none !important;
 }
 
 .second-round-hero + #products,
 .second-round-hero + .home-stage {
   position: relative;
   z-index: 2;
-  margin-top: -1px;
+  margin-top: 0;
   background: var(--paper, #f7f6f1);
   border-top: 0;
 }
@@ -338,16 +244,20 @@ body.second-round-active .site-header {
 }
 
 .second-round-hero.is-reduced-motion {
-  height: 108svh;
+  height: 100svh;
 }
 
-.second-round-hero.is-reduced-motion .second-round-media {
-  display: none;
+.second-round-hero.is-reduced-motion .second-round-video {
+  opacity: 0;
+}
+
+.second-round-hero.is-reduced-motion .second-round-frame {
+  opacity: 1;
 }
 
 @media (max-width: 760px) {
   .second-round-hero {
-    height: 270vh;
+    height: 220vh;
   }
 
   .second-round-stage {
@@ -396,36 +306,6 @@ body.second-round-active .site-header {
     width: 82px;
   }
 
-  .second-round-bridge {
-    top: auto;
-    left: 22px;
-    right: 22px;
-    bottom: 30px;
-    width: auto;
-    transform: translate3d(0, var(--sr-bridge-mobile-shift), 0);
-  }
-
-  .second-round-bridge h2 {
-    font-size: clamp(36px, 10.8vw, 52px);
-  }
-
-  .second-round-bridge h2 span {
-    white-space: normal;
-  }
-
-  .second-round-bridge-body {
-    max-width: 84vw;
-    margin-top: 16px;
-    font-size: 13px;
-  }
-
-  .second-round-cta {
-    min-height: 42px;
-    margin-top: 22px;
-    padding-inline: 16px;
-    font-size: 11.5px;
-  }
-
   .second-round-shade {
     background:
       linear-gradient(180deg, rgba(4,14,9,.18) 0%, rgba(4,14,9,.1) 30%, rgba(4,14,9,.72) 78%, rgba(4,14,9,.82) 100%);
@@ -438,8 +318,7 @@ body.second-round-active .site-header {
 
 @media (prefers-reduced-motion: reduce) {
   .site-header,
-  .second-round-copy,
-  .second-round-cta {
+  .second-round-copy {
     transition: none !important;
   }
 }
