@@ -13,20 +13,14 @@ async function expectRecoveredCanceledOrder(page) {
 }
 
 test("guest order route survives a full reload by reloading the server order", async ({ page }) => {
-  // This regression is about our server-backed capability-token recovery, not an
-  // external CDN's cold-start latency. Force the storefront's documented static
-  // fallback path so the test stays deterministic even on a fresh CI runner.
+  // The capability-token recovery does not depend on the optional Supabase CDN
+  // client. Keep this regression deterministic on a cold CI runner.
   await page.route("https://cdn.jsdelivr.net/**", (route) => route.abort("failed"));
-
-  await page.addInitScript(({ orderId, lookupToken }) => {
-    sessionStorage.setItem("reball.guestLookup.session.v1", JSON.stringify({ orderId, lookupToken }));
-  }, { orderId: ORDER_ID, lookupToken: LOOKUP_TOKEN });
 
   let lookupCount = 0;
   await page.route("**/functions/v1/guest-order-lookup", async (route) => {
     lookupCount += 1;
-    const request = route.request();
-    const body = JSON.parse(request.postData() || "{}");
+    const body = JSON.parse(route.request().postData() || "{}");
     expect(body.orderId).toBe(ORDER_ID);
     expect(body.lookupToken).toBe(LOOKUP_TOKEN);
     await route.fulfill({
@@ -49,13 +43,21 @@ test("guest order route survives a full reload by reloading the server order", a
     });
   });
 
-  await page.goto(`/#/order/${ORDER_ID}`);
-  await expectRecoveredCanceledOrder(page);
-  await expect.poll(() => lookupCount).toBeGreaterThanOrEqual(1);
+  // Boot the real application on its origin first. Then store the same
+  // sessionStorage capability the checkout flow stores in a real browser.
+  await page.goto("/#/");
+  await expect(page.locator("main h1")).toHaveCount(1);
+  await page.evaluate(({ orderId, lookupToken }) => {
+    sessionStorage.setItem("reball.guestLookup.session.v1", JSON.stringify({ orderId, lookupToken }));
+    location.hash = `#/order/${orderId}`;
+  }, { orderId: ORDER_ID, lookupToken: LOOKUP_TOKEN });
 
-  // The original regression happened after a browser refresh. Verify that exact
-  // boundary rather than merely navigating to the route once.
-  await page.reload();
+  await expect.poll(() => lookupCount).toBeGreaterThanOrEqual(1);
   await expectRecoveredCanceledOrder(page);
+
+  // This is the production regression boundary: a full document refresh must
+  // reconstruct the order from the server using the retained capability token.
+  await page.reload();
   await expect.poll(() => lookupCount).toBeGreaterThanOrEqual(2);
+  await expectRecoveredCanceledOrder(page);
 });
