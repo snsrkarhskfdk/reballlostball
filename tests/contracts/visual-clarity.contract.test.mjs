@@ -34,11 +34,11 @@ test("home stages own a paper background and dark readable copy", () => {
   assert.ok(contrast("#2e5c3f", "#f7f6f1") >= 4.5, "home eyebrow must exceed AA contrast");
 });
 
-test("SECOND ROUND final bridge has an intentional visible panel", () => {
-  assert.match(clarityCss, /\.second-round-paper::before/);
-  assert.match(clarityCss, /\.second-round-bridge \{[\s\S]*background: rgba\(255, 255, 255, 0\.92\)/);
-  assert.match(clarityCss, /\.second-round-bridge h2 \{[\s\S]*color: #102a1b/);
-  assert.match(clarityCss, /@media \(max-width: 760px\)[\s\S]*max-height: calc\(100svh - 28px\)/);
+test("SECOND ROUND final ornament and landing card stay retired", () => {
+  assert.match(clarityCss, /\.second-round-paper,[\s\S]*\.second-round-cta\s*\{[\s\S]*display:\s*none !important/s);
+  assert.match(clarityCss, /\.second-round-paper::before,[\s\S]*content:\s*none !important/s);
+  assert.doesNotMatch(clarityCss, /radial-gradient\(circle, rgba\(20, 48, 31, 0\.12\)/);
+  assert.doesNotMatch(clarityCss, /READY FOR YOUR ROUND/);
 });
 
 test("visual clarity guard loads last while the Toss path base remains intact", () => {
@@ -48,4 +48,6 @@ test("visual clarity guard loads last while the Toss path base remains intact", 
   const clarityIndex = indexHtml.indexOf("visual-clarity-fixes.css");
   assert.ok(baseIndex > 0, "Toss path-form success redirect requires the root base href");
   assert.ok(accessibilityIndex > 0 && checkoutIndex > accessibilityIndex && clarityIndex > checkoutIndex);
+  assert.match(indexHtml, /second-round-hero\.css\?v=20260831-01/);
+  assert.match(indexHtml, /second-round-hero\.mjs\?v=20260831-01/);
 });
