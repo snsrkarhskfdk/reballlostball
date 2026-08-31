@@ -155,7 +155,7 @@ function createHero(oldSection) {
   const tick = () => {
     if (destroyed || !section.isConnected) return;
     const delta = target - current;
-    current += delta * (compactViewport ? 0.20 : 0.14);
+    current += delta * (compactViewport ? 0.24 : 0.22);
     if (Math.abs(delta) < 0.0008) current = target;
     updateVisuals(current);
     if (current !== target) raf = window.requestAnimationFrame(tick);
