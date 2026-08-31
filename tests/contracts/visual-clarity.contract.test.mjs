@@ -2,9 +2,11 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 
-const [accessibilityCss, clarityCss, indexHtml] = await Promise.all([
+const [accessibilityCss, clarityCss, heroCss, heroJs, indexHtml] = await Promise.all([
   readFile(new URL("../../src/frontend/ui/accessibility-fixes.css", import.meta.url), "utf8"),
   readFile(new URL("../../src/frontend/ui/visual-clarity-fixes.css", import.meta.url), "utf8"),
+  readFile(new URL("../../second-round-hero.css", import.meta.url), "utf8"),
+  readFile(new URL("../../second-round-hero.mjs", import.meta.url), "utf8"),
   readFile(new URL("../../index.html", import.meta.url), "utf8"),
 ]);
 
@@ -34,7 +36,9 @@ test("home stages own a paper background and dark readable copy", () => {
   assert.ok(contrast("#2e5c3f", "#f7f6f1") >= 4.5, "home eyebrow must exceed AA contrast");
 });
 
-test("SECOND ROUND final ornament and landing card stay retired", () => {
+test("SECOND ROUND keeps the real ending still but retires decorative landing UI", () => {
+  assert.match(heroJs, /HERO_ENDING = "\/hero\/drop\/10\.webp"/);
+  assert.match(heroCss, /\.second-round-video,[\s\S]*\.second-round-ending\s*\{[\s\S]*object-fit:\s*contain/s);
   assert.match(clarityCss, /\.second-round-paper,[\s\S]*\.second-round-cta\s*\{[\s\S]*display:\s*none !important/s);
   assert.match(clarityCss, /\.second-round-paper::before,[\s\S]*content:\s*none !important/s);
   assert.doesNotMatch(clarityCss, /radial-gradient\(circle, rgba\(20, 48, 31, 0\.12\)/);
@@ -48,6 +52,6 @@ test("visual clarity guard loads last while the Toss path base remains intact", 
   const clarityIndex = indexHtml.indexOf("visual-clarity-fixes.css");
   assert.ok(baseIndex > 0, "Toss path-form success redirect requires the root base href");
   assert.ok(accessibilityIndex > 0 && checkoutIndex > accessibilityIndex && clarityIndex > checkoutIndex);
-  assert.match(indexHtml, /second-round-hero\.css\?v=20260831-02/);
-  assert.match(indexHtml, /second-round-hero\.mjs\?v=20260831-02/);
+  assert.match(indexHtml, /second-round-hero\.css\?v=20260901-01/);
+  assert.match(indexHtml, /second-round-hero\.mjs\?v=20260901-01/);
 });
