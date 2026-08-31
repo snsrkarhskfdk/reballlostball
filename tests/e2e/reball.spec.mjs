@@ -71,7 +71,7 @@ test("Toss success return confirms on the server and removes paymentKey from the
   expect(new URL(page.url()).searchParams.has("paymentKey")).toBe(false);
 });
 
-test("mock card confirmation failure never renders a completed order and scrubs the payment key", async ({ page }) => {
+test("mock card confirmation failure never renders a completed order, scrubs provider secrets, and retains retry context", async ({ page }) => {
   await page.route("**/functions/v1/payment-confirm", async (route) => {
     await route.fulfill({
       status: 409,
@@ -83,9 +83,13 @@ test("mock card confirmation failure never renders a completed order and scrubs 
     });
   });
   await page.goto("/?payment=success&paymentKey=pk_fail&orderId=order-2&amount=17000#/payment/success");
-  await expect(page).toHaveURL(/#\/payment\/fail$/);
-  expect(new URL(page.url()).searchParams.has("paymentKey")).toBe(false);
-  expect(new URL(page.url()).hash).toBe("#/payment/fail");
+  await expect(page).toHaveURL(/#\/payment\/fail\?orderId=ORDER-2$/);
+  const finalUrl = new URL(page.url());
+  expect(finalUrl.searchParams.has("paymentKey")).toBe(false);
+  expect(finalUrl.hash).toBe("#/payment/fail?orderId=ORDER-2");
+  expect(finalUrl.hash).not.toContain("paymentKey");
+  expect(finalUrl.hash).not.toContain("code=");
+  expect(finalUrl.hash).not.toContain("message=");
 });
 
 for (const [name, route] of routes) {
