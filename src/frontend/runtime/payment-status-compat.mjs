@@ -16,8 +16,10 @@ function setText(node, value) {
 
 function synchronizeOrderSummary(root) {
   if (!(root instanceof Element)) return;
+  if (root.classList.contains("payment-return-page")) return;
   const orderStatus = definitionValue(root, "주문상태");
   const paymentStatus = definitionValue(root, "결제상태");
+  if (!orderStatus && !paymentStatus) return;
   const copy = orderCompletionCopy(orderStatus, paymentStatus);
 
   const heading = root.querySelector("h1, h2");
@@ -38,6 +40,7 @@ function synchronizeOrderSummary(root) {
 
 function ensurePaidCancelAction(root) {
   if (!(root instanceof Element)) return;
+  if (root.classList.contains("payment-return-page")) return;
   const actions = root.querySelector(".action-row.center");
   if (!actions) return;
 
@@ -64,7 +67,7 @@ function ensurePaidCancelAction(root) {
 }
 
 function patchOrderPages(root = document) {
-  root.querySelectorAll(".complete-page").forEach((page) => {
+  root.querySelectorAll(".complete-page:not(.payment-return-page)").forEach((page) => {
     synchronizeOrderSummary(page);
     ensurePaidCancelAction(page);
   });
