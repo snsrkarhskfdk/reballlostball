@@ -44,6 +44,7 @@ for (const viewport of [
     const products = page.locator("#products");
     await expect(hero).toBeVisible();
     await expect(products).toHaveCount(1);
+    await expect(page.locator(".second-round-video")).toHaveCount(1);
     await expect(page.locator(".second-round-frame")).toHaveCount(0);
     await expect(page.locator(".second-round-bridge")).toHaveCount(0);
     await expect(page.locator(".second-round-paper")).toHaveCount(0);
