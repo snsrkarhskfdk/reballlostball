@@ -64,11 +64,12 @@ for (const viewport of [
       return node.offsetTop + scrollable * 0.94;
     });
     await page.evaluate((top) => window.scrollTo({ top, behavior: "instant" }), nearEnd);
-    await page.waitForTimeout(220);
 
+    await expect.poll(
+      async () => Number(await ending.evaluate((node) => getComputedStyle(node).opacity)),
+      { timeout: 2500 }
+    ).toBeGreaterThan(0.95);
     await expect(ending).toBeVisible();
-    const endingOpacity = Number(await ending.evaluate((node) => getComputedStyle(node).opacity));
-    expect(endingOpacity).toBeGreaterThan(0.95);
 
     const heroBottom = await hero.evaluate((node) => node.offsetTop + node.offsetHeight);
     await page.evaluate((top) => window.scrollTo({ top, behavior: "instant" }), heroBottom);
