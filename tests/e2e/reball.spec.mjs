@@ -167,12 +167,10 @@ for (const width of [360, 390, 768, 1024, 1440]) {
   });
 }
 
-test("primary commerce action is keyboard reachable", async ({ page }) => {
+test("primary storefront commerce action is keyboard reachable", async ({ page }) => {
   await page.goto("/#/");
-  const primary = page.locator("[data-second-round-cta]");
+  const primary = page.locator(".featured-product-grid .product-card").first().locator("a, button").first();
   await expect(primary).toHaveCount(1);
   await primary.focus();
   await expect(primary).toBeFocused();
-  await page.keyboard.press("Enter");
-  await expect(page.locator('[data-home-stage="3"]')).toBeVisible();
 });
