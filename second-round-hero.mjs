@@ -1,7 +1,6 @@
 const SELECTOR = "[data-flight-transition]";
 const HERO_VIDEO = "/hero/intro/reball_intro_1.mp4";
 const HERO_POSTER = "./assets/figma/hero-poster.webp";
-const DROP_FRAME_COUNT = 10;
 
 const clamp = (value, min = 0, max = 1) => Math.min(max, Math.max(min, value));
 const invLerp = (start, end, value) => clamp((value - start) / (end - start));
@@ -19,7 +18,6 @@ function sceneMarkup() {
     <div class="second-round-stage" data-second-round-stage>
       <div class="second-round-media" data-second-round-media aria-hidden="true">
         <video class="second-round-video" data-second-round-video src="${HERO_VIDEO}" poster="${HERO_POSTER}" muted playsinline preload="auto"></video>
-        <img class="second-round-frame" data-second-round-frame src="/hero/drop/01.webp" alt="" decoding="async" />
         <div class="second-round-shade"></div>
         <div class="second-round-grain"></div>
       </div>
@@ -88,33 +86,21 @@ function createHero(oldSection) {
 
   const stage = section.querySelector("[data-second-round-stage]");
   const video = section.querySelector("[data-second-round-video]");
-  const frame = section.querySelector("[data-second-round-frame]");
   const progressBar = section.querySelector("[data-second-round-progress]");
   const counter = section.querySelector("[data-second-round-counter]");
   const copies = [...section.querySelectorAll("[data-second-round-copy]")];
   const reducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
   const compactViewport = window.matchMedia("(max-width: 760px)").matches;
 
-  // There is intentionally no separate landing/final scene. The pinned media ends
-  // and the regular #products storefront begins immediately after the hero.
-  section.style.height = reducedMotion ? "100svh" : compactViewport ? "220vh" : "280vh";
-
-  const frames = Array.from({ length: DROP_FRAME_COUNT }, (_, index) => {
-    const image = new Image();
-    image.decoding = "async";
-    image.src = `/hero/drop/${String(index + 1).padStart(2, "0")}.webp`;
-    return image;
-  });
-
-  const preloadFrames = () => frames.forEach((image) => image.decode?.().catch(() => {}));
-  if ("requestIdleCallback" in window) window.requestIdleCallback(preloadFrames, { timeout: 1600 });
-  else window.setTimeout(preloadFrames, 600);
+  // The cinematic is the entire hero. There is no post-video still, frame sequence,
+  // landing card, ornament or intermediate screen. As the video reaches its final
+  // frame, the sticky hero ends and the normal #products storefront takes over.
+  section.style.height = reducedMotion ? "100svh" : compactViewport ? "190vh" : "220vh";
 
   let videoDuration = 0;
   let target = 0;
-  let current = reducedMotion ? 0.72 : 0;
+  let current = 0;
   let raf = 0;
-  let lastFrameIndex = -1;
   let lastScene = -1;
   let destroyed = false;
 
@@ -130,36 +116,29 @@ function createHero(oldSection) {
   };
 
   const updateVisuals = (p) => {
-    const scene = p < 0.30 ? 0 : p < 0.62 ? 1 : 2;
+    const scene = p < 0.30 ? 0 : p < 0.64 ? 1 : 2;
     setScene(scene);
 
-    const framePhase = smoothstep(0.48, 0.86, p);
-    const frameIndex = Math.min(DROP_FRAME_COUNT - 1, Math.floor(framePhase * DROP_FRAME_COUNT));
-    if (frameIndex !== lastFrameIndex) {
-      lastFrameIndex = frameIndex;
-      frame.src = frames[frameIndex]?.src || `/hero/drop/${String(frameIndex + 1).padStart(2, "0")}.webp`;
-    }
-
-    const videoOpacity = 1 - smoothstep(0.56, 0.72, p);
-    const frameOpacity = smoothstep(0.48, 0.64, p);
-    const copyExit = smoothstep(0.90, 0.98, p);
-    const shadeOpacity = 1 - 0.32 * smoothstep(0.70, 0.96, p);
-    const grainOpacity = Math.max(0.025, 0.09 * (1 - 0.55 * p));
+    const copyExit = smoothstep(0.92, 0.995, p);
+    const shadeOpacity = 1 - 0.28 * smoothstep(0.72, 0.98, p);
+    const grainOpacity = Math.max(0.02, 0.09 * (1 - 0.55 * p));
 
     stage.style.setProperty("--sr-progress", p.toFixed(4));
-    stage.style.setProperty("--sr-video-opacity", videoOpacity.toFixed(4));
-    stage.style.setProperty("--sr-frame-opacity", frameOpacity.toFixed(4));
     stage.style.setProperty("--sr-copy-opacity", (1 - copyExit).toFixed(4));
     stage.style.setProperty("--sr-shade-opacity", shadeOpacity.toFixed(4));
     stage.style.setProperty("--sr-grain-opacity", grainOpacity.toFixed(4));
     progressBar.style.transform = `scaleX(${p})`;
 
-    document.body.classList.toggle("second-round-active", p < 0.985 && section.isConnected);
+    // Restore the normal header only at the very end so it belongs to the storefront,
+    // not to a fake final hero scene.
+    document.body.classList.toggle("second-round-active", p < 0.99 && section.isConnected);
 
     if (videoDuration > 0 && !reducedMotion) {
-      const scrub = clamp(p / 0.64);
-      const nextTime = scrub * Math.max(0, videoDuration - 0.04);
-      if (Number.isFinite(nextTime) && Math.abs(video.currentTime - nextTime) > 0.025) {
+      // Consume essentially the full scroll range with the actual video. The old
+      // implementation ended the video around 64% and then held generated stills.
+      const scrub = clamp(p / 0.995);
+      const nextTime = scrub * Math.max(0, videoDuration - 0.015);
+      if (Number.isFinite(nextTime) && Math.abs(video.currentTime - nextTime) > 0.02) {
         try { video.currentTime = nextTime; } catch {}
       }
     }
@@ -168,7 +147,7 @@ function createHero(oldSection) {
   const tick = () => {
     if (destroyed || !section.isConnected) return;
     const delta = target - current;
-    current += delta * (compactViewport ? 0.18 : 0.12);
+    current += delta * (compactViewport ? 0.20 : 0.14);
     if (Math.abs(delta) < 0.0008) current = target;
     updateVisuals(current);
     if (current !== target) raf = window.requestAnimationFrame(tick);
@@ -182,7 +161,7 @@ function createHero(oldSection) {
   const measure = () => {
     if (reducedMotion) {
       section.classList.add("is-reduced-motion");
-      updateVisuals(current);
+      updateVisuals(0);
       document.body.classList.remove("second-round-active");
       return;
     }

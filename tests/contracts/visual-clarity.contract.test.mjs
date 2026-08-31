@@ -48,6 +48,6 @@ test("visual clarity guard loads last while the Toss path base remains intact", 
   const clarityIndex = indexHtml.indexOf("visual-clarity-fixes.css");
   assert.ok(baseIndex > 0, "Toss path-form success redirect requires the root base href");
   assert.ok(accessibilityIndex > 0 && checkoutIndex > accessibilityIndex && clarityIndex > checkoutIndex);
-  assert.match(indexHtml, /second-round-hero\.css\?v=20260831-01/);
-  assert.match(indexHtml, /second-round-hero\.mjs\?v=20260831-01/);
+  assert.match(indexHtml, /second-round-hero\.css\?v=20260831-02/);
+  assert.match(indexHtml, /second-round-hero\.mjs\?v=20260831-02/);
 });

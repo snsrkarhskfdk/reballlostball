@@ -36,7 +36,7 @@ for (const viewport of [
   { name: "desktop", width: 1440, height: 900 },
   { name: "mobile", width: 390, height: 844 },
 ]) {
-  test(`SECOND ROUND hands directly to the normal storefront on ${viewport.name}`, async ({ page }) => {
+  test(`SECOND ROUND video hands directly to the normal storefront on ${viewport.name}`, async ({ page }) => {
     await page.setViewportSize({ width: viewport.width, height: viewport.height });
     await page.goto("/#/");
 
@@ -44,6 +44,8 @@ for (const viewport of [
     const products = page.locator("#products");
     await expect(hero).toBeVisible();
     await expect(products).toHaveCount(1);
+    await expect(page.locator(".second-round-video")).toHaveCount(1);
+    await expect(page.locator(".second-round-frame")).toHaveCount(0);
     await expect(page.locator(".second-round-bridge")).toHaveCount(0);
     await expect(page.locator(".second-round-paper")).toHaveCount(0);
     await expect(page.locator("[data-second-round-cta]")).toHaveCount(0);
