@@ -7,8 +7,6 @@ const paper = "rgb(247, 246, 241)";
 test("home-stage copy remains readable even while the hero body state is dark", async ({ page }) => {
   await page.goto("/#/");
 
-  // Reproduce the contrast failure that axe found: the SECOND ROUND runtime can
-  // temporarily make the body dark while later home stages already exist in DOM.
   await page.evaluate(() => document.body.classList.add("second-round-active"));
 
   for (const selector of [".home-stage--trust", ".home-stage--products", ".home-stage--shipping"]) {
@@ -38,52 +36,32 @@ for (const viewport of [
   { name: "desktop", width: 1440, height: 900 },
   { name: "mobile", width: 390, height: 844 },
 ]) {
-  test(`SECOND ROUND final bridge is visible and contained on ${viewport.name}`, async ({ page }) => {
+  test(`SECOND ROUND hands directly to the normal storefront on ${viewport.name}`, async ({ page }) => {
     await page.setViewportSize({ width: viewport.width, height: viewport.height });
-    await page.emulateMedia({ reducedMotion: "reduce" });
     await page.goto("/#/");
 
     const hero = page.locator(".second-round-hero");
+    const products = page.locator("#products");
     await expect(hero).toBeVisible();
-    await hero.evaluate((node) => node.scrollIntoView({ block: "start", behavior: "instant" }));
-    await page.waitForTimeout(80);
+    await expect(products).toHaveCount(1);
+    await expect(page.locator(".second-round-bridge")).toHaveCount(0);
+    await expect(page.locator(".second-round-paper")).toHaveCount(0);
+    await expect(page.locator("[data-second-round-cta]")).toHaveCount(0);
 
-    const bridge = page.locator(".second-round-bridge");
-    await expect(bridge).toBeVisible();
-    await expect(bridge).toHaveAttribute("aria-hidden", "false");
-    await expect(bridge.locator("h2")).toHaveCSS("color", "rgb(16, 42, 27)");
-    await expect(bridge.locator(".second-round-bridge-body")).toHaveCSS("color", "rgb(70, 89, 75)");
-    await expect(bridge.locator(".second-round-cta")).toBeVisible();
+    const directSibling = await hero.evaluate((node) => node.nextElementSibling?.id || "");
+    expect(directSibling).toBe("products");
 
-    const geometry = await bridge.evaluate((node) => {
-      const rect = node.getBoundingClientRect();
-      const paperNode = document.querySelector(".second-round-paper");
-      const ornament = paperNode ? getComputedStyle(paperNode, "::before") : null;
-      return {
-        left: rect.left,
-        right: rect.right,
-        top: rect.top,
-        bottom: rect.bottom,
-        width: rect.width,
-        height: rect.height,
-        clientHeight: node.clientHeight,
-        scrollHeight: node.scrollHeight,
-        background: getComputedStyle(node).backgroundColor,
-        ornamentContent: ornament?.content || "none",
-        documentOverflow: document.documentElement.scrollWidth - window.innerWidth,
-      };
-    });
+    const heroBottom = await hero.evaluate((node) => node.offsetTop + node.offsetHeight);
+    await page.evaluate((top) => window.scrollTo({ top, behavior: "instant" }), heroBottom);
+    await page.waitForTimeout(120);
 
-    expect(geometry.left).toBeGreaterThanOrEqual(0);
-    expect(geometry.right).toBeLessThanOrEqual(viewport.width + 1);
-    expect(geometry.top).toBeGreaterThanOrEqual(0);
-    expect(geometry.bottom).toBeLessThanOrEqual(viewport.height + 1);
-    expect(geometry.width).toBeGreaterThan(viewport.name === "desktop" ? 500 : 300);
-    expect(geometry.height).toBeGreaterThan(viewport.name === "desktop" ? 250 : 220);
-    expect(geometry.clientHeight).toBeLessThanOrEqual(viewport.height);
-    expect(geometry.scrollHeight).toBeGreaterThanOrEqual(geometry.clientHeight);
-    expect(geometry.background).toBe("rgba(255, 255, 255, 0.92)");
-    expect(geometry.ornamentContent).not.toBe("none");
-    expect(geometry.documentOverflow).toBeLessThanOrEqual(1);
+    await expect(products).toBeVisible();
+    await expect(page.locator(".site-header")).toBeVisible();
+    const geometry = await page.evaluate(() => ({
+      overflow: document.documentElement.scrollWidth - window.innerWidth,
+      productsTop: document.querySelector("#products")?.getBoundingClientRect().top ?? 9999,
+    }));
+    expect(geometry.overflow).toBeLessThanOrEqual(1);
+    expect(geometry.productsTop).toBeLessThan(viewport.height);
   });
 }

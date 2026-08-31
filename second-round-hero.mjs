@@ -17,11 +17,9 @@ let mountQueued = false;
 function sceneMarkup() {
   return `
     <div class="second-round-stage" data-second-round-stage>
-      <div class="second-round-paper" aria-hidden="true"></div>
       <div class="second-round-media" data-second-round-media aria-hidden="true">
         <video class="second-round-video" data-second-round-video src="${HERO_VIDEO}" poster="${HERO_POSTER}" muted playsinline preload="auto"></video>
         <img class="second-round-frame" data-second-round-frame src="/hero/drop/01.webp" alt="" decoding="async" />
-        <div class="second-round-surface" data-second-round-surface></div>
         <div class="second-round-shade"></div>
         <div class="second-round-grain"></div>
       </div>
@@ -56,13 +54,6 @@ function sceneMarkup() {
           <span class="second-round-progress-track"><i data-second-round-progress></i></span>
           <small>SCROLL</small>
         </div>
-
-        <div class="second-round-bridge" data-second-round-bridge aria-hidden="true">
-          <p>READY FOR YOUR ROUND</p>
-          <h2><span>당신의 다음 라운드를</span><span>고르세요.</span></h2>
-          <span class="second-round-bridge-body">A+ · A · B 실제 상태와 확정 가격을 보고 선택할 수 있습니다.</span>
-          <button type="button" class="second-round-cta" data-second-round-cta>실제 재고 상품 보기 <b>→</b></button>
-        </div>
       </div>
     </div>
   `;
@@ -79,19 +70,6 @@ function promoteProductsAfterHero(section) {
   if (productGrid && carousel && carousel.previousElementSibling !== productGrid) {
     products.insertBefore(productGrid, carousel);
   }
-}
-
-function scrollToFirstProductCard(reducedMotion) {
-  const target =
-    document.querySelector("#products .featured-product-grid .product-card") ||
-    document.querySelector("#products .featured-product-grid") ||
-    document.getElementById("products");
-  if (!target) return;
-
-  const header = document.querySelector(".site-header");
-  const headerHeight = header?.getBoundingClientRect().height || 64;
-  const top = Math.max(0, window.scrollY + target.getBoundingClientRect().top - headerHeight - 18);
-  window.scrollTo({ top, behavior: reducedMotion ? "auto" : "smooth" });
 }
 
 function createHero(oldSection) {
@@ -111,15 +89,15 @@ function createHero(oldSection) {
   const stage = section.querySelector("[data-second-round-stage]");
   const video = section.querySelector("[data-second-round-video]");
   const frame = section.querySelector("[data-second-round-frame]");
-  const bridge = section.querySelector("[data-second-round-bridge]");
   const progressBar = section.querySelector("[data-second-round-progress]");
   const counter = section.querySelector("[data-second-round-counter]");
   const copies = [...section.querySelectorAll("[data-second-round-copy]")];
-  const cta = section.querySelector("[data-second-round-cta]");
   const reducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
   const compactViewport = window.matchMedia("(max-width: 760px)").matches;
 
-  section.style.height = reducedMotion ? "108svh" : compactViewport ? "270vh" : "360vh";
+  // There is intentionally no separate landing/final scene. The pinned media ends
+  // and the regular #products storefront begins immediately after the hero.
+  section.style.height = reducedMotion ? "100svh" : compactViewport ? "220vh" : "280vh";
 
   const frames = Array.from({ length: DROP_FRAME_COUNT }, (_, index) => {
     const image = new Image();
@@ -134,7 +112,7 @@ function createHero(oldSection) {
 
   let videoDuration = 0;
   let target = 0;
-  let current = reducedMotion ? 1 : 0;
+  let current = reducedMotion ? 0.72 : 0;
   let raf = 0;
   let lastFrameIndex = -1;
   let lastScene = -1;
@@ -152,43 +130,34 @@ function createHero(oldSection) {
   };
 
   const updateVisuals = (p) => {
-    const scene = p < 0.27 ? 0 : p < 0.55 ? 1 : 2;
+    const scene = p < 0.30 ? 0 : p < 0.62 ? 1 : 2;
     setScene(scene);
 
-    const framePhase = smoothstep(0.38, 0.63, p);
+    const framePhase = smoothstep(0.48, 0.86, p);
     const frameIndex = Math.min(DROP_FRAME_COUNT - 1, Math.floor(framePhase * DROP_FRAME_COUNT));
     if (frameIndex !== lastFrameIndex) {
       lastFrameIndex = frameIndex;
       frame.src = frames[frameIndex]?.src || `/hero/drop/${String(frameIndex + 1).padStart(2, "0")}.webp`;
     }
 
-    const videoOpacity = 1 - smoothstep(0.46, 0.62, p);
-    const frameOpacity = smoothstep(0.34, 0.46, p) * (1 - smoothstep(0.58, 0.70, p));
-    const surfaceOpacity = smoothstep(0.58, 0.70, p);
-    const bridgeProgress = smoothstep(0.66, 0.90, p);
-    const copyExit = smoothstep(0.64, 0.74, p);
-    const shadeOpacity = 1 - smoothstep(0.56, 0.70, p);
-    const grainOpacity = Math.max(0.006, 0.09 * (1 - surfaceOpacity));
-    const mediaOpacity = 1 - smoothstep(0.66, 0.78, p);
+    const videoOpacity = 1 - smoothstep(0.56, 0.72, p);
+    const frameOpacity = smoothstep(0.48, 0.64, p);
+    const copyExit = smoothstep(0.90, 0.98, p);
+    const shadeOpacity = 1 - 0.32 * smoothstep(0.70, 0.96, p);
+    const grainOpacity = Math.max(0.025, 0.09 * (1 - 0.55 * p));
 
     stage.style.setProperty("--sr-progress", p.toFixed(4));
     stage.style.setProperty("--sr-video-opacity", videoOpacity.toFixed(4));
     stage.style.setProperty("--sr-frame-opacity", frameOpacity.toFixed(4));
-    stage.style.setProperty("--sr-surface-opacity", surfaceOpacity.toFixed(4));
-    stage.style.setProperty("--sr-media-opacity", mediaOpacity.toFixed(4));
-    stage.style.setProperty("--sr-bridge", bridgeProgress.toFixed(4));
     stage.style.setProperty("--sr-copy-opacity", (1 - copyExit).toFixed(4));
     stage.style.setProperty("--sr-shade-opacity", shadeOpacity.toFixed(4));
     stage.style.setProperty("--sr-grain-opacity", grainOpacity.toFixed(4));
-    stage.style.setProperty("--sr-bridge-shift", `${((1 - bridgeProgress) * -22).toFixed(2)}px`);
-    stage.style.setProperty("--sr-bridge-mobile-shift", `${((1 - bridgeProgress) * 14).toFixed(2)}px`);
     progressBar.style.transform = `scaleX(${p})`;
-    bridge.setAttribute("aria-hidden", bridgeProgress > 0.48 ? "false" : "true");
 
-    document.body.classList.toggle("second-round-active", p < 0.68 && section.isConnected);
+    document.body.classList.toggle("second-round-active", p < 0.985 && section.isConnected);
 
     if (videoDuration > 0 && !reducedMotion) {
-      const scrub = clamp(p / 0.55);
+      const scrub = clamp(p / 0.64);
       const nextTime = scrub * Math.max(0, videoDuration - 0.04);
       if (Number.isFinite(nextTime) && Math.abs(video.currentTime - nextTime) > 0.025) {
         try { video.currentTime = nextTime; } catch {}
@@ -212,9 +181,8 @@ function createHero(oldSection) {
 
   const measure = () => {
     if (reducedMotion) {
-      target = current = 1;
       section.classList.add("is-reduced-motion");
-      updateVisuals(1);
+      updateVisuals(current);
       document.body.classList.remove("second-round-active");
       return;
     }
@@ -234,8 +202,6 @@ function createHero(oldSection) {
   video.addEventListener("canplay", () => { try { video.pause(); } catch {} }, { passive: true });
   window.addEventListener("scroll", measure, { passive: true });
   window.addEventListener("resize", measure, { passive: true });
-
-  cta.addEventListener("click", () => scrollToFirstProductCard(reducedMotion));
 
   measure();
 
