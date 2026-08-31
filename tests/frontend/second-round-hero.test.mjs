@@ -17,57 +17,38 @@ test("SECOND ROUND hero scrubs media with scroll and remounts after SPA renders"
   assert.match(source, /requestAnimationFrame/);
   assert.match(source, /MutationObserver/);
   assert.match(source, /prefers-reduced-motion/);
-  assert.match(source, /data-second-round-cta/);
 });
 
-test("SECOND ROUND hero uses a shorter pinned full-screen scroll stage", () => {
+test("SECOND ROUND uses a shorter pinned full-screen sequence before the normal storefront", () => {
   const source = read("second-round-hero.mjs");
   const css = read("second-round-hero.css");
-  assert.match(css, /\.second-round-hero\s*\{[^}]*height:\s*360vh/s);
+  assert.match(css, /\.second-round-hero\s*\{[^}]*height:\s*280vh/s);
   assert.match(css, /\.second-round-stage\s*\{[^}]*position:\s*sticky[^}]*height:\s*100svh/s);
-  assert.match(source, /compactViewport \? "270vh" : "360vh"/);
+  assert.match(source, /compactViewport \? "220vh" : "280vh"/);
 });
 
-test("SECOND ROUND ends after inspection without a fourth poster scene", () => {
+test("SECOND ROUND ends after inspection without any decorative final scene", () => {
   const source = read("second-round-hero.mjs");
+  const css = read("second-round-hero.css");
   assert.match(source, /01 \/ 03/);
   assert.doesNotMatch(source, /data-second-round-copy="3"/);
-  assert.doesNotMatch(source, /다시, 라운드로\./);
+  assert.doesNotMatch(source, /data-second-round-bridge|data-second-round-cta|second-round-paper|second-round-surface/);
+  assert.doesNotMatch(source, /당신의 다음 라운드를|READY FOR YOUR ROUND/);
+  assert.match(css, /\.second-round-paper,[\s\S]*\.second-round-cta\s*\{[\s\S]*display:\s*none !important/s);
 });
 
-test("SECOND ROUND clean landing contains no golf-hole landing plate", () => {
+test("SECOND ROUND retains the final inspection frame until the storefront takes over", () => {
+  const source = read("second-round-hero.mjs");
+  assert.match(source, /frameOpacity = smoothstep\(0\.48, 0\.64, p\)/);
+  assert.match(source, /second-round-active", p < 0\.985/);
+  assert.doesNotMatch(source, /surfaceOpacity|bridgeProgress|mediaOpacity/);
+});
+
+test("SECOND ROUND moves normal products directly after the cinematic section", () => {
   const source = read("second-round-hero.mjs");
   const css = read("second-round-hero.css");
-  assert.match(source, /second-round-surface/);
-  assert.match(source, /surfaceOpacity = smoothstep/);
-  assert.match(css, /\.second-round-surface\s*\{/);
-  assert.doesNotMatch(source, /grass_landing_plate|GRASS_PLATE|second-round-grass/);
-  assert.doesNotMatch(css, /second-round-grass|grass_landing_plate/);
-});
-
-test("SECOND ROUND final bridge removes the empty media card and restores the header", () => {
-  const source = read("second-round-hero.mjs");
-  const css = read("second-round-hero.css");
-  assert.match(source, /mediaOpacity = 1 - smoothstep\(0\.66, 0\.78, p\)/);
-  assert.match(source, /--sr-media-opacity/);
-  assert.match(source, /second-round-active", p < 0\.68/);
-  assert.match(css, /opacity:\s*var\(--sr-media-opacity\)/);
-  assert.match(css, /\.second-round-media\s*\{[^}]*transform:\s*none[^}]*box-shadow:\s*none/s);
-  assert.doesNotMatch(source, /mediaX\s*=\s*bridgeProgress|mediaScale\s*=\s*1 - bridgeProgress/);
-});
-
-test("SECOND ROUND final copy is deliberately two lines and CTA is compact", () => {
-  const source = read("second-round-hero.mjs");
-  const css = read("second-round-hero.css");
-  assert.match(source, /<h2><span>당신의 다음 라운드를<\/span><span>고르세요\.<\/span><\/h2>/);
-  assert.match(css, /\.second-round-bridge h2 span\s*\{[^}]*display:\s*block[^}]*white-space:\s*nowrap/s);
-  assert.match(css, /\.second-round-cta\s*\{[^}]*min-height:\s*44px[^}]*font-size:\s*12px/s);
-});
-
-test("SECOND ROUND moves products directly after the hero and CTA targets the first product card", () => {
-  const source = read("second-round-hero.mjs");
   assert.match(source, /section\.after\(products\)/);
   assert.match(source, /products\.insertBefore\(productGrid, carousel\)/);
-  assert.match(source, /#products \.featured-product-grid \.product-card/);
-  assert.match(source, /window\.scrollTo\(\{ top, behavior:/);
+  assert.match(css, /\.second-round-hero \+ #products[\s\S]*background: var\(--paper, #f7f6f1\)/);
+  assert.doesNotMatch(source, /scrollToFirstProductCard|window\.scrollTo/);
 });
