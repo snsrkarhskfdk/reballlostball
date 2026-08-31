@@ -11,5 +11,6 @@ test("paid order UI receives customer cancellation action only for completed ser
   assert.match(moduleText, /dataset\.paymentCancelOrder = orderId/);
   assert.match(moduleText, /orderCompletionCopy\(orderStatus, paymentStatus\)/);
   assert.match(moduleText, /formatOrderDateTime\(rawDate\)/);
-  assert.match(indexText, /payment-status-compat\.mjs\?v=20260829-01/);
+  assert.match(moduleText, /complete-page:not\(\.payment-return-page\)/);
+  assert.match(indexText, /payment-status-compat\.mjs\?v=20260831-01/);
 });
