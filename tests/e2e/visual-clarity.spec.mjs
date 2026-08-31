@@ -36,26 +36,43 @@ for (const viewport of [
   { name: "desktop", width: 1440, height: 900 },
   { name: "mobile", width: 390, height: 844 },
 ]) {
-  test(`SECOND ROUND video hands directly to the normal storefront on ${viewport.name}`, async ({ page }) => {
+  test(`SECOND ROUND keeps the full ending composition then hands to storefront on ${viewport.name}`, async ({ page }) => {
     await page.setViewportSize({ width: viewport.width, height: viewport.height });
     await page.goto("/#/");
 
     const hero = page.locator(".second-round-hero");
+    const video = page.locator(".second-round-video");
+    const ending = page.locator(".second-round-ending");
     const products = page.locator("#products");
+
     await expect(hero).toBeVisible();
     await expect(products).toHaveCount(1);
-    await expect(page.locator(".second-round-video")).toHaveCount(1);
+    await expect(video).toHaveCount(1);
+    await expect(ending).toHaveCount(1);
     await expect(page.locator(".second-round-frame")).toHaveCount(0);
     await expect(page.locator(".second-round-bridge")).toHaveCount(0);
     await expect(page.locator(".second-round-paper")).toHaveCount(0);
     await expect(page.locator("[data-second-round-cta]")).toHaveCount(0);
+    await expect(video).toHaveCSS("object-fit", "contain");
+    await expect(ending).toHaveCSS("object-fit", "contain");
 
     const directSibling = await hero.evaluate((node) => node.nextElementSibling?.id || "");
     expect(directSibling).toBe("products");
 
+    const nearEnd = await hero.evaluate((node) => {
+      const scrollable = Math.max(1, node.offsetHeight - window.innerHeight);
+      return node.offsetTop + scrollable * 0.94;
+    });
+    await page.evaluate((top) => window.scrollTo({ top, behavior: "instant" }), nearEnd);
+    await page.waitForTimeout(220);
+
+    await expect(ending).toBeVisible();
+    const endingOpacity = Number(await ending.evaluate((node) => getComputedStyle(node).opacity));
+    expect(endingOpacity).toBeGreaterThan(0.95);
+
     const heroBottom = await hero.evaluate((node) => node.offsetTop + node.offsetHeight);
     await page.evaluate((top) => window.scrollTo({ top, behavior: "instant" }), heroBottom);
-    await page.waitForTimeout(120);
+    await page.waitForTimeout(160);
 
     await expect(products).toBeVisible();
     await expect(page.locator(".site-header")).toBeVisible();
