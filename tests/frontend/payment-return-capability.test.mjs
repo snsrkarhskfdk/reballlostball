@@ -5,6 +5,7 @@ import {
   capturePaymentReturnCapability,
   replacePaymentReturnUrl,
 } from "../../src/frontend/core/router.mjs";
+import { loadGuestLookupSession } from "../../src/frontend/core/storage.mjs";
 import {
   browserPaymentReturnToken,
   confirmTossPayment,
@@ -76,12 +77,17 @@ test("retry preparation uses stored return capability when guest sessionStorage 
   assert.deepEqual(sentBody, { orderId, paymentReturnToken: returnToken });
 });
 
-test("success confirmation recovers capability from Toss return URL and clears it after success", async () => {
+test("success confirmation replaces lost guest identity with a refreshed lookup token", async () => {
   const storage = memoryStorage();
+  const refreshedLookupToken = "refreshed-guest-lookup-token";
   let sentBody;
   const fetchImpl = async (_url, init) => {
     sentBody = JSON.parse(init.body);
-    return okJson({ paid: true, order: { orderNo: orderId } });
+    return okJson({
+      paid: true,
+      order: { orderNo: orderId },
+      guestLookupToken: refreshedLookupToken,
+    });
   };
 
   const result = await confirmTossPayment({
@@ -102,6 +108,10 @@ test("success confirmation recovers capability from Toss return URL and clears i
   assert.equal(result.paid, true);
   assert.equal(sentBody.paymentReturnToken, returnToken);
   assert.equal(sentBody.guestLookupToken, undefined);
+  assert.deepEqual(loadGuestLookupSession(storage), {
+    orderId,
+    lookupToken: refreshedLookupToken,
+  });
   assert.equal(storage.getItem(paymentReturnStorageKey(orderId)), null);
 });
 
