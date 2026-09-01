@@ -61,15 +61,12 @@ export function replacePaymentReturnUrl(
   const basePath = new URL(".", documentRef.baseURI).pathname;
   let safeRoute = String(route || "/");
 
-  // Capture the scoped payment-only capability before scrubbing provider return
-  // parameters. It survives a mobile card-app round trip in this resumed tab but
-  // never remains visible in the browser URL after replaceState.
-  capturePaymentReturnCapability(locationRef, storageRef);
-
   // A failed Toss return must drop provider-sensitive query values such as
   // paymentKey/code/message/paymentReturnToken, while keeping the non-secret order
-  // number so a refresh can render the correct retry surface.
+  // number so a refresh can render the correct retry surface. Preserve only the
+  // scoped payment capability in sessionStorage before scrubbing the URL.
   if (safeRoute === "/payment/fail") {
+    capturePaymentReturnCapability(locationRef, storageRef);
     const orderId = String(paymentReturnParams(locationRef).get("orderId") || "").trim().toUpperCase();
     if (/^[A-Z0-9_-]{6,64}$/.test(orderId)) {
       safeRoute = `/payment/fail?orderId=${encodeURIComponent(orderId)}`;
