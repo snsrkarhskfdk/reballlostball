@@ -91,7 +91,7 @@ export function prepareTossPayment(config, orderId, guestLookupToken = "") {
   );
 }
 
-export async function confirmTossPayment(config, confirmation) {
+export function confirmTossPayment(config, confirmation) {
   const orderId = safeOrderId(confirmation?.orderId);
   const paymentKey = String(confirmation?.paymentKey || "").trim();
   const amount = Number(confirmation?.amount);
@@ -99,14 +99,17 @@ export async function confirmTossPayment(config, confirmation) {
   const explicitReturnToken = safeReturnToken(confirmation?.paymentReturnToken);
   const storage = config.storage ?? globalThis.sessionStorage;
   const locationLike = config.locationLike ?? globalThis.location;
-  const paymentReturnToken = explicitReturnToken
-    ? rememberPaymentReturnToken(orderId, explicitReturnToken, storage)
-    : browserPaymentReturnToken(orderId, { locationLike, storage });
+
   if (!orderId || paymentKey.length < 6
       || !Number.isSafeInteger(amount) || amount < 1) {
     throw new Error("결제 승인 정보가 올바르지 않습니다.");
   }
-  const result = await postJson(
+
+  const paymentReturnToken = explicitReturnToken
+    ? rememberPaymentReturnToken(orderId, explicitReturnToken, storage)
+    : browserPaymentReturnToken(orderId, { locationLike, storage });
+
+  return postJson(
     config.fetchImpl ?? fetch,
     `${String(config.baseUrl).replace(/\/$/, "")}/functions/v1/payment-confirm`,
     {
@@ -120,9 +123,10 @@ export async function confirmTossPayment(config, confirmation) {
       apikey: config.anonKey,
       ...(config.accessToken ? { Authorization: `Bearer ${config.accessToken}` } : {}),
     }
-  );
-  clearPaymentReturnToken(orderId, storage);
-  return result;
+  ).then((result) => {
+    clearPaymentReturnToken(orderId, storage);
+    return result;
+  });
 }
 
 export function loadTossSdk(documentRef = document, { timeoutMs = TOSS_SDK_TIMEOUT_MS } = {}) {
