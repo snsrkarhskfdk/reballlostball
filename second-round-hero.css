@@ -258,6 +258,18 @@ body.second-round-active .site-header {
   opacity: 1;
 }
 
+/* Break the cinematic out of the storefront's narrow content column on desktop.
+   92vw preserves a deliberate edge gutter while 1600px prevents overexpansion.
+   The media itself stays contain, so neither the video nor the golf ending is cropped. */
+@media (min-width: 1024px) {
+  .second-round-hero {
+    width: min(92vw, 1600px);
+    max-width: 1600px;
+    margin-left: calc(50% - min(46vw, 800px));
+    margin-right: 0;
+  }
+}
+
 @media (max-width: 760px) {
   .second-round-hero {
     height: 205vh;

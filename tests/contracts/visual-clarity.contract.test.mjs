@@ -45,6 +45,13 @@ test("SECOND ROUND keeps the real ending still but retires decorative landing UI
   assert.doesNotMatch(clarityCss, /READY FOR YOUR ROUND/);
 });
 
+test("SECOND ROUND desktop cinematic breaks out to 92vw without reintroducing crop", () => {
+  assert.match(heroCss, /@media \(min-width: 1024px\)[\s\S]*\.second-round-hero\s*\{[\s\S]*width:\s*min\(92vw, 1600px\)/s);
+  assert.match(heroCss, /max-width:\s*1600px/);
+  assert.match(heroCss, /margin-left:\s*calc\(50% - min\(46vw, 800px\)\)/);
+  assert.match(heroCss, /\.second-round-video,[\s\S]*\.second-round-ending\s*\{[\s\S]*object-fit:\s*contain/s);
+});
+
 test("visual clarity guard loads last while the Toss path base remains intact", () => {
   const baseIndex = indexHtml.indexOf('<base href="/" />');
   const accessibilityIndex = indexHtml.indexOf("accessibility-fixes.css");
@@ -52,6 +59,6 @@ test("visual clarity guard loads last while the Toss path base remains intact", 
   const clarityIndex = indexHtml.indexOf("visual-clarity-fixes.css");
   assert.ok(baseIndex > 0, "Toss path-form success redirect requires the root base href");
   assert.ok(accessibilityIndex > 0 && checkoutIndex > accessibilityIndex && clarityIndex > checkoutIndex);
-  assert.match(indexHtml, /second-round-hero\.css\?v=20260901-01/);
+  assert.match(indexHtml, /second-round-hero\.css\?v=20260901-02/);
   assert.match(indexHtml, /second-round-hero\.mjs\?v=20260901-01/);
 });
