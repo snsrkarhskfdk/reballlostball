@@ -43,11 +43,24 @@ Deno.serve(async (req: Request) => {
     const paymentKey = cleanString(body.paymentKey, 200);
     const amount = Number(body.amount);
     const guestToken = cleanString(body.guestLookupToken, 200);
-    const guestTokenHash = guestToken ? await sha256Hex(guestToken) : null;
+    let guestTokenHash = guestToken ? await sha256Hex(guestToken) : null;
+    const paymentReturnToken = cleanString(body.paymentReturnToken, 200).toLowerCase();
+
     if (!/^[A-Z0-9_-]{6,64}$/.test(orderNo) || paymentKey.length < 6
         || !Number.isSafeInteger(amount) || amount < 1) {
       throw new HttpError(400, "INVALID_PAYMENT_CONFIRMATION", "결제 승인 정보를 확인해 주세요.");
     }
+
+    // A mobile card-app round trip can resume the successUrl in a fresh browser
+    // context. Recover only the stored guest-token HASH from an order-scoped
+    // payment return capability; never place the guest lookup token itself in URLs.
+    if (!user && !guestTokenHash && /^[0-9a-f]{64}$/.test(paymentReturnToken)) {
+      guestTokenHash = await rpc<string | null>("resolve_payment_return_capability_v1", {
+        p_order_no: orderNo,
+        p_return_token: paymentReturnToken,
+      });
+    }
+
     if (!user && !guestTokenHash) throw new HttpError(403, "ORDER_ACCESS_DENIED", "주문을 확인할 수 없습니다.");
     await enforceRateLimit(req, "payment_confirm", `${user?.id || guestTokenHash}:${orderNo}`, 12, 900, 900);
 
