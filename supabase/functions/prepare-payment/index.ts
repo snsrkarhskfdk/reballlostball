@@ -1,4 +1,11 @@
-import { HttpError, cleanString, isExplicitNonProductionRuntime, sha256Hex } from "../_shared/core.ts";
+import {
+  HttpError,
+  cleanString,
+  constantTimeEqual,
+  hmacSha256Hex,
+  isExplicitNonProductionRuntime,
+  sha256Hex,
+} from "../_shared/core.ts";
 import {
   assertAllowedOrigin,
   jsonResponse,
@@ -30,6 +37,18 @@ function withPaymentReturnCapability(rawUrl: string, orderNo: string, returnToke
   return url.toString();
 }
 
+function paymentReturnSecret(): string {
+  const secret = Deno.env.get("GUEST_ORDER_TOKEN_SECRET") || "";
+  if (secret.length < 32) {
+    throw new HttpError(503, "SECURITY_CONFIG_MISSING", "결제 복귀 보안 설정을 확인할 수 없습니다.");
+  }
+  return secret;
+}
+
+async function paymentReturnCapability(orderNo: string): Promise<string> {
+  return hmacSha256Hex(paymentReturnSecret(), `payment-return-v2:${orderNo}`);
+}
+
 Deno.serve(async (req: Request) => {
   if (req.method === "OPTIONS") {
     try { return optionsResponse(req); } catch (error) { return publicErrorResponse(req, error); }
@@ -44,20 +63,22 @@ Deno.serve(async (req: Request) => {
     const orderNo = cleanString(body.orderNo ?? body.orderId, 64).toUpperCase();
     const guestToken = cleanString(body.guestLookupToken, 200);
     let guestTokenHash = guestToken ? await sha256Hex(guestToken) : null;
-    const paymentReturnToken = cleanString(body.paymentReturnToken, 200).toLowerCase();
+    const suppliedReturnToken = cleanString(body.paymentReturnToken, 200).toLowerCase();
 
     if (!/^[A-Z0-9_-]{6,64}$/.test(orderNo)) {
       throw new HttpError(404, "ORDER_NOT_FOUND", "주문을 확인할 수 없습니다.");
     }
 
-    // Mobile card-app round trips may resume in a fresh browser context where the
-    // guest sessionStorage token is gone. A scoped payment-return capability can
-    // restore only the server-side guest-token hash needed for payment retry.
-    if (!user && !guestTokenHash && /^[0-9a-f]{64}$/.test(paymentReturnToken)) {
-      guestTokenHash = await rpc<string | null>("resolve_payment_return_capability_v1", {
-        p_order_no: orderNo,
-        p_return_token: paymentReturnToken,
-      });
+    // The return capability is HMAC-bound to this order and independent of the
+    // current guest lookup hash. That keeps retries valid even after a successful
+    // mobile return rotates a fresh canonical guest lookup token.
+    if (!user && !guestTokenHash && /^[0-9a-f]{64}$/.test(suppliedReturnToken)) {
+      const expectedReturnToken = await paymentReturnCapability(orderNo);
+      if (constantTimeEqual(expectedReturnToken, suppliedReturnToken)) {
+        guestTokenHash = await rpc<string | null>("payment_return_guest_hash_v2", {
+          p_order_no: orderNo,
+        });
+      }
     }
 
     if (!user && !guestTokenHash) {
@@ -89,7 +110,7 @@ Deno.serve(async (req: Request) => {
     }[String(order.paymentMethod)] || "CARD";
 
     const returnToken = !user && guestTokenHash
-      ? await sha256Hex(`payment-return-v1:${guestTokenHash}:${orderNo}`)
+      ? await paymentReturnCapability(orderNo)
       : "";
     const successUrl = withPaymentReturnCapability(
       safeConfiguredUrl("TOSS_SUCCESS_URL"),
