@@ -1,5 +1,6 @@
 const TOSS_SDK_URL = "https://js.tosspayments.com/v2/standard";
 const TOSS_SDK_TIMEOUT_MS = 15_000;
+const PAYMENT_RETURN_STORAGE_PREFIX = "reball.paymentReturnToken.";
 let tossSdkPromise = null;
 
 async function postJson(fetchImpl, url, body, headers = {}) {
@@ -13,11 +14,72 @@ async function postJson(fetchImpl, url, body, headers = {}) {
   return payload;
 }
 
+function safeOrderId(value) {
+  const orderId = String(value || "").trim().toUpperCase();
+  return /^[A-Z0-9_-]{6,64}$/.test(orderId) ? orderId : "";
+}
+
+function safeReturnToken(value) {
+  const token = String(value || "").trim().toLowerCase();
+  return /^[0-9a-f]{64}$/.test(token) ? token : "";
+}
+
+function paramsFromLocation(locationLike = globalThis.location) {
+  const location = locationLike || { search: "", hash: "" };
+  const params = new URLSearchParams(String(location.search || ""));
+  const hash = String(location.hash || "").replace(/^#/, "");
+  const queryIndex = hash.indexOf("?");
+  if (queryIndex >= 0) {
+    for (const [key, value] of new URLSearchParams(hash.slice(queryIndex + 1))) {
+      if (!params.has(key)) params.set(key, value);
+    }
+  }
+  return params;
+}
+
+export function paymentReturnStorageKey(orderId) {
+  const safeId = safeOrderId(orderId);
+  return safeId ? `${PAYMENT_RETURN_STORAGE_PREFIX}${safeId}` : "";
+}
+
+export function rememberPaymentReturnToken(orderId, token, storage = globalThis.sessionStorage) {
+  const key = paymentReturnStorageKey(orderId);
+  const safeToken = safeReturnToken(token);
+  if (!key || !safeToken || !storage?.setItem) return "";
+  try { storage.setItem(key, safeToken); } catch { return ""; }
+  return safeToken;
+}
+
+export function browserPaymentReturnToken(orderId, {
+  locationLike = globalThis.location,
+  storage = globalThis.sessionStorage,
+} = {}) {
+  const safeId = safeOrderId(orderId);
+  if (!safeId) return "";
+  const fromUrl = safeReturnToken(paramsFromLocation(locationLike).get("paymentReturnToken"));
+  if (fromUrl) return rememberPaymentReturnToken(safeId, fromUrl, storage);
+  const key = paymentReturnStorageKey(safeId);
+  if (!key || !storage?.getItem) return "";
+  try { return safeReturnToken(storage.getItem(key)); } catch { return ""; }
+}
+
+function clearPaymentReturnToken(orderId, storage = globalThis.sessionStorage) {
+  const key = paymentReturnStorageKey(orderId);
+  if (!key || !storage?.removeItem) return;
+  try { storage.removeItem(key); } catch {}
+}
+
 export function prepareTossPayment(config, orderId, guestLookupToken = "") {
+  const safeId = safeOrderId(orderId);
+  const paymentReturnToken = guestLookupToken ? "" : browserPaymentReturnToken(safeId);
   return postJson(
     config.fetchImpl ?? fetch,
     `${String(config.baseUrl).replace(/\/$/, "")}/functions/v1/prepare-payment`,
-    { orderId, ...(guestLookupToken ? { guestLookupToken } : {}) },
+    {
+      orderId: safeId || orderId,
+      ...(guestLookupToken ? { guestLookupToken } : {}),
+      ...(paymentReturnToken ? { paymentReturnToken } : {}),
+    },
     {
       apikey: config.anonKey,
       ...(config.accessToken ? { Authorization: `Bearer ${config.accessToken}` } : {}),
@@ -25,24 +87,36 @@ export function prepareTossPayment(config, orderId, guestLookupToken = "") {
   );
 }
 
-export function confirmTossPayment(config, confirmation) {
-  const orderId = String(confirmation?.orderId || "").trim();
+export async function confirmTossPayment(config, confirmation) {
+  const orderId = safeOrderId(confirmation?.orderId);
   const paymentKey = String(confirmation?.paymentKey || "").trim();
   const amount = Number(confirmation?.amount);
   const guestLookupToken = String(confirmation?.guestLookupToken || "").trim();
-  if (!/^[A-Z0-9_-]{6,64}$/i.test(orderId) || paymentKey.length < 6
+  const explicitReturnToken = safeReturnToken(confirmation?.paymentReturnToken);
+  const paymentReturnToken = explicitReturnToken
+    ? rememberPaymentReturnToken(orderId, explicitReturnToken)
+    : browserPaymentReturnToken(orderId);
+  if (!orderId || paymentKey.length < 6
       || !Number.isSafeInteger(amount) || amount < 1) {
     throw new Error("결제 승인 정보가 올바르지 않습니다.");
   }
-  return postJson(
+  const result = await postJson(
     config.fetchImpl ?? fetch,
     `${String(config.baseUrl).replace(/\/$/, "")}/functions/v1/payment-confirm`,
-    { paymentKey, orderId, amount, ...(guestLookupToken ? { guestLookupToken } : {}) },
+    {
+      paymentKey,
+      orderId,
+      amount,
+      ...(guestLookupToken ? { guestLookupToken } : {}),
+      ...(!guestLookupToken && paymentReturnToken ? { paymentReturnToken } : {}),
+    },
     {
       apikey: config.anonKey,
       ...(config.accessToken ? { Authorization: `Bearer ${config.accessToken}` } : {}),
     }
   );
+  clearPaymentReturnToken(orderId);
+  return result;
 }
 
 export function loadTossSdk(documentRef = document, { timeoutMs = TOSS_SDK_TIMEOUT_MS } = {}) {
