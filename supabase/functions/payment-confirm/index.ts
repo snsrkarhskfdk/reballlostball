@@ -2,6 +2,9 @@ import {
   HttpError,
   ProviderError,
   cleanString,
+  constantTimeEqual,
+  hmacSha256Base64Url,
+  hmacSha256Hex,
   normalizePaymentMethod,
   safeIsoDate,
   sha256Hex,
@@ -25,6 +28,25 @@ import { rpc, sessionUser } from "../_shared/supabase.ts";
 
 const TOSS_CONFIRM_ENDPOINT = "https://api.tosspayments.com/v1/payments/confirm";
 
+function guestTokenSecret(): string {
+  const secret = Deno.env.get("GUEST_ORDER_TOKEN_SECRET") || "";
+  if (secret.length < 32) {
+    throw new HttpError(503, "SECURITY_CONFIG_MISSING", "결제 복귀 보안 설정을 확인할 수 없습니다.");
+  }
+  return secret;
+}
+
+async function expectedPaymentReturnCapability(orderNo: string): Promise<string> {
+  return hmacSha256Hex(guestTokenSecret(), `payment-return-v2:${orderNo}`);
+}
+
+async function recoveredGuestLookupToken(orderNo: string, paymentKeyHash: string): Promise<string> {
+  return hmacSha256Base64Url(
+    guestTokenSecret(),
+    `guest-order-recovery-v2:${orderNo}:${paymentKeyHash}`,
+  );
+}
+
 Deno.serve(async (req: Request) => {
   if (req.method === "OPTIONS") {
     try { return optionsResponse(req); } catch (error) { return publicErrorResponse(req, error); }
@@ -44,27 +66,49 @@ Deno.serve(async (req: Request) => {
     const amount = Number(body.amount);
     const guestToken = cleanString(body.guestLookupToken, 200);
     let guestTokenHash = guestToken ? await sha256Hex(guestToken) : null;
-    const paymentReturnToken = cleanString(body.paymentReturnToken, 200).toLowerCase();
+    const suppliedReturnToken = cleanString(body.paymentReturnToken, 200).toLowerCase();
+    let recoveredThroughReturnCapability = false;
 
     if (!/^[A-Z0-9_-]{6,64}$/.test(orderNo) || paymentKey.length < 6
         || !Number.isSafeInteger(amount) || amount < 1) {
       throw new HttpError(400, "INVALID_PAYMENT_CONFIRMATION", "결제 승인 정보를 확인해 주세요.");
     }
 
-    // A mobile card-app round trip can resume the successUrl in a fresh browser
-    // context. Recover only the stored guest-token HASH from an order-scoped
-    // payment return capability; never place the guest lookup token itself in URLs.
-    if (!user && !guestTokenHash && /^[0-9a-f]{64}$/.test(paymentReturnToken)) {
-      guestTokenHash = await rpc<string | null>("resolve_payment_return_capability_v1", {
-        p_order_no: orderNo,
-        p_return_token: paymentReturnToken,
-      });
+    // On Android/iOS the card app can resume the success URL in a fresh browser
+    // context. Validate the order-scoped HMAC capability at the Edge boundary,
+    // then recover only the current guest-token hash through a service-only RPC.
+    if (!user && !guestTokenHash && /^[0-9a-f]{64}$/.test(suppliedReturnToken)) {
+      const expectedReturnToken = await expectedPaymentReturnCapability(orderNo);
+      if (constantTimeEqual(expectedReturnToken, suppliedReturnToken)) {
+        guestTokenHash = await rpc<string | null>("payment_return_guest_hash_v2", {
+          p_order_no: orderNo,
+        });
+        recoveredThroughReturnCapability = Boolean(guestTokenHash);
+      }
     }
 
     if (!user && !guestTokenHash) throw new HttpError(403, "ORDER_ACCESS_DENIED", "주문을 확인할 수 없습니다.");
     await enforceRateLimit(req, "payment_confirm", `${user?.id || guestTokenHash}:${orderNo}`, 12, 900, 900);
 
     const paymentKeyHash = await sha256Hex(paymentKey);
+    const replacementGuestLookupToken = recoveredThroughReturnCapability
+      ? await recoveredGuestLookupToken(orderNo, paymentKeyHash)
+      : null;
+    const replacementGuestLookupTokenHash = replacementGuestLookupToken
+      ? await sha256Hex(replacementGuestLookupToken)
+      : null;
+
+    const rotateGuestLookupToken = async (orderLike: Record<string, unknown>): Promise<string | null> => {
+      if (!replacementGuestLookupToken || !replacementGuestLookupTokenHash) return null;
+      const status = String(orderLike.status || "");
+      if (!new Set(["paid", "waiting_for_deposit"]).has(status)) return null;
+      const rotated = await rpc<boolean>("rotate_guest_lookup_token_after_payment_v2", {
+        p_order_no: orderNo,
+        p_new_guest_token_hash: replacementGuestLookupTokenHash,
+      });
+      return rotated ? replacementGuestLookupToken : null;
+    };
+
     attemptKey = `confirm_${await sha256Hex(`${orderNo}:${paymentKeyHash}`)}`;
     const requestHash = await sha256Hex(stableStringify({ orderNo, paymentKeyHash, amount }));
     const claim = await rpc<Record<string, unknown>>("claim_payment_confirmation_v1", {
@@ -84,7 +128,12 @@ Deno.serve(async (req: Request) => {
       throw new HttpError(409, "ORDER_CANCELLATION_PENDING", "취소 처리 중인 주문입니다.");
     }
     if (claim.alreadyFinalized === true || claim.attemptStatus === "succeeded") {
-      return jsonResponse(req, { order: claim, duplicate: true });
+      const refreshedLookupToken = await rotateGuestLookupToken(claim);
+      return jsonResponse(req, {
+        order: claim,
+        duplicate: true,
+        ...(refreshedLookupToken ? { guestLookupToken: refreshedLookupToken } : {}),
+      });
     }
     if (claim.attemptStatus === "failed") {
       throw new HttpError(409, "PAYMENT_RETRY_REQUIRES_NEW_ORDER", "실패한 주문은 재고를 다시 확인한 뒤 새 주문으로 결제해 주세요.");
@@ -112,7 +161,6 @@ Deno.serve(async (req: Request) => {
       });
     } catch (error) {
       if (error instanceof ProviderError) {
-        // A timeout or 5xx can occur after Toss accepted the confirmation. Query before deciding.
         if (!error.definitive) {
           try {
             const queried = await provider.get(paymentKey);
@@ -196,7 +244,14 @@ Deno.serve(async (req: Request) => {
     if (order.status === "paid" && normalized.status !== "DONE") {
       throw new HttpError(500, "INVALID_PAID_TRANSITION", "결제 상태를 확정하지 못했습니다.");
     }
-    return jsonResponse(req, { order, paid: normalized.status === "DONE", waitingForDeposit: normalized.status === "WAITING_FOR_DEPOSIT" });
+
+    const refreshedLookupToken = await rotateGuestLookupToken(order);
+    return jsonResponse(req, {
+      order,
+      paid: normalized.status === "DONE",
+      waitingForDeposit: normalized.status === "WAITING_FOR_DEPOSIT",
+      ...(refreshedLookupToken ? { guestLookupToken: refreshedLookupToken } : {}),
+    });
   } catch (error) {
     if (!(error instanceof HttpError || error instanceof ProviderError)) safeLog("payment-confirm", req, "UNEXPECTED_ERROR");
     return publicErrorResponse(req, error, "결제 승인 요청을 처리하지 못했습니다.");
