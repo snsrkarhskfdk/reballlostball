@@ -70,7 +70,8 @@ function clearPaymentReturnToken(orderId, storage = globalThis.sessionStorage) {
 }
 
 export function prepareTossPayment(config, orderId, guestLookupToken = "") {
-  const safeId = safeOrderId(orderId);
+  const rawOrderId = String(orderId || "").trim();
+  const safeId = safeOrderId(rawOrderId);
   const storage = config.storage ?? globalThis.sessionStorage;
   const locationLike = config.locationLike ?? globalThis.location;
   const paymentReturnToken = guestLookupToken
@@ -80,7 +81,7 @@ export function prepareTossPayment(config, orderId, guestLookupToken = "") {
     config.fetchImpl ?? fetch,
     `${String(config.baseUrl).replace(/\/$/, "")}/functions/v1/prepare-payment`,
     {
-      orderId: safeId || orderId,
+      orderId: rawOrderId,
       ...(guestLookupToken ? { guestLookupToken } : {}),
       ...(paymentReturnToken ? { paymentReturnToken } : {}),
     },
