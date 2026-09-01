@@ -56,6 +56,16 @@ for (const viewport of [
     await expect(video).toHaveCSS("object-fit", "contain");
     await expect(ending).toHaveCSS("object-fit", "contain");
 
+    const heroBox = await hero.boundingBox();
+    expect(heroBox).not.toBeNull();
+    if (viewport.name === "desktop") {
+      const expectedWidth = Math.min(viewport.width * 0.92, 1600);
+      expect(Math.abs(heroBox.width - expectedWidth)).toBeLessThan(2);
+      expect(Math.abs(heroBox.x - ((viewport.width - heroBox.width) / 2))).toBeLessThan(2);
+    } else {
+      expect(heroBox.width).toBeLessThanOrEqual(viewport.width + 1);
+    }
+
     const directSibling = await hero.evaluate((node) => node.nextElementSibling?.id || "");
     expect(directSibling).toBe("products");
 
