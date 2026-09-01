@@ -1,3 +1,5 @@
+import { saveGuestLookupSession } from "../core/storage.mjs";
+
 const TOSS_SDK_URL = "https://js.tosspayments.com/v2/standard";
 const TOSS_SDK_TIMEOUT_MS = 15_000;
 const PAYMENT_RETURN_STORAGE_PREFIX = "reball.paymentReturnToken.";
@@ -125,6 +127,13 @@ export function confirmTossPayment(config, confirmation) {
       ...(config.accessToken ? { Authorization: `Bearer ${config.accessToken}` } : {}),
     }
   ).then((result) => {
+    const refreshedGuestLookupToken = String(result?.guestLookupToken || "").trim();
+    if (refreshedGuestLookupToken) {
+      saveGuestLookupSession(storage, {
+        orderId,
+        lookupToken: refreshedGuestLookupToken,
+      });
+    }
     clearPaymentReturnToken(orderId, storage);
     return result;
   });
