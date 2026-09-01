@@ -22,6 +22,14 @@ function safeConfiguredUrl(name: string): string {
   }
 }
 
+function withPaymentReturnCapability(rawUrl: string, orderNo: string, returnToken: string): string {
+  if (!returnToken) return rawUrl;
+  const url = new URL(rawUrl);
+  url.searchParams.set("orderId", orderNo);
+  url.searchParams.set("paymentReturnToken", returnToken);
+  return url.toString();
+}
+
 Deno.serve(async (req: Request) => {
   if (req.method === "OPTIONS") {
     try { return optionsResponse(req); } catch (error) { return publicErrorResponse(req, error); }
@@ -32,12 +40,30 @@ Deno.serve(async (req: Request) => {
     const body = await readJson(req, 16 * 1024);
     const user = await sessionUser(req);
     if (req.headers.has("authorization") && !user) throw new HttpError(401, "AUTH_REQUIRED", "로그인 상태를 확인해 주세요.");
+
     const orderNo = cleanString(body.orderNo ?? body.orderId, 64).toUpperCase();
     const guestToken = cleanString(body.guestLookupToken, 200);
-    const guestTokenHash = guestToken ? await sha256Hex(guestToken) : null;
-    if (!/^[A-Z0-9_-]{6,64}$/.test(orderNo) || (!user && !guestTokenHash)) {
+    let guestTokenHash = guestToken ? await sha256Hex(guestToken) : null;
+    const paymentReturnToken = cleanString(body.paymentReturnToken, 200).toLowerCase();
+
+    if (!/^[A-Z0-9_-]{6,64}$/.test(orderNo)) {
       throw new HttpError(404, "ORDER_NOT_FOUND", "주문을 확인할 수 없습니다.");
     }
+
+    // Mobile card-app round trips may resume in a fresh browser context where the
+    // guest sessionStorage token is gone. A scoped payment-return capability can
+    // restore only the server-side guest-token hash needed for payment retry.
+    if (!user && !guestTokenHash && /^[0-9a-f]{64}$/.test(paymentReturnToken)) {
+      guestTokenHash = await rpc<string | null>("resolve_payment_return_capability_v1", {
+        p_order_no: orderNo,
+        p_return_token: paymentReturnToken,
+      });
+    }
+
+    if (!user && !guestTokenHash) {
+      throw new HttpError(404, "ORDER_NOT_FOUND", "주문을 확인할 수 없습니다.");
+    }
+
     await enforceRateLimit(req, "payment_prepare", `${user?.id || guestTokenHash}:${orderNo}`, 20, 900, 900);
     const order = await rpc<Record<string, unknown> | null>("get_order_v1", {
       p_order_no: orderNo,
@@ -49,18 +75,33 @@ Deno.serve(async (req: Request) => {
       throw new HttpError(409, "ORDER_NOT_PAYMENT_READY", "현재 결제할 수 없는 주문입니다.");
     }
     if (order.paymentProvider === "mock") assertMockPaymentProviderAllowed();
+
     const clientKey = Deno.env.get("TOSS_PAYMENTS_CLIENT_KEY") || "";
     if (order.paymentProvider === "toss_payments" && !/^(test|live)_(g?ck)_/.test(clientKey)) {
       throw new HttpError(503, "PAYMENT_CONFIG_MISSING", "결제 설정을 확인할 수 없습니다.");
     }
+
     const method = {
       card: "CARD",
       transfer: "TRANSFER",
       virtual_account: "VIRTUAL_ACCOUNT",
       easy_pay: "CARD",
     }[String(order.paymentMethod)] || "CARD";
-    const successUrl = safeConfiguredUrl("TOSS_SUCCESS_URL");
-    const failUrl = safeConfiguredUrl("TOSS_FAIL_URL");
+
+    const returnToken = !user && guestTokenHash
+      ? await sha256Hex(`payment-return-v1:${guestTokenHash}:${orderNo}`)
+      : "";
+    const successUrl = withPaymentReturnCapability(
+      safeConfiguredUrl("TOSS_SUCCESS_URL"),
+      orderNo,
+      returnToken,
+    );
+    const failUrl = withPaymentReturnCapability(
+      safeConfiguredUrl("TOSS_FAIL_URL"),
+      orderNo,
+      returnToken,
+    );
+
     return jsonResponse(req, {
       orderId: order.orderNo,
       orderName: order.orderName,

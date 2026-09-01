@@ -2,6 +2,8 @@ function currentLocation(locationLike) {
   return locationLike ?? globalThis.location ?? { hash: "", pathname: "", search: "" };
 }
 
+const PAYMENT_RETURN_STORAGE_PREFIX = "reball.paymentReturnToken.";
+
 export function parseRoute(locationLike) {
   const { hash = "" } = currentLocation(locationLike);
   const raw = String(hash).replace(/^#/, "") || "/";
@@ -31,21 +33,40 @@ export function paymentReturnParams(locationLike) {
   return params;
 }
 
+export function capturePaymentReturnCapability(
+  locationLike = globalThis.location,
+  storageRef = globalThis.sessionStorage,
+) {
+  const params = paymentReturnParams(locationLike);
+  const orderId = String(params.get("orderId") || "").trim().toUpperCase();
+  const token = String(params.get("paymentReturnToken") || "").trim().toLowerCase();
+  if (!/^[A-Z0-9_-]{6,64}$/.test(orderId) || !/^[0-9a-f]{64}$/.test(token)) return "";
+  try {
+    storageRef?.setItem?.(`${PAYMENT_RETURN_STORAGE_PREFIX}${orderId}`, token);
+    return token;
+  } catch {
+    return "";
+  }
+}
+
 export function replacePaymentReturnUrl(
   route,
   {
     documentRef = globalThis.document,
     historyRef = globalThis.history,
     locationRef = globalThis.location,
+    storageRef = globalThis.sessionStorage,
   } = {}
 ) {
   const basePath = new URL(".", documentRef.baseURI).pathname;
   let safeRoute = String(route || "/");
 
   // A failed Toss return must drop provider-sensitive query values such as
-  // paymentKey/code/message, but keeping the non-secret order number lets a
-  // customer refresh the fail page and still retry the same server order.
+  // paymentKey/code/message/paymentReturnToken, while keeping the non-secret order
+  // number so a refresh can render the correct retry surface. Preserve only the
+  // scoped payment capability in sessionStorage before scrubbing the URL.
   if (safeRoute === "/payment/fail") {
+    capturePaymentReturnCapability(locationRef, storageRef);
     const orderId = String(paymentReturnParams(locationRef).get("orderId") || "").trim().toUpperCase();
     if (/^[A-Z0-9_-]{6,64}$/.test(orderId)) {
       safeRoute = `/payment/fail?orderId=${encodeURIComponent(orderId)}`;
