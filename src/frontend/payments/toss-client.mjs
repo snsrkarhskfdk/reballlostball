@@ -71,7 +71,11 @@ function clearPaymentReturnToken(orderId, storage = globalThis.sessionStorage) {
 
 export function prepareTossPayment(config, orderId, guestLookupToken = "") {
   const safeId = safeOrderId(orderId);
-  const paymentReturnToken = guestLookupToken ? "" : browserPaymentReturnToken(safeId);
+  const storage = config.storage ?? globalThis.sessionStorage;
+  const locationLike = config.locationLike ?? globalThis.location;
+  const paymentReturnToken = guestLookupToken
+    ? ""
+    : browserPaymentReturnToken(safeId, { locationLike, storage });
   return postJson(
     config.fetchImpl ?? fetch,
     `${String(config.baseUrl).replace(/\/$/, "")}/functions/v1/prepare-payment`,
@@ -93,9 +97,11 @@ export async function confirmTossPayment(config, confirmation) {
   const amount = Number(confirmation?.amount);
   const guestLookupToken = String(confirmation?.guestLookupToken || "").trim();
   const explicitReturnToken = safeReturnToken(confirmation?.paymentReturnToken);
+  const storage = config.storage ?? globalThis.sessionStorage;
+  const locationLike = config.locationLike ?? globalThis.location;
   const paymentReturnToken = explicitReturnToken
-    ? rememberPaymentReturnToken(orderId, explicitReturnToken)
-    : browserPaymentReturnToken(orderId);
+    ? rememberPaymentReturnToken(orderId, explicitReturnToken, storage)
+    : browserPaymentReturnToken(orderId, { locationLike, storage });
   if (!orderId || paymentKey.length < 6
       || !Number.isSafeInteger(amount) || amount < 1) {
     throw new Error("결제 승인 정보가 올바르지 않습니다.");
@@ -115,7 +121,7 @@ export async function confirmTossPayment(config, confirmation) {
       ...(config.accessToken ? { Authorization: `Bearer ${config.accessToken}` } : {}),
     }
   );
-  clearPaymentReturnToken(orderId);
+  clearPaymentReturnToken(orderId, storage);
   return result;
 }
 
