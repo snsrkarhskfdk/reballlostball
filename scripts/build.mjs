@@ -28,11 +28,20 @@ function shouldCopyAsset(sourcePath) {
 await rm(outputDir, { recursive: true, force: true });
 await mkdir(outputDir, { recursive: true });
 
-for (const file of ["app.js", "styles.css", "second-round-hero.mjs", "second-round-hero.css"]) {
+for (const file of [
+  "app.js",
+  "styles.css",
+  "second-round-hero.mjs",
+  "second-round-hero.css",
+  "store-manager.mjs",
+  "store-manager.css",
+]) {
   await copyFile(file, `${outputDir}/${file}`);
 }
 const indexHtml = await readFile("index.html", "utf8");
 await writeFile(`${outputDir}/index.html`, injectPublicConfig(indexHtml), "utf8");
+const storeManagerHtml = await readFile("store-manager.html", "utf8");
+await writeFile(`${outputDir}/store-manager.html`, injectPublicConfig(storeManagerHtml), "utf8");
 
 for (const optionalFile of ["CNAME", ".nojekyll"]) {
   if (existsSync(optionalFile)) {
