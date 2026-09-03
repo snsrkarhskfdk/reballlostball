@@ -4,6 +4,14 @@
   "outputDirectory": "dist",
   "rewrites": [
     {
+      "source": "/store-manager",
+      "destination": "/store-manager.html"
+    },
+    {
+      "source": "/store-manager/",
+      "destination": "/store-manager.html"
+    },
+    {
       "source": "/(.*)",
       "destination": "/index.html"
     }
