@@ -34,6 +34,71 @@ for update to authenticated
 using (private.has_role('store_manager'::text))
 with check (private.has_role('store_manager'::text));
 
+-- RLS decides which rows may be touched. These triggers additionally pin which columns
+-- a store_manager-only actor may change, so browser devtools cannot widen the UI scope.
+create or replace function private.guard_store_manager_product_update_v1()
+returns trigger
+language plpgsql
+security definer
+set search_path to ''
+as $function$
+begin
+  if private.has_role('store_manager'::text)
+     and not private.has_role('owner_admin'::text)
+     and not private.has_role('inventory_manager'::text) then
+    if new.id is distinct from old.id
+       or new.brand_id is distinct from old.brand_id
+       or new.slug is distinct from old.slug
+       or new.name is distinct from old.name
+       or new.subtitle is distinct from old.subtitle
+       or new.summary is distinct from old.summary
+       or new.sale_type is distinct from old.sale_type
+       or new.featured is distinct from old.featured
+       or new.created_at is distinct from old.created_at then
+      raise exception using errcode = '42501', message = 'store manager product field denied';
+    end if;
+  end if;
+  return new;
+end;
+$function$;
+
+create or replace function private.guard_store_manager_variant_update_v1()
+returns trigger
+language plpgsql
+security definer
+set search_path to ''
+as $function$
+begin
+  if private.has_role('store_manager'::text)
+     and not private.has_role('owner_admin'::text)
+     and not private.has_role('inventory_manager'::text) then
+    if new.id is distinct from old.id
+       or new.product_id is distinct from old.product_id
+       or new.sku is distinct from old.sku
+       or new.option_model is distinct from old.option_model
+       or new.option_color is distinct from old.option_color
+       or new.option_design is distinct from old.option_design
+       or new.grade is distinct from old.grade
+       or new.pack_size is distinct from old.pack_size
+       or new.compare_at_krw is distinct from old.compare_at_krw
+       or new.created_at is distinct from old.created_at then
+      raise exception using errcode = '42501', message = 'store manager variant field denied';
+    end if;
+  end if;
+  return new;
+end;
+$function$;
+
+drop trigger if exists products_store_manager_field_guard on public.products;
+create trigger products_store_manager_field_guard
+before update on public.products
+for each row execute function private.guard_store_manager_product_update_v1();
+
+drop trigger if exists product_variants_store_manager_field_guard on public.product_variants;
+create trigger product_variants_store_manager_field_guard
+before update on public.product_variants
+for each row execute function private.guard_store_manager_variant_update_v1();
+
 -- Store managers can read fulfillment data, but no direct order mutation is granted.
 drop policy if exists orders_store_manager_select on public.orders;
 create policy orders_store_manager_select on public.orders
