@@ -76,17 +76,17 @@ async function sessionUser(req: Request): Promise<{ id: string } | null> {
   return payload?.id ? { id: String(payload.id) } : null;
 }
 
-async function isAdmin(userId: string): Promise<boolean> {
+async function canManageShipping(userId: string): Promise<boolean> {
   const params = new URLSearchParams({
     select: "role",
     user_id: `eq.${userId}`,
-    role: "in.(owner_admin,cs_manager)",
-    limit: "2",
+    role: "in.(owner_admin,cs_manager,store_manager)",
+    limit: "3",
   });
   const response = await fetch(`${supabaseUrl()}/rest/v1/user_roles?${params}`, { headers: serviceHeaders() });
   if (!response.ok) return false;
   const rows = await response.json().catch(() => []);
-  return Array.isArray(rows) && rows.some((row) => row.role === "owner_admin" || row.role === "cs_manager");
+  return Array.isArray(rows) && rows.some((row) => new Set(["owner_admin", "cs_manager", "store_manager"]).has(row.role));
 }
 
 async function updateShipping(body: Record<string, unknown>): Promise<unknown> {
@@ -120,7 +120,7 @@ Deno.serve(async (req: Request) => {
 
     const user = await sessionUser(req);
     if (!user) throw new HttpError(401, "AUTH_REQUIRED", "관리자 로그인이 필요합니다.");
-    if (!(await isAdmin(user.id))) throw new HttpError(403, "ADMIN_ACCESS_DENIED", "배송 정보를 변경할 권한이 없습니다.");
+    if (!(await canManageShipping(user.id))) throw new HttpError(403, "ADMIN_ACCESS_DENIED", "배송 정보를 변경할 권한이 없습니다.");
 
     const body = await req.json().catch(() => ({}));
     const orderId = clean(body.orderId, 36).toLowerCase();
