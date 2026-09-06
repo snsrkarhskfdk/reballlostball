@@ -45,3 +45,6 @@ verify_jwt = false
 
 [functions.admin-console]
 verify_jwt = false
+
+[functions.admin-ops-extra]
+verify_jwt = false
