@@ -11,16 +11,17 @@
     <meta name="reball-toss-client-key" content="" />
     <meta name="reball-captcha-provider" content="" />
     <meta name="reball-captcha-site-key" content="" />
-    <title>리볼 로스트볼 | 매장 운영</title>
-    <link rel="stylesheet" href="/store-manager.css?v=20260903-02" />
+    <title>리볼 로스트볼 | 관리자</title>
+    <link rel="stylesheet" href="/store-manager.css?v=20260907-01" />
   </head>
   <body>
     <header class="sm-header">
       <a class="sm-brand" href="/" aria-label="리볼 로스트볼 홈">
         <span class="sm-ball" aria-hidden="true"></span>
-        <span><b>리볼 로스트볼</b><small>STORE MANAGER</small></span>
+        <span><b>리볼 로스트볼</b><small>ADMIN & STORE OPS</small></span>
       </a>
       <div class="sm-header-actions">
+        <span class="sm-role" data-role-label hidden></span>
         <span class="sm-user" data-user-label hidden></span>
         <button class="sm-button sm-button--ghost" type="button" data-logout hidden>로그아웃</button>
       </div>
@@ -29,9 +30,9 @@
     <main class="sm-main">
       <section class="sm-login" data-login-panel>
         <div class="sm-login-card">
-          <p class="sm-eyebrow">REBALL STORE OPS</p>
-          <h1>매장 운영자 로그인</h1>
-          <p>상품 사진·가격·재고·판매상태와 송장 업무만 처리하는 전용 화면입니다. 정산·권한 설정 같은 고위험 기능은 별도 관리 영역으로 분리되어 있습니다.</p>
+          <p class="sm-eyebrow">REBALL ADMIN</p>
+          <h1>관리자 로그인</h1>
+          <p>상품·재고·주문·배송부터 취소/반품, 회원, 리뷰, 프로모션, 매출, 사업자 설정까지 역할별 권한으로 관리합니다.</p>
           <form data-login-form>
             <label>관리자 이메일<input type="email" name="email" autocomplete="username" required /></label>
             <label>비밀번호<input type="password" name="password" autocomplete="current-password" minlength="8" required /></label>
@@ -44,8 +45,8 @@
       <section class="sm-denied" data-denied-panel hidden>
         <div class="sm-login-card">
           <p class="sm-eyebrow">ACCESS LIMITED</p>
-          <h1>매장 운영 권한이 없습니다.</h1>
-          <p>이 계정에 <b>store_manager</b> 권한이 지정되면 사용할 수 있습니다.</p>
+          <h1>관리자 권한이 없습니다.</h1>
+          <p>이 계정에 매장·CS·재고·결제·대표 관리자 권한이 지정되면 사용할 수 있습니다.</p>
           <button class="sm-button sm-button--ghost" type="button" data-logout>다른 계정으로 로그인</button>
         </div>
       </section>
@@ -53,46 +54,128 @@
       <section class="sm-app" data-app-panel hidden>
         <div class="sm-hero">
           <div>
-            <p class="sm-eyebrow">REBALL STORE OPS</p>
-            <h1>오늘 필요한 운영만.</h1>
-            <p>사진 교체, 가격·재고·판매상태 수정, 주문 송장 등록을 한 곳에서 처리합니다.</p>
+            <p class="sm-eyebrow">REBALL OPERATIONS</p>
+            <h1>판매 운영을 한 화면에서.</h1>
+            <p>오늘 주문과 매출, 재고 경보, 상품·배송·CS·회원·프로모션·설정을 역할별로 관리합니다.</p>
           </div>
           <div class="sm-summary" data-summary></div>
         </div>
 
-        <nav class="sm-tabs" aria-label="매장 운영 메뉴">
-          <button type="button" class="is-active" data-tab="products">상품 관리</button>
-          <button type="button" data-tab="shipping">주문 · 송장</button>
+        <nav class="sm-tabs sm-tabs--scroll" aria-label="관리자 운영 메뉴">
+          <button type="button" data-tab="dashboard" data-admin-tab="dashboard" hidden>대시보드</button>
+          <button type="button" class="is-active" data-tab="products">상품 · 재고</button>
+          <button type="button" data-tab="shipping">주문 · 배송</button>
+          <button type="button" data-tab="returns" data-admin-tab="returns" hidden>취소 · 반품</button>
+          <button type="button" data-tab="inquiry" data-admin-tab="inquiry" hidden>문의</button>
+          <button type="button" data-tab="promo" data-admin-tab="promo" hidden>쿠폰 · 배너</button>
+          <button type="button" data-tab="pos" data-admin-tab="pos" hidden>POS</button>
+          <button type="button" data-tab="settlement" data-admin-tab="settlement" hidden>매출 · 정산</button>
+          <button type="button" data-tab="customer" data-admin-tab="customer" hidden>회원</button>
+          <button type="button" data-tab="review" data-admin-tab="review" hidden>리뷰</button>
+          <button type="button" data-tab="settings" data-admin-tab="settings" hidden>설정 · 권한</button>
         </nav>
+
+        <section class="sm-panel" data-panel="dashboard" hidden>
+          <div class="sm-panel-head"><div><p class="sm-eyebrow">DASHBOARD</p><h2>오늘 운영 현황</h2></div><button class="sm-button" type="button" data-admin-reload="dashboard">새로고침</button></div>
+          <div class="sm-metric-grid" data-dashboard-metrics></div>
+          <div class="sm-split-grid"><div><h3>처리 필요</h3><div data-dashboard-alerts></div></div><div><h3>최근 주문</h3><div data-dashboard-orders></div></div></div>
+        </section>
 
         <section class="sm-panel" data-panel="products">
           <div class="sm-panel-head">
             <div><p class="sm-eyebrow">PRODUCTS</p><h2>상품 사진 · 가격 · 재고 · 판매상태</h2></div>
             <div class="sm-panel-actions">
               <input class="sm-search" type="search" placeholder="상품명·브랜드 검색" data-product-search />
+              <button class="sm-button" type="button" data-product-create-toggle hidden>새 상품</button>
               <button class="sm-button sm-button--ghost" type="button" data-reload-products>새로고침</button>
             </div>
           </div>
-          <p class="sm-help">사진은 휴대폰에서 바로 선택할 수 있습니다. 업로드 시 긴 변 1600px 이하 WebP로 자동 변환하고, 이전 파일은 남겨 두어 실수로 덮어쓰지 않습니다.</p>
+          <p class="sm-help">사진은 휴대폰에서 바로 선택할 수 있습니다. 업로드 시 긴 변 1600px 이하 WebP로 자동 변환합니다. 판매중지와 재고 0은 즉시 쇼핑몰 판매 가능 여부에 반영됩니다.</p>
+          <form class="sm-inline-form sm-create-product" data-product-create-form hidden>
+            <h3>새 상품 + 첫 SKU 등록</h3>
+            <div class="sm-form-grid">
+              <label>브랜드<select class="sm-select" name="brandId" required data-brand-options></select></label>
+              <label>상품명<input class="sm-input" name="name" required maxlength="120" /></label>
+              <label>슬러그<input class="sm-input" name="slug" required pattern="[a-z0-9]+(-[a-z0-9]+)*" placeholder="brand-model-lostball" /></label>
+              <label>설명<input class="sm-input" name="subtitle" maxlength="200" /></label>
+              <label>SKU<input class="sm-input" name="sku" required maxlength="100" /></label>
+              <label>모델<input class="sm-input" name="model" maxlength="100" /></label>
+              <label>색상<input class="sm-input" name="color" value="화이트" maxlength="60" /></label>
+              <label>등급<select class="sm-select" name="grade"><option>S</option><option>A_PLUS</option><option>A</option><option>B</option></select></label>
+              <label>구성(구)<input class="sm-input" name="pack" type="number" min="1" value="10" required /></label>
+              <label>가격<input class="sm-input" name="price" type="number" min="1" step="100" required /></label>
+              <label>재고<input class="sm-input" name="stock" type="number" min="0" value="0" required /></label>
+            </div>
+            <div class="sm-panel-actions"><button class="sm-button sm-button--primary" type="submit">상품 등록</button><button class="sm-button" type="button" data-product-create-cancel>취소</button></div>
+          </form>
           <div class="sm-product-list" data-product-list></div>
         </section>
 
         <section class="sm-panel" data-panel="shipping" hidden>
           <div class="sm-panel-head">
-            <div><p class="sm-eyebrow">FULFILLMENT</p><h2>결제완료 주문 · 송장관리</h2></div>
+            <div><p class="sm-eyebrow">ORDERS & FULFILLMENT</p><h2>주문 · 송장관리</h2></div>
             <div class="sm-panel-actions">
               <input class="sm-search" type="search" placeholder="주문번호·수취인 검색" data-order-search />
               <button class="sm-button sm-button--ghost" type="button" data-reload-orders>새로고침</button>
             </div>
           </div>
-          <p class="sm-help">승인·취소 같은 결제상태는 여기서 변경하지 않습니다. 배송준비 → 송장등록/출고 → 배송완료만 처리합니다.</p>
+          <p class="sm-help">배송준비 → 송장등록/출고 → 배송완료를 처리합니다. 결제 취소/환불은 권한이 있는 계정의 ‘취소 · 반품’ 탭에서만 가능합니다.</p>
           <div class="sm-order-list" data-order-list></div>
+        </section>
+
+        <section class="sm-panel" data-panel="returns" hidden>
+          <div class="sm-panel-head"><div><p class="sm-eyebrow">RETURNS</p><h2>취소 · 반품 · 교환</h2></div><div class="sm-panel-actions"><select class="sm-select" data-return-filter><option value="all">전체</option><option value="cancelable">결제취소 가능</option><option value="requested">접수됨</option><option value="completed">완료</option></select><button class="sm-button" data-admin-reload="returns">새로고침</button></div></div>
+          <p class="sm-help">결제완료 후 출고 전 주문만 Toss 전액 취소할 수 있습니다. 배송 이후 반품/교환은 요청 건으로 기록해 CS 이력을 남깁니다.</p>
+          <div data-return-list class="sm-card-list"></div>
+        </section>
+
+        <section class="sm-panel" data-panel="inquiry" hidden>
+          <div class="sm-panel-head"><div><p class="sm-eyebrow">INQUIRY</p><h2>고객 문의</h2></div><button class="sm-button" type="button" data-new-inquiry>전화/메일 문의 기록</button></div>
+          <div data-inquiry-list class="sm-card-list"></div>
+        </section>
+
+        <section class="sm-panel" data-panel="promo" hidden>
+          <div class="sm-panel-head"><div><p class="sm-eyebrow">PROMOTION</p><h2>쿠폰 · 할인 · 배너</h2></div><button class="sm-button" data-admin-reload="promo">새로고침</button></div>
+          <div class="sm-split-grid"><div><h3>혜택 정책</h3><div data-benefit-list class="sm-card-list"></div><button class="sm-button sm-button--primary" type="button" data-new-benefit>혜택 추가</button></div><div><h3>홈 배너</h3><div data-banner-list class="sm-card-list"></div><button class="sm-button sm-button--primary" type="button" data-new-banner>배너 추가</button></div></div>
+        </section>
+
+        <section class="sm-panel" data-panel="pos" hidden>
+          <div class="sm-panel-head"><div><p class="sm-eyebrow">POS</p><h2>매장 POS 기기</h2></div><button class="sm-button sm-button--primary" type="button" data-new-pos>기기 등록</button></div>
+          <p class="sm-help">온라인 결제 권한과 분리된 기기 상태 관리입니다. 실제 카드 정산 정보나 비밀키는 이 화면에 저장하지 않습니다.</p>
+          <div data-pos-list class="sm-card-list"></div>
+        </section>
+
+        <section class="sm-panel" data-panel="settlement" hidden>
+          <div class="sm-panel-head"><div><p class="sm-eyebrow">SALES</p><h2>매출 · 정산 통계</h2></div><button class="sm-button" type="button" data-export-sales>CSV 내보내기</button></div>
+          <div class="sm-metric-grid" data-settlement-metrics></div>
+          <div data-settlement-list class="sm-table-wrap"></div>
+        </section>
+
+        <section class="sm-panel" data-panel="customer" hidden>
+          <div class="sm-panel-head"><div><p class="sm-eyebrow">CUSTOMERS</p><h2>고객 · 회원관리</h2></div><div class="sm-panel-actions"><input class="sm-search" type="search" placeholder="이메일·이름·전화" data-member-search /><button class="sm-button" data-admin-reload="customer">새로고침</button></div></div>
+          <div data-member-list class="sm-table-wrap"></div>
+        </section>
+
+        <section class="sm-panel" data-panel="review" hidden>
+          <div class="sm-panel-head"><div><p class="sm-eyebrow">REVIEWS</p><h2>리뷰 승인 · 노출</h2></div><button class="sm-button" data-admin-reload="review">새로고침</button></div>
+          <div data-review-list class="sm-card-list"></div>
+        </section>
+
+        <section class="sm-panel" data-panel="settings" hidden>
+          <div class="sm-panel-head"><div><p class="sm-eyebrow">SETTINGS</p><h2>사업자 · 배송 · 권한 · 감사로그</h2></div><button class="sm-button" data-admin-reload="settings">새로고침</button></div>
+          <div class="sm-split-grid">
+            <form class="sm-inline-form" data-business-form><h3>사업자 정보</h3><div class="sm-form-grid"><label>상호<input class="sm-input" name="brand_name_ko" /></label><label>대표자<input class="sm-input" name="representative_name" /></label><label>사업자번호<input class="sm-input" name="business_number" /></label><label>통신판매업번호<input class="sm-input" name="mail_order_number" /></label><label>이메일<input class="sm-input" name="email" type="email" /></label><label>고객센터<input class="sm-input" name="cs_phone" /></label><label class="sm-span-2">사업장/반품 도로명 주소<input class="sm-input" name="address_road" /></label></div><button class="sm-button sm-button--primary" type="submit">사업자 정보 저장</button></form>
+            <form class="sm-inline-form" data-commerce-form><h3>주문 · 배송 설정</h3><div class="sm-form-grid"><label>기본 배송비<input class="sm-input" name="base_shipping_krw" type="number" min="0" step="100" /></label><label>무료배송 기준<input class="sm-input" name="free_shipping_threshold_krw" type="number" min="0" step="100" /></label><label>도서산간 추가<input class="sm-input" name="remote_area_surcharge_krw" type="number" min="0" step="100" /></label><label>재고 예약(분)<input class="sm-input" name="reservation_ttl_minutes" type="number" min="10" max="1440" /></label><label>비회원 조회(일)<input class="sm-input" name="guest_lookup_ttl_days" type="number" min="1" max="3650" /></label></div><button class="sm-button sm-button--primary" type="submit">배송 설정 저장</button></form>
+          </div>
+          <h3>최근 관리자 변경 기록</h3><div data-audit-list class="sm-table-wrap"></div>
         </section>
       </section>
     </main>
 
+    <dialog class="sm-dialog" data-admin-dialog><form method="dialog"><button class="sm-dialog-close" value="cancel" aria-label="닫기">×</button></form><div data-dialog-body></div></dialog>
     <div class="sm-toast" data-toast role="status" aria-live="polite"></div>
     <input type="file" accept="image/jpeg,image/png,image/webp,image/avif" data-media-picker hidden />
     <script type="module" src="/store-manager.mjs?v=20260903-02"></script>
+    <script type="module" src="/src/frontend/admin/store-console.mjs?v=20260907-01"></script>
   </body>
 </html>
