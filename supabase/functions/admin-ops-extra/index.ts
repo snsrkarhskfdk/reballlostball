@@ -30,7 +30,6 @@ function hasAny(roles:Role[], allowed:Set<Role>):boolean { return roles.some((ro
 function requireAny(roles:Role[], allowed:Set<Role>, message="관리자 권한이 필요합니다."):void {
   if(!hasAny(roles,allowed)) throw new HttpError(403,"ADMIN_ACCESS_DENIED",message);
 }
-function requireOwner(roles:Role[]):void { if(!roles.includes("owner_admin")) throw new HttpError(403,"OWNER_ACCESS_DENIED","대표 관리자 권한이 필요합니다."); }
 
 async function returnsView(roles:Role[]):Promise<Row> {
   requireAny(roles,ORDER,"취소·반품 정보를 조회할 권한이 없습니다.");
@@ -105,7 +104,9 @@ async function handleGet(req:Request, roles:Role[]):Promise<Response> {
 async function handlePost(req:Request,userId:string):Promise<Response> {
   const body = await readJson(req,128*1024);
   const action = cleanString(body.action,60);
-  const payload = body.payload && typeof body.payload === "object" && !Array.isArray(body.payload) ? body.payload : {};
+  const payload: Record<string, unknown> = body.payload && typeof body.payload === "object" && !Array.isArray(body.payload)
+    ? body.payload as Record<string, unknown>
+    : {};
   if(!action) throw new HttpError(400,"INVALID_ACTION","관리자 작업을 확인해 주세요.");
   const result = await rpc("admin_ops_mutation_v1",{p_actor_user_id:userId,p_action:action,p_payload:payload});
   return jsonResponse(req,{result});
