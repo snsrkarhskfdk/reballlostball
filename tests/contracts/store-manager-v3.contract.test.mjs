@@ -16,11 +16,11 @@ const [migration, hardening, extraEdge, extraUi, injector, build, devServer, con
 
 test("V3 ports every previously missing operations area onto the service-mediated console", () => {
   for (const view of ["returns", "inquiries", "reviews", "promo", "pos", "settlement", "brands"]) {
-    assert.match(extraEdge, new RegExp(`view ===? \\"?${view}|view===\\"${view}\\"`));
+    assert.ok(extraEdge.includes(`view===\"${view}\"`), `missing GET view: ${view}`);
   }
   for (const tab of ["returns", "inquiries", "reviews", "promo", "pos", "settlement"]) {
-    assert.match(extraUi, new RegExp(`data-extra-tab=\\"${tab}\\"`));
-    assert.match(extraUi, new RegExp(`data-panel=\\"${tab}\\"`));
+    assert.ok(extraUi.includes(`[\"${tab}\",`), `missing generated tab definition: ${tab}`);
+    assert.ok(extraUi.includes(`data-panel=\"${tab}\"`), `missing panel: ${tab}`);
   }
   for (const action of ["product_create", "return_create", "return_status", "inquiry_create", "inquiry_reply", "inquiry_close", "benefit_create", "benefit_toggle", "banner_create", "banner_toggle", "pos_create", "pos_status", "review_visibility"]) {
     assert.match(migration, new RegExp(action));
@@ -70,6 +70,7 @@ test("cover photo no longer overwrites every SKU thumbnail and sales CSV blocks 
 test("extended console assets are injected in both production build and local E2E server", () => {
   assert.match(injector, /store-console-extra\.css/);
   assert.match(injector, /store-console-extra\.mjs/);
+  assert.match(injector, /store-console-extra-guard\.mjs/);
   assert.match(build, /injectAdminConsoleAssets\(injectPublicConfig\(storeManagerHtml\)\)/);
   assert.match(devServer, /configuredStoreManagerHtml/);
   assert.match(devServer, /injectAdminConsoleAssets/);
