@@ -42,3 +42,6 @@ verify_jwt = false
 
 [functions.admin-shipping]
 verify_jwt = false
+
+[functions.admin-console]
+verify_jwt = false
