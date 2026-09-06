@@ -15,16 +15,13 @@ type AnyRow = Record<string, unknown>;
 
 const ADMIN_ROLES = new Set<Role>(["cs_manager", "inventory_manager", "payments_manager", "store_manager", "owner_admin"]);
 const ORDER_ROLES = new Set<Role>(["cs_manager", "payments_manager", "store_manager", "owner_admin"]);
+const SHIPPING_ROLES = new Set<Role>(["cs_manager", "store_manager", "owner_admin"]);
 const PRODUCT_ROLES = new Set<Role>(["inventory_manager", "store_manager", "owner_admin"]);
 const PAYMENT_ROLES = new Set<Role>(["payments_manager", "owner_admin"]);
-const MEMBER_ROLES = new Set<Role>(["cs_manager", "owner_admin"]);
+const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
 async function rolesFor(userId: string): Promise<Role[]> {
-  const params = new URLSearchParams({
-    select: "role",
-    user_id: `eq.${userId}`,
-    limit: "20",
-  });
+  const params = new URLSearchParams({ select: "role", user_id: `eq.${userId}`, limit: "20" });
   const rows = await serviceSelect<Array<{ role?: Role }>>(`/rest/v1/user_roles?${params}`);
   return rows.map((row) => row.role).filter((role): role is Role => Boolean(role));
 }
@@ -49,33 +46,44 @@ function kstDayStartIso(now = new Date()): string {
 
 async function dashboardView(roles: Role[]): Promise<AnyRow> {
   requireAny(roles, ADMIN_ROLES);
+  const canOrders = hasAny(roles, ORDER_ROLES);
+  const canShipping = hasAny(roles, SHIPPING_ROLES);
+  const canProducts = hasAny(roles, PRODUCT_ROLES);
+  const canPayments = hasAny(roles, PAYMENT_ROLES);
+
   const [orders, payments, variants] = await Promise.all([
-    serviceSelect<AnyRow[]>(`/rest/v1/orders?select=id,order_no,status,payment_status,total_krw,created_at,updated_at&order=created_at.desc&limit=500`),
-    serviceSelect<AnyRow[]>(`/rest/v1/payments?select=order_id,status,approved_amount,canceled_amount,approved_at,canceled_at,last_reconcile_error,reconcile_attempts&order=created_at.desc&limit=500`),
-    serviceSelect<AnyRow[]>(`/rest/v1/product_variants?select=id,sku,stock_qty,active,product_id&active=eq.true&limit=1200`),
+    canOrders
+      ? serviceSelect<AnyRow[]>(`/rest/v1/orders?select=id,order_no,status,payment_status,total_krw,created_at,updated_at&order=created_at.desc&limit=500`)
+      : Promise.resolve([]),
+    canPayments
+      ? serviceSelect<AnyRow[]>(`/rest/v1/payments?select=order_id,status,approved_amount,canceled_amount,approved_at,canceled_at,last_reconcile_error,reconcile_attempts&order=created_at.desc&limit=500`)
+      : Promise.resolve([]),
+    canProducts
+      ? serviceSelect<AnyRow[]>(`/rest/v1/product_variants?select=id,sku,stock_qty,active,product_id&active=eq.true&limit=1200`)
+      : Promise.resolve([]),
   ]);
-  const start = new Date(kstDayStartIso()).getTime();
-  const paidToday = payments.filter((p) => p.status === "done" && new Date(String(p.approved_at || 0)).getTime() >= start);
-  const refundsToday = payments.filter((p) => Number(p.canceled_amount || 0) > 0 && new Date(String(p.canceled_at || 0)).getTime() >= start);
-  const grossTodayKrw = paidToday.reduce((sum, p) => sum + Number(p.approved_amount || 0), 0);
-  const refundsTodayKrw = refundsToday.reduce((sum, p) => sum + Number(p.canceled_amount || 0), 0);
-  const pendingShipping = orders.filter((o) => ["paid", "shipping_ready", "shipped"].includes(String(o.status))).length;
-  const lowStock = variants.filter((v) => Number(v.stock_qty || 0) <= 5).length;
-  const outOfStock = variants.filter((v) => Number(v.stock_qty || 0) <= 0).length;
-  const paymentAlerts = payments.filter((p) => cleanString(p.last_reconcile_error, 500) || Number(p.reconcile_attempts || 0) >= 5).length;
-  return {
-    metrics: {
-      paidTodayCount: paidToday.length,
-      grossTodayKrw,
-      refundsTodayKrw,
-      netTodayKrw: grossTodayKrw - refundsTodayKrw,
-      pendingShipping,
-      lowStock,
-      outOfStock,
-      paymentAlerts,
-    },
-    recentOrders: orders.slice(0, 12),
-  };
+
+  const metrics: AnyRow = {};
+  if (canPayments) {
+    const start = new Date(kstDayStartIso()).getTime();
+    const paidToday = payments.filter((p) => p.status === "done" && new Date(String(p.approved_at || 0)).getTime() >= start);
+    const refundsToday = payments.filter((p) => Number(p.canceled_amount || 0) > 0 && new Date(String(p.canceled_at || 0)).getTime() >= start);
+    const grossTodayKrw = paidToday.reduce((sum, p) => sum + Number(p.approved_amount || 0), 0);
+    const refundsTodayKrw = refundsToday.reduce((sum, p) => sum + Number(p.canceled_amount || 0), 0);
+    metrics.paidTodayCount = paidToday.length;
+    metrics.grossTodayKrw = grossTodayKrw;
+    metrics.refundsTodayKrw = refundsTodayKrw;
+    metrics.netTodayKrw = grossTodayKrw - refundsTodayKrw;
+    metrics.paymentAlerts = payments.filter((p) => cleanString(p.last_reconcile_error, 500) || Number(p.reconcile_attempts || 0) >= 5).length;
+  }
+  if (canShipping) {
+    metrics.pendingShipping = orders.filter((o) => ["paid", "shipping_ready", "shipped"].includes(String(o.status))).length;
+  }
+  if (canProducts) {
+    metrics.lowStock = variants.filter((v) => Number(v.stock_qty || 0) <= 5).length;
+    metrics.outOfStock = variants.filter((v) => Number(v.stock_qty || 0) <= 0).length;
+  }
+  return { metrics, recentOrders: canOrders ? orders.slice(0, 12) : [] };
 }
 
 async function ordersView(roles: Role[]): Promise<AnyRow> {
@@ -90,21 +98,34 @@ async function ordersView(roles: Role[]): Promise<AnyRow> {
     serviceSelect<AnyRow[]>(`/rest/v1/payments?select=order_id,provider,method,status,requested_amount,approved_amount,canceled_amount,approved_at,canceled_at,reconcile_attempts,last_reconcile_error,transaction_id,approval_no&order=created_at.desc&limit=400`),
     serviceSelect<AnyRow[]>(`/rest/v1/order_events?select=order_id,event_type,payload_json,actor_user_id,created_at&event_type=eq.admin_note&order=created_at.desc&limit=500`),
   ]);
-  const paymentMap = new Map(payments.map((p) => [String(p.order_id), p]));
+  const canPayments = hasAny(roles, PAYMENT_ROLES);
+  const paymentMap = new Map(payments.map((payment) => {
+    const safePayment = canPayments ? payment : {
+      order_id: payment.order_id,
+      method: payment.method,
+      status: payment.status,
+      requested_amount: payment.requested_amount,
+      approved_amount: payment.approved_amount,
+      canceled_amount: payment.canceled_amount,
+      approved_at: payment.approved_at,
+      canceled_at: payment.canceled_at,
+    };
+    return [String(payment.order_id), safePayment];
+  }));
   const notes = new Map<string, AnyRow[]>();
   for (const event of noteEvents) {
     const id = String(event.order_id || "");
     if (!notes.has(id)) notes.set(id, []);
     if ((notes.get(id)?.length || 0) < 5) notes.get(id)?.push(event);
   }
-  const canPayments = hasAny(roles, PAYMENT_ROLES);
+  const cancelableStatuses = new Set(["payment_auth_started", "waiting_for_deposit", "paid", "partially_canceled"]);
   return {
     canPayments,
     orders: orders.map((order) => ({
       ...order,
       payment: paymentMap.get(String(order.id)) || null,
       notes: notes.get(String(order.id)) || [],
-      canCancel: canPayments && !["shipping_ready", "shipped", "delivered", "canceled", "refunded"].includes(String(order.status)),
+      canCancel: canPayments && cancelableStatuses.has(String(order.status)),
     })),
   };
 }
@@ -147,9 +168,7 @@ async function staffView(roles: Role[]): Promise<AnyRow> {
     byUser.get(id)?.push(String(row.role || ""));
   }
   return {
-    staff: profiles
-      .map((profile) => ({ ...profile, roles: byUser.get(String(profile.id)) || [] }))
-      .filter((profile) => (profile.roles as string[]).some((role) => role !== "customer") || profile.email || profile.auth_email),
+    staff: profiles.map((profile) => ({ ...profile, roles: byUser.get(String(profile.id)) || [] })),
   };
 }
 
@@ -174,11 +193,11 @@ async function handlePost(req: Request, userId: string, roles: Role[]): Promise<
   if (action === "catalogUpdate") {
     requireAny(roles, PRODUCT_ROLES, "상품을 변경할 권한이 없습니다.");
     const productId = cleanString(body.productId, 36).toLowerCase();
-    if (!/^[0-9a-f-]{36}$/.test(productId)) throw new HttpError(400, "INVALID_PRODUCT", "상품을 확인해 주세요.");
+    if (!UUID_PATTERN.test(productId)) throw new HttpError(400, "INVALID_PRODUCT", "상품을 확인해 주세요.");
     const result = await rpc("admin_catalog_update_v2", {
       p_actor_user_id: userId,
       p_product_id: productId,
-      p_product_patch: body.productPatch && typeof body.productPatch === "object" ? body.productPatch : {},
+      p_product_patch: body.productPatch && typeof body.productPatch === "object" && !Array.isArray(body.productPatch) ? body.productPatch : {},
       p_variants: Array.isArray(body.variants) ? body.variants : [],
     });
     return jsonResponse(req, { result });
@@ -188,8 +207,8 @@ async function handlePost(req: Request, userId: string, roles: Role[]): Promise<
     requireOwner(roles);
     const result = await rpc("admin_update_store_settings_v2", {
       p_actor_user_id: userId,
-      p_store: body.store && typeof body.store === "object" ? body.store : {},
-      p_commerce: body.commerce && typeof body.commerce === "object" ? body.commerce : {},
+      p_store: body.store && typeof body.store === "object" && !Array.isArray(body.store) ? body.store : {},
+      p_commerce: body.commerce && typeof body.commerce === "object" && !Array.isArray(body.commerce) ? body.commerce : {},
     });
     return jsonResponse(req, { result });
   }
@@ -209,7 +228,7 @@ async function handlePost(req: Request, userId: string, roles: Role[]): Promise<
   if (action === "roleSet") {
     requireOwner(roles);
     const targetUserId = cleanString(body.userId, 36).toLowerCase();
-    if (!/^[0-9a-f-]{36}$/.test(targetUserId)) throw new HttpError(400, "INVALID_USER", "사용자를 확인해 주세요.");
+    if (!UUID_PATTERN.test(targetUserId)) throw new HttpError(400, "INVALID_USER", "사용자를 확인해 주세요.");
     const result = await rpc("admin_set_user_role_v2", {
       p_actor_user_id: userId,
       p_target_user_id: targetUserId,
@@ -222,7 +241,7 @@ async function handlePost(req: Request, userId: string, roles: Role[]): Promise<
   if (action === "orderNote") {
     requireAny(roles, ORDER_ROLES, "주문 메모를 남길 권한이 없습니다.");
     const orderId = cleanString(body.orderId, 36).toLowerCase();
-    if (!/^[0-9a-f-]{36}$/.test(orderId)) throw new HttpError(400, "INVALID_ORDER", "주문을 확인해 주세요.");
+    if (!UUID_PATTERN.test(orderId)) throw new HttpError(400, "INVALID_ORDER", "주문을 확인해 주세요.");
     const result = await rpc("admin_add_order_note_v1", {
       p_actor_user_id: userId,
       p_order_id: orderId,
