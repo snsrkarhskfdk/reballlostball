@@ -20,4 +20,21 @@ jobs:
           cache: npm
       - run: npm ci
       - run: npx playwright install --with-deps chromium
-      - run: npm run qa
+      - name: Lint
+        run: npm run lint
+      - name: Build
+        run: npm run build
+      - name: Legacy entrypoint check
+        run: npm run check:legacy
+      - name: Edge function typecheck
+        run: npm run check:edge
+      - name: SQL validation
+        run: npm run check:sql
+      - name: Unit tests
+        run: npm run test:unit
+      - name: Contract tests
+        run: npm run test:integration
+      - name: E2E tests
+        run: npm run test:e2e
+      - name: Accessibility tests
+        run: npm run test:a11y
