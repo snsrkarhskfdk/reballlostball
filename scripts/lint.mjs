@@ -2,7 +2,7 @@ import { existsSync, readFileSync, readdirSync } from "node:fs";
 import { spawnSync } from "node:child_process";
 import { join } from "node:path";
 
-const requiredFiles = ["index.html", "styles.css", "app.js"];
+const requiredFiles = ["index.html", "styles.css", "app.js", "store-manager.html", "store-manager.mjs", "store-manager.css"];
 const errors = [];
 
 function filesUnder(directory, predicate) {
@@ -17,9 +17,7 @@ function filesUnder(directory, predicate) {
 }
 
 for (const file of requiredFiles) {
-  if (!existsSync(file)) {
-    errors.push(`Missing required file: ${file}`);
-  }
+  if (!existsSync(file)) errors.push(`Missing required file: ${file}`);
 }
 
 if (errors.length === 0) {
@@ -31,6 +29,7 @@ if (errors.length === 0) {
 
   const syntaxFiles = [
     "app.js",
+    "store-manager.mjs",
     ...filesUnder("scripts", (file) => /\.m?js$/i.test(file)),
     ...filesUnder("src/frontend", (file) => /\.m?js$/i.test(file)),
   ];
@@ -54,36 +53,22 @@ if (errors.length === 0) {
   ];
 
   for (const name of requiredFunctions) {
-    if (!app.includes(`function ${name}`)) {
-      errors.push(`Missing function: ${name}`);
-    }
+    if (!app.includes(`function ${name}`)) errors.push(`Missing function: ${name}`);
   }
 
-  if (!index.includes('<div id="app"></div>')) {
-    errors.push("index.html must expose #app mount node");
-  }
-
-  if (app.includes("console.log")) {
-    errors.push("Remove console.log from app.js");
-  }
-
-  if (app.includes("figma.com/api/mcp")) {
-    errors.push("Use local assets instead of short-lived Figma asset URLs");
-  }
+  if (!index.includes('<div id="app"></div>')) errors.push("index.html must expose #app mount node");
+  if (app.includes("console.log")) errors.push("Remove console.log from app.js");
+  if (app.includes("figma.com/api/mcp")) errors.push("Use local assets instead of short-lived Figma asset URLs");
 
   if (css.includes("#06140E") || css.includes("#06140e") || app.includes("#06140E") || app.includes("#06140e")) {
     errors.push("Replace exact #06140E with the approved fairway gradient colors");
   }
 
   for (const token of ["--fairway", "--mint", "--gold", "--gradient-deep"]) {
-    if (!cssForChecks.includes(token)) {
-      errors.push(`Missing CSS token: ${token}`);
-    }
+    if (!cssForChecks.includes(token)) errors.push(`Missing CSS token: ${token}`);
   }
 
-  if (cssForChecks.includes("tailwind")) {
-    errors.push("Tailwind should not be introduced for this static implementation");
-  }
+  if (cssForChecks.includes("tailwind")) errors.push("Tailwind should not be introduced for this static implementation");
 }
 
 if (errors.length > 0) {
