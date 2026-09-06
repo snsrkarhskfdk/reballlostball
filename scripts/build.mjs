@@ -6,6 +6,7 @@ try {
 import { cp, copyFile, mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { existsSync } from "node:fs";
 import { injectPublicConfig } from "./public-config.mjs";
+import { injectAdminConsoleAssets } from "./admin-console-assets.mjs";
 
 await import("./build-check.mjs");
 
@@ -41,7 +42,11 @@ for (const file of [
 const indexHtml = await readFile("index.html", "utf8");
 await writeFile(`${outputDir}/index.html`, injectPublicConfig(indexHtml), "utf8");
 const storeManagerHtml = await readFile("store-manager.html", "utf8");
-await writeFile(`${outputDir}/store-manager.html`, injectPublicConfig(storeManagerHtml), "utf8");
+await writeFile(
+  `${outputDir}/store-manager.html`,
+  injectAdminConsoleAssets(injectPublicConfig(storeManagerHtml)),
+  "utf8",
+);
 
 for (const optionalFile of ["CNAME", ".nojekyll"]) {
   if (existsSync(optionalFile)) {

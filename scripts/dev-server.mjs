@@ -7,11 +7,15 @@ import { createReadStream, existsSync, readFileSync, statSync } from "node:fs";
 import { createServer } from "node:http";
 import { extname, isAbsolute, join, normalize, relative, resolve } from "node:path";
 import { injectPublicConfig } from "./public-config.mjs";
+import { injectAdminConsoleAssets } from "./admin-console-assets.mjs";
 
 const root = process.cwd();
 const requestedPort = Number.parseInt(process.argv.at(-1), 10);
 const startPort = Number.isFinite(requestedPort) ? requestedPort : 3000;
 const configuredIndexHtml = injectPublicConfig(readFileSync(join(root, "index.html"), "utf8"));
+const configuredStoreManagerHtml = injectAdminConsoleAssets(
+  injectPublicConfig(readFileSync(join(root, "store-manager.html"), "utf8")),
+);
 
 const mimeTypes = {
   ".css": "text/css; charset=utf-8",
@@ -67,6 +71,10 @@ function createStaticServer() {
     });
     if (target === join(root, "index.html")) {
       response.end(configuredIndexHtml);
+      return;
+    }
+    if (target === join(root, "store-manager.html")) {
+      response.end(configuredStoreManagerHtml);
       return;
     }
     const stream = createReadStream(target);

@@ -59,7 +59,7 @@ async function dashboardView(roles: Role[]): Promise<AnyRow> {
       ? serviceSelect<AnyRow[]>(`/rest/v1/payments?select=order_id,status,approved_amount,canceled_amount,approved_at,canceled_at,last_reconcile_error,reconcile_attempts&order=created_at.desc&limit=500`)
       : Promise.resolve([]),
     canProducts
-      ? serviceSelect<AnyRow[]>(`/rest/v1/product_variants?select=id,sku,stock_qty,active,product_id&active=eq.true&limit=1200`)
+      ? serviceSelect<AnyRow[]>(`/rest/v1/product_variants?select=id,sku,stock_qty,low_stock_threshold,active,product_id&active=eq.true&limit=1200`)
       : Promise.resolve([]),
   ]);
 
@@ -80,7 +80,11 @@ async function dashboardView(roles: Role[]): Promise<AnyRow> {
     metrics.pendingShipping = orders.filter((o) => ["paid", "shipping_ready", "shipped"].includes(String(o.status))).length;
   }
   if (canProducts) {
-    metrics.lowStock = variants.filter((v) => Number(v.stock_qty || 0) <= 5).length;
+    metrics.lowStock = variants.filter((v) => {
+      const stock = Number(v.stock_qty || 0);
+      const threshold = Number.isFinite(Number(v.low_stock_threshold)) ? Number(v.low_stock_threshold) : 5;
+      return stock <= threshold;
+    }).length;
     metrics.outOfStock = variants.filter((v) => Number(v.stock_qty || 0) <= 0).length;
   }
   return { metrics, recentOrders: canOrders ? orders.slice(0, 12) : [] };
