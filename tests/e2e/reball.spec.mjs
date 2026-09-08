@@ -7,8 +7,7 @@ const routes = [
   ["checkout", "/#/checkout"],
   ["login", "/#/login"],
   ["signup", "/#/signup"],
-  ["guest order", "/#/guest-order"],
-  ["admin", "/#/admin"],
+  ["guest order", "/#/login/order"],
 ];
 
 test("development entry uses the production HTML and app module", async ({ page }) => {
@@ -110,14 +109,15 @@ test("home keeps five semantic stages while placing purchasable products directl
   await expect(page.locator("footer .footer-store-business")).toHaveCount(1);
 });
 
-test("forged local admin state cannot reveal the admin shell", async ({ page }) => {
+test("legacy admin route is retired and forged local state cannot reveal the operations console", async ({ page }) => {
   await page.addInitScript(() => {
     localStorage.setItem("reball.adminUser", JSON.stringify({ id: "admin", role: "owner_admin" }));
     localStorage.setItem("reball.adminCredentials", JSON.stringify({ id: "admin", password: "forged" }));
   });
   await page.goto("/#/admin");
-  await expect(page.locator("[data-admin-login-form]")).toBeVisible();
-  await expect(page.locator("[data-admin-shell]")).toHaveCount(0);
+  await expect(page).toHaveURL(/\/store-manager$/);
+  await expect(page.locator("[data-login-panel]")).toBeVisible();
+  await expect(page.locator("[data-app-panel]")).toBeHidden();
 });
 
 test("legacy sensitive localStorage is purged", async ({ page }) => {
