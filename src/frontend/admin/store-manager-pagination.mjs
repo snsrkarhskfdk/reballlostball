@@ -162,9 +162,12 @@ function updatePager(scope) {
   const label = pager.querySelector(`[${config.label}]`);
   const previous = pager.querySelector(`[${config.prev}]`);
   const next = pager.querySelector(`[${config.next}]`);
-  if (label) label.textContent = `${state.page} 페이지 · ${state.pageSize}건씩`;
-  if (previous) previous.disabled = state.page <= 1;
-  if (next) next.disabled = !state.hasMore;
+  const nextLabel = `${state.page} 페이지 · ${state.pageSize}건씩`;
+  // The observer watches childList mutations. Reassigning identical text here
+  // would retrigger the observer forever, so every DOM write is idempotent.
+  if (label && label.textContent !== nextLabel) label.textContent = nextLabel;
+  if (previous && previous.disabled !== (state.page <= 1)) previous.disabled = state.page <= 1;
+  if (next && next.disabled !== !state.hasMore) next.disabled = !state.hasMore;
 }
 
 function resetScopeToFirstPage(scope, { reload = false } = {}) {
@@ -181,7 +184,6 @@ installAdminFetchBoundary();
 window.addEventListener("reball:order-pagination", (event) => {
   const scope = event?.detail?.scope === "shipping" ? "shipping" : "orders";
   ensurePager(scope);
-  updatePager(scope);
 });
 
 document.addEventListener("click", (event) => {
