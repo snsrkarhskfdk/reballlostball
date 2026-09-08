@@ -34,8 +34,8 @@ function requireAny(roles:Role[], allowed:Set<Role>, message="관리자 권한�
 async function returnsView(roles:Role[]):Promise<Row> {
   requireAny(roles,ORDER,"취소·반품 정보를 조회할 권한이 없습니다.");
   const [requests, orders] = await Promise.all([
-    serviceSelect<Row[]>(`/rest/v1/return_requests?select=id,order_id,request_type,reason,status,resolution_note,requested_by,handled_by,requested_at,handled_at,updated_at,orders(order_no,total_krw,status,payment_status,shipping_carrier,tracking_number)&order=requested_at.desc&limit=500`),
-    serviceSelect<Row[]>(`/rest/v1/orders?select=id,order_no,status,payment_status,payment_method,total_krw,refund_amount,created_at,address_snapshot&status=in.(paid,partially_canceled)&order=created_at.desc&limit=500`),
+    serviceSelect<Row[]>(`/rest/v1/return_requests?select=id,order_id,request_type,reason,status,resolution_note,requested_by,handled_by,requested_at,handled_at,updated_at,orders(order_no,total_krw,status,payment_status)&order=requested_at.desc&limit=500`),
+    serviceSelect<Row[]>(`/rest/v1/orders?select=id,order_no,status,payment_status,payment_method,total_krw,refund_amount,created_at&status=in.(paid,partially_canceled)&order=created_at.desc&limit=500`),
   ]);
   const canCancel = hasAny(roles,PAYMENT);
   return { requests, cancelableOrders: orders.map((o)=>({...o,canCancel})), canCancel };
