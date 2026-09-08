@@ -15,6 +15,7 @@ type AnyRow = Record<string, unknown>;
 
 const ADMIN_ROLES = new Set<Role>(["cs_manager", "inventory_manager", "payments_manager", "store_manager", "owner_admin"]);
 const ORDER_ROLES = new Set<Role>(["cs_manager", "payments_manager", "store_manager", "owner_admin"]);
+const ORDER_PII_ROLES = new Set<Role>(["cs_manager", "store_manager", "owner_admin"]);
 const SHIPPING_ROLES = new Set<Role>(["cs_manager", "store_manager", "owner_admin"]);
 const PRODUCT_ROLES = new Set<Role>(["inventory_manager", "store_manager", "owner_admin"]);
 const PAYMENT_ROLES = new Set<Role>(["payments_manager", "owner_admin"]);
@@ -69,9 +70,6 @@ async function dashboardView(roles: Role[]): Promise<AnyRow> {
   const metrics: AnyRow = {};
   if (canPayments) {
     const start = new Date(kstDayStartIso()).getTime();
-    // Gross approvals are immutable events. A payment canceled later today must still
-    // remain in today's gross and be offset by the refund ledger, otherwise net sales
-    // can become falsely negative.
     const approvedToday = payments.filter((p) =>
       Number(p.approved_amount || 0) > 0
       && new Date(String(p.approved_at || 0)).getTime() >= start
@@ -104,17 +102,22 @@ async function dashboardView(roles: Role[]): Promise<AnyRow> {
 
 async function ordersView(roles: Role[]): Promise<AnyRow> {
   requireAny(roles, ORDER_ROLES, "주문 정보를 조회할 권한이 없습니다.");
+  const canPayments = hasAny(roles, PAYMENT_ROLES);
+  const canOrderPii = hasAny(roles, ORDER_PII_ROLES);
+  const safeOrderSelect = "id,order_no,status,payment_status,payment_method,payment_provider,subtotal_krw,shipping_krw,discount_krw,refund_amount,total_krw,created_at,updated_at";
+  const fullOrderSelect = `${safeOrderSelect},profile_id,address_snapshot,shipping_carrier,tracking_number,shipped_at,delivered_at,order_items(product_name,variant_name,unit_price_krw,qty,line_total_krw)`;
   const orderParams = new URLSearchParams({
-    select: "id,profile_id,order_no,status,payment_status,payment_method,payment_provider,subtotal_krw,shipping_krw,discount_krw,refund_amount,total_krw,address_snapshot,created_at,updated_at,shipping_carrier,tracking_number,shipped_at,delivered_at,order_items(product_name,variant_name,unit_price_krw,qty,line_total_krw)",
+    select: canOrderPii ? fullOrderSelect : safeOrderSelect,
     order: "created_at.desc",
     limit: "250",
   });
   const [orders, payments, noteEvents] = await Promise.all([
     serviceSelect<AnyRow[]>(`/rest/v1/orders?${orderParams}`),
     serviceSelect<AnyRow[]>(`/rest/v1/payments?select=order_id,provider,method,status,requested_amount,approved_amount,canceled_amount,approved_at,canceled_at,reconcile_attempts,last_reconcile_error,transaction_id,approval_no&order=created_at.desc&limit=400`),
-    serviceSelect<AnyRow[]>(`/rest/v1/order_events?select=order_id,event_type,payload_json,actor_user_id,created_at&event_type=eq.admin_note&order=created_at.desc&limit=500`),
+    canOrderPii
+      ? serviceSelect<AnyRow[]>(`/rest/v1/order_events?select=order_id,event_type,payload_json,actor_user_id,created_at&event_type=eq.admin_note&order=created_at.desc&limit=500`)
+      : Promise.resolve([]),
   ]);
-  const canPayments = hasAny(roles, PAYMENT_ROLES);
   const paymentMap = new Map(payments.map((payment) => {
     const safePayment = canPayments ? payment : {
       order_id: payment.order_id,
@@ -137,10 +140,12 @@ async function ordersView(roles: Role[]): Promise<AnyRow> {
   const cancelableStatuses = new Set(["payment_auth_started", "waiting_for_deposit", "paid", "partially_canceled"]);
   return {
     canPayments,
+    canOrderPii,
     orders: orders.map((order) => ({
       ...order,
+      piiRedacted: !canOrderPii,
       payment: paymentMap.get(String(order.id)) || null,
-      notes: notes.get(String(order.id)) || [],
+      notes: canOrderPii ? notes.get(String(order.id)) || [] : [],
       canCancel: canPayments && cancelableStatuses.has(String(order.status)),
     })),
   };
@@ -255,7 +260,7 @@ async function handlePost(req: Request, userId: string, roles: Role[]): Promise<
   }
 
   if (action === "orderNote") {
-    requireAny(roles, ORDER_ROLES, "주문 메모를 남길 권한이 없습니다.");
+    requireAny(roles, ORDER_PII_ROLES, "주문 메모를 남길 권한이 없습니다.");
     const orderId = cleanString(body.orderId, 36).toLowerCase();
     if (!UUID_PATTERN.test(orderId)) throw new HttpError(400, "INVALID_ORDER", "주문을 확인해 주세요.");
     const result = await rpc("admin_add_order_note_v1", {
