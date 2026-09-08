@@ -25,6 +25,7 @@ const EXTRA_TAB_ROLES = {
   settlement: new Set(["owner_admin", "payments_manager"]),
 };
 const PRODUCT_THRESHOLD_ROLES = new Set(["owner_admin", "store_manager", "inventory_manager"]);
+const thresholdPending = new Set();
 let currentRoles = [];
 let enhanceTimer = 0;
 let cancelBusy = false;
@@ -112,26 +113,34 @@ function scheduleThresholdEnhancement() {
 async function enhanceThresholdControls() {
   if (!supabase || !hasAny(PRODUCT_THRESHOLD_ROLES)) return;
   const rows = [...document.querySelectorAll("[data-product-list] [data-variant-id]")]
-    .filter((row) => !row.querySelector("[data-final-threshold-control]"));
+    .filter((row) => {
+      const id = row.dataset.variantId;
+      return id && !row.querySelector("[data-final-threshold-control]") && !thresholdPending.has(id);
+    });
   if (!rows.length) return;
   const ids = rows.map((row) => row.dataset.variantId).filter(Boolean);
-  if (!ids.length) return;
-  const { data, error } = await supabase
-    .from("product_variants")
-    .select("id,low_stock_threshold")
-    .in("id", ids);
-  if (error) return;
-  const thresholds = new Map((data || []).map((row) => [row.id, Number(row.low_stock_threshold ?? 5)]));
-  for (const row of rows) {
-    const threshold = thresholds.get(row.dataset.variantId);
-    if (!Number.isSafeInteger(threshold)) continue;
-    const control = document.createElement("label");
-    control.className = "sm-final-threshold";
-    control.dataset.finalThresholdControl = "";
-    control.innerHTML = `<span class="sm-muted">저재고 기준</span><div class="sm-final-threshold-row"><input class="sm-input" data-final-threshold-input type="number" min="0" max="9999" step="1" value="${threshold}" /><button class="sm-button sm-button--small" type="button" data-final-threshold-save>기준 저장</button></div>`;
-    const activeControl = row.querySelector(".sm-status-toggle");
-    if (activeControl) row.insertBefore(control, activeControl);
-    else row.append(control);
+  ids.forEach((id) => thresholdPending.add(id));
+  try {
+    const { data, error } = await supabase
+      .from("product_variants")
+      .select("id,low_stock_threshold")
+      .in("id", ids);
+    if (error) return;
+    const thresholds = new Map((data || []).map((row) => [row.id, Number(row.low_stock_threshold ?? 5)]));
+    for (const row of rows) {
+      if (!row.isConnected || row.querySelector("[data-final-threshold-control]")) continue;
+      const threshold = thresholds.get(row.dataset.variantId);
+      if (!Number.isSafeInteger(threshold)) continue;
+      const control = document.createElement("div");
+      control.className = "sm-final-threshold";
+      control.dataset.finalThresholdControl = "";
+      control.innerHTML = `<label class="sm-muted" for="threshold-${row.dataset.variantId}">저재고 기준</label><div class="sm-final-threshold-row"><input id="threshold-${row.dataset.variantId}" class="sm-input" data-final-threshold-input type="number" min="0" max="9999" step="1" value="${threshold}" /><button class="sm-button sm-button--small" type="button" data-final-threshold-save>기준 저장</button></div>`;
+      const activeControl = row.querySelector(".sm-status-toggle");
+      if (activeControl) row.insertBefore(control, activeControl);
+      else row.append(control);
+    }
+  } finally {
+    ids.forEach((id) => thresholdPending.delete(id));
   }
 }
 
@@ -233,7 +242,6 @@ if (app) new MutationObserver(() => { applyExtraTabPermissions(); scheduleThresh
 if (nav) new MutationObserver(applyExtraTabPermissions).observe(nav, { childList: true, subtree: true, attributes: true, attributeFilter: ["hidden"] });
 if (summary) new MutationObserver(patchDashboardLabels).observe(summary, { childList: true, subtree: true });
 
-document.querySelector("[data-product-list]")?.addEventListener("DOMNodeInserted", scheduleThresholdEnhancement, { passive: true });
 patchDashboardLabels();
 refreshRoles();
 setTimeout(refreshRoles, 250);
