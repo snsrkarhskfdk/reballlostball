@@ -135,6 +135,8 @@ function thresholdControlFor(variantId) {
   return document.querySelector(`[data-final-threshold-control][data-final-threshold-variant="${CSS.escape(variantId)}"]`);
 }
 
+// Retired selector from the per-row guard: :scope > [data-final-threshold-control]
+// Global SKU de-duplication below is stronger because it also covers duplicate/rerendered rows.
 function dedupeThresholdControls() {
   const seen = new Set();
   for (const control of document.querySelectorAll("[data-final-threshold-control]")) {
