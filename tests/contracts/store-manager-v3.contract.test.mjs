@@ -65,8 +65,10 @@ test("new product registration is atomic and low-stock configuration is bounded 
   assert.match(finalAudit, /data-final-threshold-input/);
   assert.match(finalAudit, /action: "threshold_set"/);
   assert.match(finalAudit, /저재고 기준 이하/);
+  assert.match(finalAudit, /FINAL_AUDIT_GLOBAL_KEY/);
   assert.match(finalAudit, /thresholdPending/);
-  assert.match(finalAudit, /!row\.querySelector\("\[data-final-threshold-control\]"\)/);
+  assert.match(finalAudit, /dedupeThresholdControls/);
+  assert.match(finalAudit, /:scope > \[data-final-threshold-control\]/);
 });
 
 test("cover photo protection and CSV formula-injection protection remain in force", () => {
