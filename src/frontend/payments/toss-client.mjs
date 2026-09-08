@@ -8,15 +8,22 @@ let tossSdkPromise = null;
 
 async function postJson(fetchImpl, url, body, headers = {}, timeoutMs = TOSS_API_TIMEOUT_MS) {
   const controller = new AbortController();
-  const timer = globalThis.setTimeout(
-    () => controller.abort(new DOMException("요청 시간이 초과되었습니다.", "TimeoutError")),
-    Math.max(1, Number(timeoutMs) || TOSS_API_TIMEOUT_MS)
-  );
+  const configuredTimeout = Number(timeoutMs);
+  const useTimeout = Number.isFinite(configuredTimeout) && configuredTimeout > 0;
+  const timer = useTimeout
+    ? globalThis.setTimeout(
+        () => controller.abort(new DOMException("요청 시간이 초과되었습니다.", "TimeoutError")),
+        configuredTimeout
+      )
+    : 0;
   try {
     const response = await fetchImpl(url, {
       method: "POST",
       headers: { "Content-Type": "application/json", ...headers },
       body: JSON.stringify(body),
+      // Always provide a signal. The release-wide fetch boundary treats an
+      // explicit signal as ownership by this payment client, so a no-timeout
+      // payment-confirm cannot be re-aborted by the generic 15s wrapper.
       signal: controller.signal,
     });
     const payload = await response.json().catch(() => ({}));
@@ -28,7 +35,7 @@ async function postJson(fetchImpl, url, body, headers = {}, timeoutMs = TOSS_API
     }
     throw error;
   } finally {
-    globalThis.clearTimeout(timer);
+    if (timer) globalThis.clearTimeout(timer);
   }
 }
 
@@ -107,7 +114,7 @@ export function prepareTossPayment(config, orderId, guestLookupToken = "") {
       apikey: config.anonKey,
       ...(config.accessToken ? { Authorization: `Bearer ${config.accessToken}` } : {}),
     },
-    config.timeoutMs
+    config.timeoutMs ?? TOSS_API_TIMEOUT_MS
   );
 }
 
@@ -129,6 +136,15 @@ export function confirmTossPayment(config, confirmation) {
     ? rememberPaymentReturnToken(orderId, explicitReturnToken, storage)
     : browserPaymentReturnToken(orderId, { locationLike, storage });
 
+  // A browser-side timeout is unsafe for confirmation: Toss or the Edge
+  // Function may still commit while the SPA scrubs paymentKey from the URL.
+  // Keep the idempotent confirmation request alive until the server returns a
+  // definitive result. Callers may explicitly opt into a positive
+  // confirmTimeoutMs only for controlled non-production tests.
+  const confirmTimeoutMs = Number(config.confirmTimeoutMs) > 0
+    ? Number(config.confirmTimeoutMs)
+    : 0;
+
   return postJson(
     config.fetchImpl ?? fetch,
     `${String(config.baseUrl).replace(/\/$/, "")}/functions/v1/payment-confirm`,
@@ -143,7 +159,7 @@ export function confirmTossPayment(config, confirmation) {
       apikey: config.anonKey,
       ...(config.accessToken ? { Authorization: `Bearer ${config.accessToken}` } : {}),
     },
-    config.timeoutMs
+    confirmTimeoutMs
   ).then((result) => {
     const refreshedGuestLookupToken = String(result?.guestLookupToken || "").trim();
     if (refreshedGuestLookupToken) {
