@@ -98,6 +98,57 @@ function removeRetryButton(control) {
   control?.querySelector("[data-captcha-retry]")?.remove();
 }
 
+function storedWidgetId(widget) {
+  const value = widget?.dataset?.captchaWidgetId;
+  return value == null || value === "" ? null : value;
+}
+
+export async function resetCaptchaControl(control, documentRef = document) {
+  if (!control) return false;
+  const input = control.querySelector("[data-captcha-token]");
+  const widget = control.querySelector("[data-captcha-widget]");
+  const status = control.querySelector("[data-captcha-message]");
+  if (input) input.value = "";
+  removeRetryButton(control);
+  if (!widget) return false;
+
+  const config = captchaConfig(documentRef);
+  if (!config.supported) {
+    widget.dataset.captchaMounted = "false";
+    control.setAttribute("data-captcha-status", "unconfigured");
+    if (status) status.textContent = "자동입력 방지 설정 후 이용할 수 있습니다.";
+    return false;
+  }
+
+  try {
+    const client = await loadProvider(documentRef, config.provider);
+    const widgetId = storedWidgetId(widget);
+    if (widgetId !== null && typeof client?.reset === "function") {
+      client.reset(widgetId);
+      widget.dataset.captchaMounted = "true";
+      control.setAttribute("data-captcha-status", "ready");
+      if (status) status.textContent = "자동입력 방지 확인을 다시 완료해 주세요.";
+      return true;
+    }
+    if (widgetId !== null && typeof client?.remove === "function") {
+      client.remove(widgetId);
+    }
+    delete widget.dataset.captchaWidgetId;
+    widget.dataset.captchaMounted = "false";
+    widget.replaceChildren();
+    control.setAttribute("data-captcha-status", "loading");
+    if (status) status.textContent = "자동입력 방지 확인을 다시 불러오고 있습니다.";
+    await mountCaptchaWidgets(documentRef);
+    return widget.dataset.captchaMounted === "true";
+  } catch (error) {
+    widget.dataset.captchaMounted = "false";
+    control.setAttribute("data-captcha-status", "error");
+    if (status) status.textContent = error?.message || "자동입력 방지 확인을 다시 시도해 주세요.";
+    ensureRetryButton(control, documentRef);
+    return false;
+  }
+}
+
 function ensureRetryButton(control, documentRef) {
   if (!control || control.querySelector("[data-captcha-retry]")) return;
   const button = documentRef.createElement("button");
@@ -106,18 +157,13 @@ function ensureRetryButton(control, documentRef) {
   button.className = "secondary-btn compact captcha-retry-btn";
   button.textContent = "자동입력 방지 다시 시도";
   button.addEventListener("click", async () => {
-    const widget = control.querySelector("[data-captcha-widget]");
-    const input = control.querySelector("[data-captcha-token]");
-    if (input) input.value = "";
-    if (widget) {
-      delete widget.dataset.captchaMounted;
-      widget.replaceChildren();
-    }
+    button.disabled = true;
     control.setAttribute("data-captcha-status", "loading");
     const status = control.querySelector("[data-captcha-message]");
     if (status) status.textContent = "자동입력 방지 확인을 다시 불러오고 있습니다.";
-    button.remove();
-    await mountCaptchaWidgets(documentRef);
+    const reset = await resetCaptchaControl(control, documentRef);
+    if (reset) button.remove();
+    else button.disabled = false;
   });
   control.appendChild(button);
 }
@@ -146,7 +192,7 @@ export async function mountCaptchaWidgets(documentRef = document) {
       const status = control?.querySelector("[data-captcha-message]");
       if (!input || typeof client?.render !== "function") continue;
       removeRetryButton(control);
-      client.render(widget, {
+      const widgetId = client.render(widget, {
         sitekey: config.siteKey,
         callback: (token) => {
           input.value = String(token || "");
@@ -162,12 +208,12 @@ export async function mountCaptchaWidgets(documentRef = document) {
         },
         "error-callback": () => {
           input.value = "";
-          widget.dataset.captchaMounted = "false";
           control?.setAttribute("data-captcha-status", "error");
           if (status) status.textContent = "자동입력 방지 확인을 다시 시도해 주세요.";
           ensureRetryButton(control, documentRef);
         },
       });
+      widget.dataset.captchaWidgetId = String(widgetId);
       widget.dataset.captchaMounted = "true";
       control?.setAttribute("data-captcha-status", "ready");
     }
