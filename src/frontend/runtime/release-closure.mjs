@@ -1,5 +1,6 @@
 import { defaultCoupons, noticeItems } from "../catalog/content.mjs";
 import { checkLoginIdAvailability } from "../auth/login-id-client.mjs";
+import { resetCaptchaControl } from "../auth/captcha-client.mjs";
 
 const RETIRED_PROMO_MESSAGE = "현재 운영 중인 신규회원 할인 쿠폰은 없습니다. 새 혜택은 공지사항에서 별도로 안내합니다.";
 const EDGE_TIMEOUT_MS = 15_000;
@@ -24,8 +25,9 @@ function metaContent(name) {
 
 function retireExpiredWelcomePromotion() {
   // WELCOME3000 expired on 2026-06-30 and there is no active server-side
-  // benefit policy. Keep a non-promotional sentinel only so legacy consult
-  // code cannot dereference an empty array before the SPA is fully retired.
+  // benefit policy. Keep a non-promotional sentinel only as an internal
+  // fallback for the legacy consult answer, while forcing customer coupon
+  // state to an actual empty collection before app.js initializes.
   defaultCoupons.splice(0, defaultCoupons.length, {
     id: "NO_ACTIVE_SIGNUP_PROMO",
     title: "신규회원 할인 미운영",
@@ -42,7 +44,7 @@ function retireExpiredWelcomePromotion() {
     }
   }
   try {
-    localStorage.removeItem("reball.coupons");
+    localStorage.setItem("reball.coupons", "[]");
   } catch {}
 }
 
@@ -53,7 +55,8 @@ function installEdgeRequestTimeout() {
 
   globalThis.fetch = async (input, init = {}) => {
     const url = typeof input === "string" || input instanceof URL ? String(input) : String(input?.url || "");
-    const shouldTimeout = url.includes("/functions/v1/") && !init?.signal;
+    const isPaymentConfirm = url.includes("/functions/v1/payment-confirm");
+    const shouldTimeout = url.includes("/functions/v1/") && !isPaymentConfirm && !init?.signal;
     if (!shouldTimeout) return nativeFetch(input, init);
 
     const controller = new AbortController();
@@ -106,10 +109,11 @@ async function handleServerLoginIdCheck(event) {
   }
 
   const form = button.closest("form");
+  const captchaControl = form?.querySelector("[data-captcha-control]");
   const captchaToken = String(form?.querySelector("[data-captcha-token]")?.value || "").trim();
   if (!captchaToken) {
     setSignupCheckMessage("아이디 중복확인 전에 자동입력 방지 확인을 완료해 주세요.", "error");
-    form?.querySelector("[data-captcha-control]")?.scrollIntoView?.({ behavior: "smooth", block: "center" });
+    captchaControl?.scrollIntoView?.({ behavior: "smooth", block: "center" });
     return;
   }
 
@@ -117,31 +121,42 @@ async function handleServerLoginIdCheck(event) {
   button.setAttribute("aria-busy", "true");
   setSignupCheckMessage("서버에서 아이디 사용 가능 여부를 확인하고 있습니다.", "checking");
 
+  let result = null;
+  let resetReady = false;
   try {
-    const result = await checkLoginIdAvailability(
+    result = await checkLoginIdAvailability(
       {
         baseUrl: metaContent("reball-supabase-url"),
         anonKey: metaContent("reball-supabase-publishable-key"),
       },
       { loginId, captchaToken }
     );
-    if (!result.available) {
-      setSignupCheckMessage("이미 사용 중인 아이디입니다.", "taken");
-      return;
-    }
-
-    // The legacy SPA owns signup state internally. Re-enter its original click
-    // handler only after the server authority has returned available=true.
-    button.dataset.serverAuthorityPass = loginId;
-    button.disabled = false;
-    button.removeAttribute("aria-busy");
-    button.click();
   } catch (error) {
     setSignupCheckMessage(error?.message || "아이디 중복확인을 완료하지 못했습니다.", "error");
   } finally {
+    // Turnstile/hCaptcha response tokens are single-use. Always clear and
+    // reset the provider widget after the server consumes an availability
+    // check, including taken-ID and error paths.
+    resetReady = await resetCaptchaControl(captchaControl, document).catch(() => false);
     button.disabled = false;
     button.removeAttribute("aria-busy");
   }
+
+  if (!result) return;
+  if (!result.available) {
+    setSignupCheckMessage("이미 사용 중인 아이디입니다. 다른 아이디를 입력하고 자동입력 방지를 다시 확인해 주세요.", "taken");
+    return;
+  }
+  if (!resetReady) {
+    setSignupCheckMessage("아이디는 사용할 수 있지만 자동입력 방지 확인을 새로 발급하지 못했습니다. 다시 확인해 주세요.", "error");
+    return;
+  }
+
+  // The legacy SPA owns signup state internally. Re-enter its original click
+  // handler only after the server authority has returned available=true and a
+  // fresh CAPTCHA challenge is ready for the eventual signup submission.
+  button.dataset.serverAuthorityPass = loginId;
+  button.click();
 }
 
 function removeDeferredCustomerActions(root = document) {
