@@ -73,7 +73,7 @@ async function pagedSelect<T>(
   return { rows, truncated: true };
 }
 
-async function fetchProfiles(): Promise<{ rows: ProfileRow[]; truncated: boolean }> {
+function fetchProfiles(): Promise<{ rows: ProfileRow[]; truncated: boolean }> {
   return pagedSelect<ProfileRow>(
     "profiles",
     "id,login_id,email,auth_email,name,phone,marketing_email,marketing_sms,created_at",
@@ -81,16 +81,12 @@ async function fetchProfiles(): Promise<{ rows: ProfileRow[]; truncated: boolean
   );
 }
 
-async function fetchOrders(): Promise<{ rows: OrderSummaryRow[]; truncated: boolean }> {
-  try {
-    return await pagedSelect<OrderSummaryRow>(
-      "orders",
-      "profile_id,status,total_krw,refund_amount",
-      "created_at.desc",
-    );
-  } catch {
-    return { rows: [], truncated: false };
-  }
+function fetchOrders(): Promise<{ rows: OrderSummaryRow[]; truncated: boolean }> {
+  return pagedSelect<OrderSummaryRow>(
+    "orders",
+    "profile_id,status,total_krw,refund_amount",
+    "created_at.desc",
+  );
 }
 
 Deno.serve(async (req: Request) => {
