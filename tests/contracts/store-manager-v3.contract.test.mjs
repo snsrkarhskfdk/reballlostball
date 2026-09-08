@@ -3,10 +3,11 @@ import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 
 const root = new URL("../../", import.meta.url);
-const [migration, hardening, extraEdge, extraUi, finalAudit, injector, build, devServer, config] = await Promise.all([
+const [migration, hardening, extraEdge, adminMembers, extraUi, finalAudit, injector, build, devServer, config] = await Promise.all([
   readFile(new URL("supabase/migrations/20260907050000_admin_ops_console_v3_closure.sql", root), "utf8"),
   readFile(new URL("supabase/migrations/20260907051000_admin_ops_console_v3_policy_hardening.sql", root), "utf8"),
   readFile(new URL("supabase/functions/admin-ops-extra/index.ts", root), "utf8"),
+  readFile(new URL("supabase/functions/admin-members/index.ts", root), "utf8"),
   readFile(new URL("src/frontend/admin/store-console-extra.mjs", root), "utf8"),
   readFile(new URL("src/frontend/admin/store-console-final-audit.mjs", root), "utf8"),
   readFile(new URL("scripts/admin-console-assets.mjs", root), "utf8"),
@@ -80,6 +81,18 @@ test("returns cancellation supports the refund-account requirement for completed
   assert.match(finalAudit, /Idempotency-Key/);
   assert.match(finalAudit, /data-extra-cancel/);
   assert.match(finalAudit, /stopImmediatePropagation/);
+});
+
+test("member purchase totals exclude failed or fully canceled orders and subtract partial refunds", () => {
+  assert.match(adminMembers, /PURCHASE_STATUSES/);
+  for (const status of ["paid", "partially_canceled", "shipping_ready", "shipped", "delivered"]) {
+    assert.ok(adminMembers.includes(`\"${status}\"`), `missing valid purchase status: ${status}`);
+  }
+  assert.doesNotMatch(adminMembers, /PURCHASE_STATUSES[\s\S]*"payment_failed"/);
+  assert.doesNotMatch(adminMembers, /PURCHASE_STATUSES[\s\S]*"canceled"/);
+  assert.match(adminMembers, /gross - refunded/);
+  assert.match(adminMembers, /Math\.max\(0, gross - refunded\)/);
+  assert.match(adminMembers, /pagedSelect/);
 });
 
 test("final audit keeps extension permissions deterministic after base-tab rerenders", () => {
