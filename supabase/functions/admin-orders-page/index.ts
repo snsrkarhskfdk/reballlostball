@@ -7,11 +7,11 @@ import {
   safeLog,
 } from "../_shared/http.ts";
 import { enforceRateLimit } from "../_shared/security.ts";
-import { serviceSelect, sessionUser } from "../_shared/supabase.ts";
+import { rpc, serviceSelect, sessionUser } from "../_shared/supabase.ts";
 
 type Role = "customer" | "cs_manager" | "inventory_manager" | "payments_manager" | "store_manager" | "owner_admin";
 type AnyRow = Record<string, unknown>;
-type OrderScope = "orders" | "shipping";
+type OrderScope = "orders" | "shipping" | "returns";
 
 const ORDER_ROLES = new Set<Role>(["cs_manager", "payments_manager", "store_manager", "owner_admin"]);
 const ORDER_PII_ROLES = new Set<Role>(["cs_manager", "store_manager", "owner_admin"]);
@@ -19,6 +19,23 @@ const SHIPPING_ROLES = new Set<Role>(["cs_manager", "store_manager", "owner_admi
 const PAYMENT_ROLES = new Set<Role>(["payments_manager", "owner_admin"]);
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const SHIPPING_STATUSES = "in.(paid,shipping_ready,shipped,delivered)";
+const RETURN_STATUSES = "in.(paid,partially_canceled,shipping_ready,shipped,delivered)";
+const ORDER_STATUSES = new Set([
+  "payment_ready",
+  "payment_auth_started",
+  "waiting_for_deposit",
+  "paid",
+  "payment_failed",
+  "cancel_requested",
+  "partially_canceled",
+  "canceled",
+  "shipping_ready",
+  "shipped",
+  "delivered",
+  "refunded",
+]);
+const SEARCH_SCAN_CHUNK = 500;
+const SEARCH_SCAN_MAX = 10000;
 
 async function rolesFor(userId: string): Promise<Role[]> {
   const params = new URLSearchParams({ select: "role", user_id: `eq.${userId}`, limit: "20" });
@@ -37,7 +54,106 @@ function boundedInteger(value: string | null, fallback: number, min: number, max
 }
 
 function orderScope(value: string | null): OrderScope {
-  return value === "shipping" ? "shipping" : "orders";
+  if (value === "shipping" || value === "returns") return value;
+  return "orders";
+}
+
+function normalizedSearch(value: string | null): string {
+  return cleanString(value, 120).trim().toLocaleLowerCase("ko-KR");
+}
+
+function orderSearchText(order: AnyRow, canOrderPii: boolean): string {
+  const safeParts = [
+    order.order_no,
+    order.status,
+    order.payment_status,
+    order.payment_method,
+    order.payment_provider,
+    order.total_krw,
+  ];
+  if (!canOrderPii) return safeParts.join(" ").toLocaleLowerCase("ko-KR");
+  return [
+    ...safeParts,
+    JSON.stringify(order.address_snapshot || {}),
+    JSON.stringify(order.order_items || []),
+    order.shipping_carrier,
+    order.tracking_number,
+  ].join(" ").toLocaleLowerCase("ko-KR");
+}
+
+function applyScopeStatus(params: URLSearchParams, scope: OrderScope, requestedStatus: string): void {
+  if (scope === "shipping") {
+    params.set("status", SHIPPING_STATUSES);
+    return;
+  }
+  if (scope === "returns") {
+    params.set("status", RETURN_STATUSES);
+    return;
+  }
+  if (requestedStatus && ORDER_STATUSES.has(requestedStatus)) {
+    params.set("status", `eq.${requestedStatus}`);
+  }
+}
+
+async function pagedOrders({
+  select,
+  scope,
+  requestedStatus,
+  query,
+  page,
+  pageSize,
+  canOrderPii,
+}: {
+  select: string;
+  scope: OrderScope;
+  requestedStatus: string;
+  query: string;
+  page: number;
+  pageSize: number;
+  canOrderPii: boolean;
+}): Promise<{ orders: AnyRow[]; hasMore: boolean }> {
+  const pageOffset = (page - 1) * pageSize;
+  if (!query) {
+    const params = new URLSearchParams({
+      select,
+      order: "created_at.desc",
+      limit: String(pageSize + 1),
+      offset: String(pageOffset),
+    });
+    applyScopeStatus(params, scope, requestedStatus);
+    const fetched = await serviceSelect<AnyRow[]>(`/rest/v1/orders?${params}`);
+    return { orders: fetched.slice(0, pageSize), hasMore: fetched.length > pageSize };
+  }
+
+  // Search must be applied before pagination. Scan the already status-scoped
+  // authority in descending order until this filtered page plus one lookahead
+  // match is known, rather than filtering a single arbitrary server page.
+  const neededMatches = pageOffset + pageSize + 1;
+  const matches: AnyRow[] = [];
+  let scanned = 0;
+  while (scanned < SEARCH_SCAN_MAX && matches.length < neededMatches) {
+    const params = new URLSearchParams({
+      select,
+      order: "created_at.desc",
+      limit: String(SEARCH_SCAN_CHUNK),
+      offset: String(scanned),
+    });
+    applyScopeStatus(params, scope, requestedStatus);
+    const chunk = await serviceSelect<AnyRow[]>(`/rest/v1/orders?${params}`);
+    for (const order of chunk) {
+      if (orderSearchText(order, canOrderPii).includes(query)) matches.push(order);
+      if (matches.length >= neededMatches) break;
+    }
+    scanned += chunk.length;
+    if (chunk.length < SEARCH_SCAN_CHUNK) break;
+  }
+  if (scanned >= SEARCH_SCAN_MAX && matches.length < neededMatches) {
+    throw new HttpError(413, "ORDER_SEARCH_TOO_BROAD", "검색 범위를 더 구체적으로 입력해 주세요.");
+  }
+  return {
+    orders: matches.slice(pageOffset, pageOffset + pageSize),
+    hasMore: matches.length > pageOffset + pageSize,
+  };
 }
 
 Deno.serve(async (req: Request) => {
@@ -65,25 +181,22 @@ Deno.serve(async (req: Request) => {
 
     const page = boundedInteger(url.searchParams.get("page"), 1, 1, 100000);
     const pageSize = boundedInteger(url.searchParams.get("pageSize"), 50, 20, 100);
-    const offset = (page - 1) * pageSize;
     const canPayments = hasAny(roles, PAYMENT_ROLES);
     const canOrderPii = hasAny(roles, ORDER_PII_ROLES);
+    const requestedStatus = cleanString(url.searchParams.get("status"), 40).toLowerCase();
+    const query = normalizedSearch(url.searchParams.get("q"));
 
     const safeOrderSelect = "id,order_no,status,payment_status,payment_method,payment_provider,subtotal_krw,shipping_krw,discount_krw,refund_amount,total_krw,created_at,updated_at";
     const fullOrderSelect = `${safeOrderSelect},profile_id,address_snapshot,shipping_carrier,tracking_number,shipped_at,delivered_at,order_items(product_name,variant_name,unit_price_krw,qty,line_total_krw)`;
-    const orderParams = new URLSearchParams({
+    const { orders, hasMore } = await pagedOrders({
       select: canOrderPii ? fullOrderSelect : safeOrderSelect,
-      order: "created_at.desc",
-      // Read one look-ahead row so exact page-size multiples do not expose a
-      // bogus enabled "next" button that leads to an empty page.
-      limit: String(pageSize + 1),
-      offset: String(offset),
+      scope,
+      requestedStatus,
+      query,
+      page,
+      pageSize,
+      canOrderPii,
     });
-    if (scope === "shipping") orderParams.set("status", SHIPPING_STATUSES);
-
-    const fetchedOrders = await serviceSelect<AnyRow[]>(`/rest/v1/orders?${orderParams}`);
-    const hasMore = fetchedOrders.length > pageSize;
-    const orders = fetchedOrders.slice(0, pageSize);
     const orderIds = orders.map((row) => cleanString(row.id, 36).toLowerCase()).filter((id) => UUID_PATTERN.test(id));
 
     let payments: AnyRow[] = [];
@@ -95,16 +208,11 @@ Deno.serve(async (req: Request) => {
         limit: String(Math.min(500, pageSize * 3)),
         order_id: `in.(${orderIds.join(",")})`,
       });
-      const noteParams = new URLSearchParams({
-        select: "order_id,event_type,payload_json,actor_user_id,created_at",
-        event_type: "eq.admin_note",
-        order: "created_at.desc",
-        limit: String(Math.min(500, pageSize * 5)),
-        order_id: `in.(${orderIds.join(",")})`,
-      });
       [payments, noteEvents] = await Promise.all([
         serviceSelect<AnyRow[]>(`/rest/v1/payments?${paymentParams}`),
-        canOrderPii ? serviceSelect<AnyRow[]>(`/rest/v1/order_events?${noteParams}`) : Promise.resolve([]),
+        canOrderPii
+          ? rpc<AnyRow[]>("admin_order_notes_page_v1", { p_order_ids: orderIds, p_limit_per_order: 5 })
+          : Promise.resolve([]),
       ]);
     }
 
@@ -125,7 +233,7 @@ Deno.serve(async (req: Request) => {
     for (const event of noteEvents) {
       const id = String(event.order_id || "");
       if (!notes.has(id)) notes.set(id, []);
-      if ((notes.get(id)?.length || 0) < 5) notes.get(id)?.push(event);
+      notes.get(id)?.push(event);
     }
     const cancelableStatuses = new Set(["payment_auth_started", "waiting_for_deposit", "paid", "partially_canceled"]);
 
@@ -137,6 +245,8 @@ Deno.serve(async (req: Request) => {
       page,
       pageSize,
       hasMore,
+      query,
+      status: requestedStatus,
       orders: orders.map((order) => ({
         ...order,
         piiRedacted: !canOrderPii,
