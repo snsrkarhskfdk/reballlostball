@@ -1,8 +1,9 @@
 const ADMIN_TIMEOUT_MS = 15_000;
 const DEFAULT_PAGE_SIZE = 50;
 const scopes = {
-  orders: { page: 1, pageSize: DEFAULT_PAGE_SIZE, hasMore: false },
-  shipping: { page: 1, pageSize: DEFAULT_PAGE_SIZE, hasMore: false },
+  orders: { page: 1, pageSize: DEFAULT_PAGE_SIZE, hasMore: false, pending: false, requestSeq: 0 },
+  shipping: { page: 1, pageSize: DEFAULT_PAGE_SIZE, hasMore: false, pending: false, requestSeq: 0 },
+  returns: { page: 1, pageSize: DEFAULT_PAGE_SIZE, hasMore: false, pending: false, requestSeq: 0 },
 };
 
 const PAGER_CONFIG = {
@@ -24,7 +25,22 @@ const PAGER_CONFIG = {
     next: "data-shipping-page-next",
     label: "data-shipping-page-label",
   },
+  returns: {
+    panel: '[data-panel="returns"]',
+    list: "[data-extra-returns]",
+    reload: '[data-extra-reload="returns"]',
+    pager: "data-returns-pager",
+    prev: "data-returns-page-prev",
+    next: "data-returns-page-next",
+    label: "data-returns-page-label",
+  },
 };
+
+let filterTimer = 0;
+
+function requestMethod(input, init) {
+  return String(init?.method || (typeof Request !== "undefined" && input instanceof Request ? input.method : "GET")).toUpperCase();
+}
 
 function isOrdersViewUrl(url) {
   try {
@@ -36,11 +52,15 @@ function isOrdersViewUrl(url) {
 }
 
 function activeOrdersScope() {
-  const shippingPanel = document.querySelector(PAGER_CONFIG.shipping.panel);
-  if (shippingPanel && !shippingPanel.hidden) return "shipping";
-  const ordersPanel = document.querySelector(PAGER_CONFIG.orders.panel);
-  if (ordersPanel && !ordersPanel.hidden) return "orders";
+  for (const scope of ["returns", "shipping", "orders"]) {
+    const panel = document.querySelector(PAGER_CONFIG[scope].panel);
+    if (panel && !panel.hidden) return scope;
+  }
   return "";
+}
+
+function normalizedFilterValue(selector, maxLength = 120) {
+  return String(document.querySelector(selector)?.value || "").trim().slice(0, maxLength);
 }
 
 function paginatedOrdersUrl(url, scope) {
@@ -51,7 +71,29 @@ function paginatedOrdersUrl(url, scope) {
   parsed.searchParams.set("scope", scope);
   parsed.searchParams.set("page", String(state.page));
   parsed.searchParams.set("pageSize", String(state.pageSize));
+  if (scope === "orders") {
+    const status = normalizedFilterValue("[data-order-status-filter]", 40);
+    const query = normalizedFilterValue("[data-orders-search]");
+    if (status) parsed.searchParams.set("status", status);
+    if (query) parsed.searchParams.set("q", query);
+  } else if (scope === "shipping") {
+    const query = normalizedFilterValue("[data-shipping-search]");
+    if (query) parsed.searchParams.set("q", query);
+  }
   return parsed.toString();
+}
+
+function dispatchPagination(scope) {
+  const state = scopes[scope];
+  window.dispatchEvent(new CustomEvent("reball:order-pagination", {
+    detail: {
+      scope,
+      page: state.page,
+      pageSize: state.pageSize,
+      hasMore: state.hasMore,
+      pending: state.pending,
+    },
+  }));
 }
 
 function installAdminFetchBoundary() {
@@ -61,9 +103,19 @@ function installAdminFetchBoundary() {
 
   globalThis.fetch = async (input, init = {}) => {
     const originalUrl = typeof input === "string" || input instanceof URL ? String(input) : String(input?.url || "");
-    const scope = isOrdersViewUrl(originalUrl) ? activeOrdersScope() : "";
+    const method = requestMethod(input, init);
+    const scope = method === "GET" && isOrdersViewUrl(originalUrl) ? activeOrdersScope() : "";
     const targetUrl = scope ? paginatedOrdersUrl(originalUrl, scope) : originalUrl;
-    const shouldTimeout = targetUrl.includes("/functions/v1/") && !init?.signal;
+    const state = scope ? scopes[scope] : null;
+    const requestSeq = state ? ++state.requestSeq : 0;
+    if (state) {
+      state.pending = true;
+      dispatchPagination(scope);
+    }
+
+    // A generic timeout is safe only for reads. Mutations may commit after a
+    // browser abort and must rely on their own idempotency/recovery instead.
+    const shouldTimeout = method === "GET" && targetUrl.includes("/functions/v1/") && !init?.signal;
     const controller = shouldTimeout ? new AbortController() : null;
     const timer = controller
       ? globalThis.setTimeout(
@@ -77,19 +129,22 @@ function installAdminFetchBoundary() {
         ? new Request(targetUrl, input)
         : targetUrl !== originalUrl ? targetUrl : input;
       const response = await nativeFetch(requestInput, controller ? { ...init, signal: controller.signal } : init);
-      if (scope && response.ok) {
-        response.clone().json().then((payload) => {
-          const state = scopes[scope];
+      if (state && requestSeq === state.requestSeq) {
+        if (response.ok) {
+          const payload = await response.clone().json().catch(() => ({}));
           state.page = Math.max(1, Number(payload?.page) || state.page);
           state.pageSize = Math.max(20, Number(payload?.pageSize) || state.pageSize);
           state.hasMore = payload?.hasMore === true;
-          window.dispatchEvent(new CustomEvent("reball:order-pagination", {
-            detail: { scope, page: state.page, pageSize: state.pageSize, hasMore: state.hasMore },
-          }));
-        }).catch(() => undefined);
+        }
+        state.pending = false;
+        dispatchPagination(scope);
       }
       return response;
     } catch (error) {
+      if (state && requestSeq === state.requestSeq) {
+        state.pending = false;
+        dispatchPagination(scope);
+      }
       if (error?.name === "AbortError" || error?.name === "TimeoutError") {
         throw new Error("관리자 서버 연결 시간이 초과되었습니다. 새로고침 후 다시 시도해 주세요.");
       }
@@ -138,17 +193,19 @@ function ensurePager(scope) {
     list.before(pager);
     pager.querySelector(`[${config.prev}]`)?.addEventListener("click", () => {
       const state = scopes[scope];
-      if (state.page <= 1) return;
+      if (state.pending || state.page <= 1) return;
       state.page -= 1;
-      reloadScope(scope);
+      state.pending = true;
       updatePager(scope);
+      reloadScope(scope);
     });
     pager.querySelector(`[${config.next}]`)?.addEventListener("click", () => {
       const state = scopes[scope];
-      if (!state.hasMore) return;
+      if (state.pending || !state.hasMore) return;
       state.page += 1;
-      reloadScope(scope);
+      state.pending = true;
       updatePager(scope);
+      reloadScope(scope);
     });
   }
   updatePager(scope);
@@ -162,64 +219,61 @@ function updatePager(scope) {
   const label = pager.querySelector(`[${config.label}]`);
   const previous = pager.querySelector(`[${config.prev}]`);
   const next = pager.querySelector(`[${config.next}]`);
-  const nextLabel = `${state.page} 페이지 · ${state.pageSize}건씩`;
-  // The observer watches childList mutations. Reassigning identical text here
-  // would retrigger the observer forever, so every DOM write is idempotent.
+  const nextLabel = `${state.page} 페이지 · ${state.pageSize}건씩${state.pending ? " · 불러오는 중" : ""}`;
   if (label && label.textContent !== nextLabel) label.textContent = nextLabel;
-  if (previous && previous.disabled !== (state.page <= 1)) previous.disabled = state.page <= 1;
-  if (next && next.disabled !== !state.hasMore) next.disabled = !state.hasMore;
+  const previousDisabled = state.pending || state.page <= 1;
+  const nextDisabled = state.pending || !state.hasMore;
+  if (previous && previous.disabled !== previousDisabled) previous.disabled = previousDisabled;
+  if (next && next.disabled !== nextDisabled) next.disabled = nextDisabled;
 }
 
-function resetScopeToFirstPage(scope, { reload = false } = {}) {
+function resetScopeToFirstPage(scope) {
   const state = scopes[scope];
-  const changed = state.page !== 1 || state.hasMore;
   state.page = 1;
   state.hasMore = false;
   updatePager(scope);
-  if (reload && changed) reloadScope(scope);
+}
+
+function scheduleFilteredReload(scope) {
+  resetScopeToFirstPage(scope);
+  globalThis.clearTimeout(filterTimer);
+  filterTimer = globalThis.setTimeout(() => reloadScope(scope), 250);
 }
 
 installAdminFetchBoundary();
 
 window.addEventListener("reball:order-pagination", (event) => {
-  const scope = event?.detail?.scope === "shipping" ? "shipping" : "orders";
+  const requested = String(event?.detail?.scope || "");
+  const scope = Object.hasOwn(scopes, requested) ? requested : "orders";
   ensurePager(scope);
 });
 
 document.addEventListener("click", (event) => {
   const tab = event.target instanceof Element ? event.target.closest("[data-tab]") : null;
   if (!tab) return;
-  if (tab.dataset.tab === "orders") ensurePager("orders");
-  if (tab.dataset.tab === "shipping") ensurePager("shipping");
+  if (Object.hasOwn(scopes, tab.dataset.tab)) ensurePager(tab.dataset.tab);
 });
 
 document.addEventListener("input", (event) => {
   if (!(event.target instanceof Element)) return;
-  if (event.target.matches("[data-orders-search]")) {
-    resetScopeToFirstPage("orders", { reload: true });
-  }
-  if (event.target.matches("[data-shipping-search]")) {
-    resetScopeToFirstPage("shipping", { reload: true });
-  }
+  if (event.target.matches("[data-orders-search]")) scheduleFilteredReload("orders");
+  if (event.target.matches("[data-shipping-search]")) scheduleFilteredReload("shipping");
 });
 
 document.addEventListener("change", (event) => {
   if (event.target instanceof Element && event.target.matches("[data-order-status-filter]")) {
-    resetScopeToFirstPage("orders", { reload: true });
+    scheduleFilteredReload("orders");
   }
 });
 
 const observer = new MutationObserver(() => {
-  ensurePager("orders");
-  ensurePager("shipping");
+  for (const scope of Object.keys(scopes)) ensurePager(scope);
 });
 observer.observe(document.documentElement, { childList: true, subtree: true });
 if (document.readyState === "loading") {
   document.addEventListener("DOMContentLoaded", () => {
-    ensurePager("orders");
-    ensurePager("shipping");
+    for (const scope of Object.keys(scopes)) ensurePager(scope);
   }, { once: true });
 } else {
-  ensurePager("orders");
-  ensurePager("shipping");
+  for (const scope of Object.keys(scopes)) ensurePager(scope);
 }
