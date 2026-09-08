@@ -87,7 +87,18 @@ async function installMocks(page, capture, role = "owner") {
     const view = url.searchParams.get("view");
     const isPayments = role === "payments";
     let body = {};
-    if (url.pathname.endsWith("/admin-console") && request.method() === "GET") {
+    if (url.pathname.endsWith("/admin-orders-page") && request.method() === "GET") {
+      const scope = url.searchParams.get("scope") || "orders";
+      body = {
+        scope,
+        page:Number(url.searchParams.get("page") || 1),
+        pageSize:Number(url.searchParams.get("pageSize") || 50),
+        hasMore:false,
+        canPayments:true,
+        canOrderPii:!isPayments,
+        orders:[isPayments?paymentOnlyOrder:virtualOrder],
+      };
+    } else if (url.pathname.endsWith("/admin-console") && request.method() === "GET") {
       if (view === "dashboard") body = { metrics:{paidTodayCount:1,grossTodayKrw:26000,refundsTodayKrw:0,netTodayKrw:26000,pendingShipping:isPayments?undefined:1,lowStock:isPayments?undefined:1,outOfStock:isPayments?undefined:0,paymentAlerts:0},recentOrders:[{order_no:"RB-VIRTUAL",status:"paid",total_krw:26000}] };
       else if (view === "orders") body = { canPayments:true,canOrderPii:!isPayments,orders:[isPayments?paymentOnlyOrder:virtualOrder] };
       else if (view === "audit") body = { audit:[],orderEvents:[],people:{} };
