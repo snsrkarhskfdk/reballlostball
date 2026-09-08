@@ -7,7 +7,7 @@ import {
   readJson,
   safeLog,
 } from "../_shared/http.ts";
-import { enforceRateLimit, verifyCaptcha } from "../_shared/security.ts";
+import { clientIp, enforceRateLimit, verifyCaptcha } from "../_shared/security.ts";
 import { rpc } from "../_shared/supabase.ts";
 
 const LOGIN_ID_PATTERN = /^[a-z0-9][a-z0-9._-]{3,19}$/;
@@ -25,12 +25,16 @@ Deno.serve(async (req: Request) => {
 
     const body = await readJson(req, 16 * 1024);
     const loginId = normalizeLoginId(body.loginId);
-    await enforceRateLimit(req, "auth_login_id_check", loginId || "empty", 12, 900, 1800);
-    await verifyCaptcha(req, body.captchaToken);
-
     if (!LOGIN_ID_PATTERN.test(loginId)) {
       throw new HttpError(400, "INVALID_LOGIN_ID", "아이디 형식을 확인해 주세요.");
     }
+
+    // Before CAPTCHA succeeds, throttle only the caller's network identity.
+    // This prevents an attacker with invalid CAPTCHA tokens from poisoning a
+    // chosen login ID's subject bucket for legitimate users.
+    await enforceRateLimit(req, "auth_login_id_check_pre", clientIp(req), 30, 300, 900);
+    await verifyCaptcha(req, body.captchaToken);
+    await enforceRateLimit(req, "auth_login_id_check", loginId, 12, 900, 1800);
 
     const result = await rpc<{ loginIdExists?: boolean }>("check_signup_identity_v1", {
       p_login_id: loginId,
