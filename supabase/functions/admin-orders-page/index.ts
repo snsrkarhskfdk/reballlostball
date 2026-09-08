@@ -74,12 +74,16 @@ Deno.serve(async (req: Request) => {
     const orderParams = new URLSearchParams({
       select: canOrderPii ? fullOrderSelect : safeOrderSelect,
       order: "created_at.desc",
-      limit: String(pageSize),
+      // Read one look-ahead row so exact page-size multiples do not expose a
+      // bogus enabled "next" button that leads to an empty page.
+      limit: String(pageSize + 1),
       offset: String(offset),
     });
     if (scope === "shipping") orderParams.set("status", SHIPPING_STATUSES);
 
-    const orders = await serviceSelect<AnyRow[]>(`/rest/v1/orders?${orderParams}`);
+    const fetchedOrders = await serviceSelect<AnyRow[]>(`/rest/v1/orders?${orderParams}`);
+    const hasMore = fetchedOrders.length > pageSize;
+    const orders = fetchedOrders.slice(0, pageSize);
     const orderIds = orders.map((row) => cleanString(row.id, 36).toLowerCase()).filter((id) => UUID_PATTERN.test(id));
 
     let payments: AnyRow[] = [];
@@ -132,7 +136,7 @@ Deno.serve(async (req: Request) => {
       scope,
       page,
       pageSize,
-      hasMore: orders.length === pageSize,
+      hasMore,
       orders: orders.map((order) => ({
         ...order,
         piiRedacted: !canOrderPii,
