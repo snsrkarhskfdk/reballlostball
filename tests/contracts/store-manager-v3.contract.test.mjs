@@ -3,9 +3,10 @@ import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 
 const root = new URL("../../", import.meta.url);
-const [migration, hardening, extraEdge, adminMembers, extraUi, finalAudit, injector, build, devServer, config] = await Promise.all([
+const [migration, hardening, adminConsole, extraEdge, adminMembers, extraUi, finalAudit, injector, build, devServer, config] = await Promise.all([
   readFile(new URL("supabase/migrations/20260907050000_admin_ops_console_v3_closure.sql", root), "utf8"),
   readFile(new URL("supabase/migrations/20260907051000_admin_ops_console_v3_policy_hardening.sql", root), "utf8"),
+  readFile(new URL("supabase/functions/admin-console/index.ts", root), "utf8"),
   readFile(new URL("supabase/functions/admin-ops-extra/index.ts", root), "utf8"),
   readFile(new URL("supabase/functions/admin-members/index.ts", root), "utf8"),
   readFile(new URL("src/frontend/admin/store-console-extra.mjs", root), "utf8"),
@@ -64,6 +65,8 @@ test("new product registration is atomic and low-stock configuration is bounded 
   assert.match(finalAudit, /data-final-threshold-input/);
   assert.match(finalAudit, /action: "threshold_set"/);
   assert.match(finalAudit, /저재고 기준 이하/);
+  assert.match(finalAudit, /thresholdPending/);
+  assert.match(finalAudit, /!row\.querySelector\("\[data-final-threshold-control\]"\)/);
 });
 
 test("cover photo protection and CSV formula-injection protection remain in force", () => {
@@ -93,6 +96,17 @@ test("member purchase totals exclude failed or fully canceled orders and subtrac
   assert.match(adminMembers, /gross - refunded/);
   assert.match(adminMembers, /Math\.max\(0, gross - refunded\)/);
   assert.match(adminMembers, /pagedSelect/);
+  assert.doesNotMatch(adminMembers, /fetchOrders\(\)[\s\S]*catch/);
+});
+
+test("daily dashboard accounting keeps canceled same-day approvals in gross and uses refund ledger events", () => {
+  assert.match(adminConsole, /payment_refunds\?select=cancel_amount,refund_status,requested_at,completed_at/);
+  assert.match(adminConsole, /const approvedToday = payments\.filter/);
+  assert.match(adminConsole, /Number\(p\.approved_amount \|\| 0\) > 0/);
+  assert.doesNotMatch(adminConsole, /p\.status === "done" && new Date\(String\(p\.approved_at/);
+  assert.match(adminConsole, /String\(r\.refund_status\) === "completed"/);
+  assert.match(adminConsole, /r\.completed_at/);
+  assert.match(adminConsole, /grossTodayKrw - refundsTodayKrw/);
 });
 
 test("final audit keeps extension permissions deterministic after base-tab rerenders", () => {
