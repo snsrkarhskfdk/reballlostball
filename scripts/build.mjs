@@ -26,6 +26,15 @@ function shouldCopyAsset(sourcePath) {
   );
 }
 
+function injectStoreManagerReleaseAssets(html) {
+  const marker = '<script type="module" src="/store-manager.mjs?v=20260906-01"></script>';
+  if (!html.includes(marker)) throw new Error("store-manager.html 운영 스크립트 마커를 찾을 수 없습니다.");
+  return html.replace(
+    marker,
+    '<script type="module" src="/src/frontend/admin/store-manager-pagination.mjs?v=20260908-01"></script>\n    ' + marker
+  );
+}
+
 await rm(outputDir, { recursive: true, force: true });
 await mkdir(outputDir, { recursive: true });
 
@@ -44,7 +53,7 @@ await writeFile(`${outputDir}/index.html`, injectPublicConfig(indexHtml), "utf8"
 const storeManagerHtml = await readFile("store-manager.html", "utf8");
 await writeFile(
   `${outputDir}/store-manager.html`,
-  injectAdminConsoleAssets(injectPublicConfig(storeManagerHtml)),
+  injectStoreManagerReleaseAssets(injectAdminConsoleAssets(injectPublicConfig(storeManagerHtml))),
   "utf8",
 );
 
