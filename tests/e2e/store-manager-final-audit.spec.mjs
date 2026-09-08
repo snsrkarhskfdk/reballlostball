@@ -8,7 +8,8 @@ const variantId = "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb";
 const orderId = "cccccccc-cccc-4ccc-8ccc-cccccccccccc";
 
 const fakeSupabaseModule = `
-const user = { id: "11111111-1111-4111-8111-111111111111", email: "owner@example.com" };
+const role = new URL(location.href).searchParams.get("role") === "payments" ? "payments_manager" : "owner_admin";
+const user = { id: "11111111-1111-4111-8111-111111111111", email: role === "payments_manager" ? "payments@example.com" : "owner@example.com" };
 const session = { user, access_token: "test-access-token" };
 const productRows = [{
   id:"${productId}", slug:"test-ball", name:"테스트 로스트볼", subtitle:"운영 테스트", summary:"테스트", base_price_krw:15000, detail_image_url:"", active:true, updated_at:new Date().toISOString(), brands:{name:"테스트",slug:"test"},
@@ -17,8 +18,8 @@ const productRows = [{
 function query(table){
   const q={
     select(){return q},
-    eq(column){
-      if(table==="user_roles") return Promise.resolve({data:[{role:"owner_admin"}],error:null});
+    eq(){
+      if(table==="user_roles") return Promise.resolve({data:[{role}],error:null});
       return q;
     },
     in(){
@@ -55,11 +56,25 @@ const virtualOrder = {
   address_snapshot: { receiverName:"테스터", receiverPhone:"01012345678", roadAddress:"부천시 소사구 경인로10번길 34" },
   order_items: [{ product_name:"테스트 로스트볼", variant_name:"A 10구", qty:1, line_total_krw:22500 }],
   payment: { method:"virtual_account", status:"done", approved_amount:26000, canceled_amount:0 },
-  notes: [],
+  notes: [{payload_json:{note:"고객 연락처 확인"},created_at:new Date().toISOString()}],
   canCancel: true,
 };
+const paymentOnlyOrder = {
+  id: orderId,
+  order_no: "RB-VIRTUAL",
+  status: "paid",
+  payment_status: "done",
+  payment_method: "virtual_account",
+  total_krw: 26000,
+  refund_amount: 0,
+  created_at: new Date().toISOString(),
+  payment: { method:"virtual_account", status:"done", approved_amount:26000, canceled_amount:0 },
+  notes: [],
+  canCancel: true,
+  piiRedacted: true,
+};
 
-async function installMocks(page, capture) {
+async function installMocks(page, capture, role = "owner") {
   const rawHtml = await readFile(htmlPath, "utf8");
   const html = injectAdminConsoleAssets(rawHtml
     .replace('meta name="reball-supabase-url" content=""', 'meta name="reball-supabase-url" content="https://fake.supabase.test"')
@@ -70,20 +85,21 @@ async function installMocks(page, capture) {
     const request = route.request();
     const url = new URL(request.url());
     const view = url.searchParams.get("view");
+    const isPayments = role === "payments";
     let body = {};
     if (url.pathname.endsWith("/admin-console") && request.method() === "GET") {
-      if (view === "dashboard") body = { metrics:{paidTodayCount:1,grossTodayKrw:26000,refundsTodayKrw:0,netTodayKrw:26000,pendingShipping:1,lowStock:1,outOfStock:0,paymentAlerts:0},recentOrders:[virtualOrder] };
-      else if (view === "orders") body = { canPayments:true, orders:[virtualOrder] };
+      if (view === "dashboard") body = { metrics:{paidTodayCount:1,grossTodayKrw:26000,refundsTodayKrw:0,netTodayKrw:26000,pendingShipping:isPayments?undefined:1,lowStock:isPayments?undefined:1,outOfStock:isPayments?undefined:0,paymentAlerts:0},recentOrders:[{order_no:"RB-VIRTUAL",status:"paid",total_krw:26000}] };
+      else if (view === "orders") body = { canPayments:true,canOrderPii:!isPayments,orders:[isPayments?paymentOnlyOrder:virtualOrder] };
       else if (view === "audit") body = { audit:[],orderEvents:[],people:{} };
       else if (view === "settings") body = { store:{},commerce:{},policies:[] };
       else if (view === "staff") body = { staff:[] };
     } else if (url.pathname.endsWith("/admin-members")) {
       body = { members:[] };
     } else if (url.pathname.endsWith("/admin-ops-extra") && request.method() === "GET") {
-      if (view === "returns") body = { requests:[],cancelableOrders:[virtualOrder],canCancel:true };
+      if (view === "returns") body = { requests:[],cancelableOrders:[paymentOnlyOrder],canCancel:true };
       else if (view === "inquiries") body = { inquiries:[] };
       else if (view === "reviews") body = { reviews:[] };
-      else if (view === "promo") body = { benefits:[],banners:[],canManageBanners:true };
+      else if (view === "promo") body = { benefits:[],banners:[],canManageBanners:!isPayments };
       else if (view === "pos") body = { devices:[] };
       else if (view === "settlement") body = { metrics:{grossKrw:26000,canceledKrw:0,netKrw:26000,completedRefundKrw:0},rows:[],refunds:[] };
       else if (view === "brands") body = { brands:[{id:"ffffffff-ffff-4fff-8fff-ffffffffffff",name:"테스트",slug:"test",active:true}] };
@@ -101,15 +117,16 @@ async function installMocks(page, capture) {
     }
     await route.fulfill({ status:200, contentType:"application/json", headers:{"access-control-allow-origin":"*"}, body:JSON.stringify(body) });
   });
-  await page.goto("/store-manager.html");
+  await page.goto(`/store-manager.html${role === "payments" ? "?role=payments" : ""}`);
   await expect(page.locator("[data-app-panel]")).toBeVisible();
 }
 
-test("existing SKU low-stock threshold is rendered and saved through the audited RPC", async ({ page }) => {
+test("existing SKU low-stock threshold is rendered once and saved through the audited RPC", async ({ page }) => {
   const capture = { adminOps:[],paymentCancel:[] };
   await installMocks(page, capture);
   await page.locator('[data-tab="products"]').click();
   const control = page.locator(`[data-variant-id="${variantId}"] [data-final-threshold-control]`);
+  await expect(control).toHaveCount(1);
   await expect(control).toBeVisible();
   await expect(control.locator("[data-final-threshold-input]")).toHaveValue("7");
   await control.locator("[data-final-threshold-input]").fill("9");
@@ -145,4 +162,19 @@ test("Returns tab sends required refund account for a completed virtual-account 
   });
   expect(capture.paymentCancel[0].body.idempotencyKey).toBeTruthy();
   expect(capture.paymentCancel[0].idempotencyKey).toBe(capture.paymentCancel[0].body.idempotencyKey);
+});
+
+test("payments manager sees cancellation finance data without customer shipping or note PII", async ({ page }) => {
+  const capture = { adminOps:[],paymentCancel:[] };
+  await installMocks(page, capture, "payments");
+  await expect(page.locator('[data-tab="orders"]')).toBeVisible();
+  await page.locator('[data-tab="orders"]').click();
+  const card = page.locator('[data-order-no="RB-VIRTUAL"]');
+  await expect(card).toContainText("고객 배송정보 비공개");
+  await expect(card).toContainText("상품 상세 비공개");
+  await expect(card).not.toContainText("테스터");
+  await expect(card).not.toContainText("경인로10번길");
+  await expect(card.locator(".sm-note-form")).toHaveCount(0);
+  await expect(card.locator(".sm-note-list")).toHaveCount(0);
+  await expect(card.locator("[data-cancel-order]")).toBeVisible();
 });
