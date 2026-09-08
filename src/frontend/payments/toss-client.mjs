@@ -4,7 +4,20 @@ const TOSS_SDK_URL = "https://js.tosspayments.com/v2/standard";
 const TOSS_SDK_TIMEOUT_MS = 15_000;
 const TOSS_API_TIMEOUT_MS = 15_000;
 const PAYMENT_RETURN_STORAGE_PREFIX = "reball.paymentReturnToken.";
+const RECOVERABLE_CONFIRM_CODES = new Set([
+  "PAYMENT_RESULT_UNKNOWN",
+  "PAYMENT_RESPONSE_MISMATCH",
+  "PAYMENT_RECONCILIATION_PENDING",
+]);
 let tossSdkPromise = null;
+
+function requestError(message, { code = "", status = 0, payload = null } = {}) {
+  const error = new Error(message);
+  error.code = String(code || "");
+  error.status = Number(status) || 0;
+  error.payload = payload;
+  return error;
+}
 
 async function postJson(fetchImpl, url, body, headers = {}, timeoutMs = TOSS_API_TIMEOUT_MS) {
   const controller = new AbortController();
@@ -21,17 +34,22 @@ async function postJson(fetchImpl, url, body, headers = {}, timeoutMs = TOSS_API
       method: "POST",
       headers: { "Content-Type": "application/json", ...headers },
       body: JSON.stringify(body),
-      // Always provide a signal. The release-wide fetch boundary treats an
-      // explicit signal as ownership by this payment client, so a no-timeout
-      // payment-confirm cannot be re-aborted by the generic 15s wrapper.
       signal: controller.signal,
     });
     const payload = await response.json().catch(() => ({}));
-    if (!response.ok) throw new Error(payload?.message || "결제 준비에 실패했습니다.");
+    if (!response.ok) {
+      throw requestError(payload?.message || "결제 요청에 실패했습니다.", {
+        code: payload?.code,
+        status: response.status,
+        payload,
+      });
+    }
     return payload;
   } catch (error) {
     if (error?.name === "AbortError" || error?.name === "TimeoutError") {
-      throw new Error("결제 서버 연결 시간이 초과되었습니다. 같은 주문에서 다시 시도해 주세요.");
+      throw requestError("결제 서버 연결 시간이 초과되었습니다. 같은 주문에서 다시 시도해 주세요.", {
+        code: "CLIENT_TIMEOUT",
+      });
     }
     throw error;
   } finally {
@@ -94,6 +112,19 @@ function clearPaymentReturnToken(orderId, storage = globalThis.sessionStorage) {
   try { storage.removeItem(key); } catch {}
 }
 
+function confirmationRetryable(error) {
+  const code = String(error?.code || "").toUpperCase();
+  if (RECOVERABLE_CONFIRM_CODES.has(code)) return true;
+  // A transport failure is also ambiguous: the server/provider may have
+  // committed before the browser lost the response. Retrying the same tuple is
+  // safer than starting a new preparation flow.
+  return !code && (!Number(error?.status) || Number(error?.status) >= 500);
+}
+
+function sleep(ms) {
+  return new Promise((resolve) => globalThis.setTimeout(resolve, ms));
+}
+
 export function prepareTossPayment(config, orderId, guestLookupToken = "") {
   const rawOrderId = String(orderId || "").trim();
   const safeId = safeOrderId(rawOrderId);
@@ -118,7 +149,7 @@ export function prepareTossPayment(config, orderId, guestLookupToken = "") {
   );
 }
 
-export function confirmTossPayment(config, confirmation) {
+export async function confirmTossPayment(config, confirmation) {
   const orderId = safeOrderId(confirmation?.orderId);
   const paymentKey = String(confirmation?.paymentKey || "").trim();
   const amount = Number(confirmation?.amount);
@@ -135,42 +166,47 @@ export function confirmTossPayment(config, confirmation) {
   const paymentReturnToken = explicitReturnToken
     ? rememberPaymentReturnToken(orderId, explicitReturnToken, storage)
     : browserPaymentReturnToken(orderId, { locationLike, storage });
-
-  // A browser-side timeout is unsafe for confirmation: Toss or the Edge
-  // Function may still commit while the SPA scrubs paymentKey from the URL.
-  // Keep the idempotent confirmation request alive until the server returns a
-  // definitive result. Callers may explicitly opt into a positive
-  // confirmTimeoutMs only for controlled non-production tests.
+  const confirmBody = {
+    paymentKey,
+    orderId,
+    amount,
+    ...(guestLookupToken ? { guestLookupToken } : {}),
+    ...(!guestLookupToken && paymentReturnToken ? { paymentReturnToken } : {}),
+  };
+  const confirmHeaders = {
+    apikey: config.anonKey,
+    ...(config.accessToken ? { Authorization: `Bearer ${config.accessToken}` } : {}),
+  };
+  const confirmUrl = `${String(config.baseUrl).replace(/\/$/, "")}/functions/v1/payment-confirm`;
   const confirmTimeoutMs = Number(config.confirmTimeoutMs) > 0
     ? Number(config.confirmTimeoutMs)
     : 0;
+  const fetchImpl = config.fetchImpl ?? fetch;
+  let retryIndex = 0;
 
-  return postJson(
-    config.fetchImpl ?? fetch,
-    `${String(config.baseUrl).replace(/\/$/, "")}/functions/v1/payment-confirm`,
-    {
-      paymentKey,
-      orderId,
-      amount,
-      ...(guestLookupToken ? { guestLookupToken } : {}),
-      ...(!guestLookupToken && paymentReturnToken ? { paymentReturnToken } : {}),
-    },
-    {
-      apikey: config.anonKey,
-      ...(config.accessToken ? { Authorization: `Bearer ${config.accessToken}` } : {}),
-    },
-    confirmTimeoutMs
-  ).then((result) => {
-    const refreshedGuestLookupToken = String(result?.guestLookupToken || "").trim();
-    if (refreshedGuestLookupToken) {
-      saveGuestLookupSession(storage, {
-        orderId,
-        lookupToken: refreshedGuestLookupToken,
-      });
+  while (true) {
+    try {
+      const result = await postJson(fetchImpl, confirmUrl, confirmBody, confirmHeaders, confirmTimeoutMs);
+      const refreshedGuestLookupToken = String(result?.guestLookupToken || "").trim();
+      if (refreshedGuestLookupToken) {
+        saveGuestLookupSession(storage, {
+          orderId,
+          lookupToken: refreshedGuestLookupToken,
+        });
+      }
+      clearPaymentReturnToken(orderId, storage);
+      return result;
+    } catch (error) {
+      if (!confirmationRetryable(error)) throw error;
+      retryIndex += 1;
+      const delayMs = Math.min(10_000, 750 * (2 ** Math.min(retryIndex - 1, 4)));
+      await sleep(delayMs);
+      // Repeat the exact same paymentKey/orderId/amount/capability tuple. The
+      // server derives a stable idempotency key from this tuple, so an unknown
+      // provider result cannot fall through to prepare-payment or create a new
+      // authorization attempt.
     }
-    clearPaymentReturnToken(orderId, storage);
-    return result;
-  });
+  }
 }
 
 export function loadTossSdk(documentRef = document, { timeoutMs = TOSS_SDK_TIMEOUT_MS } = {}) {
@@ -248,4 +284,4 @@ export async function requestTossPayment({ clientKey, customerKey, payment }) {
   return checkout.requestPayment(payment);
 }
 
-export { TOSS_SDK_URL, TOSS_API_TIMEOUT_MS };
+export { TOSS_SDK_URL, TOSS_API_TIMEOUT_MS, RECOVERABLE_CONFIRM_CODES };
