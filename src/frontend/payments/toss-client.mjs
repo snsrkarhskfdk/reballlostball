@@ -2,18 +2,34 @@ import { saveGuestLookupSession } from "../core/storage.mjs";
 
 const TOSS_SDK_URL = "https://js.tosspayments.com/v2/standard";
 const TOSS_SDK_TIMEOUT_MS = 15_000;
+const TOSS_API_TIMEOUT_MS = 15_000;
 const PAYMENT_RETURN_STORAGE_PREFIX = "reball.paymentReturnToken.";
 let tossSdkPromise = null;
 
-async function postJson(fetchImpl, url, body, headers = {}) {
-  const response = await fetchImpl(url, {
-    method: "POST",
-    headers: { "Content-Type": "application/json", ...headers },
-    body: JSON.stringify(body),
-  });
-  const payload = await response.json().catch(() => ({}));
-  if (!response.ok) throw new Error(payload?.message || "결제 준비에 실패했습니다.");
-  return payload;
+async function postJson(fetchImpl, url, body, headers = {}, timeoutMs = TOSS_API_TIMEOUT_MS) {
+  const controller = new AbortController();
+  const timer = globalThis.setTimeout(
+    () => controller.abort(new DOMException("요청 시간이 초과되었습니다.", "TimeoutError")),
+    Math.max(1, Number(timeoutMs) || TOSS_API_TIMEOUT_MS)
+  );
+  try {
+    const response = await fetchImpl(url, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", ...headers },
+      body: JSON.stringify(body),
+      signal: controller.signal,
+    });
+    const payload = await response.json().catch(() => ({}));
+    if (!response.ok) throw new Error(payload?.message || "결제 준비에 실패했습니다.");
+    return payload;
+  } catch (error) {
+    if (error?.name === "AbortError" || error?.name === "TimeoutError") {
+      throw new Error("결제 서버 연결 시간이 초과되었습니다. 같은 주문에서 다시 시도해 주세요.");
+    }
+    throw error;
+  } finally {
+    globalThis.clearTimeout(timer);
+  }
 }
 
 function safeOrderId(value) {
@@ -90,7 +106,8 @@ export function prepareTossPayment(config, orderId, guestLookupToken = "") {
     {
       apikey: config.anonKey,
       ...(config.accessToken ? { Authorization: `Bearer ${config.accessToken}` } : {}),
-    }
+    },
+    config.timeoutMs
   );
 }
 
@@ -125,7 +142,8 @@ export function confirmTossPayment(config, confirmation) {
     {
       apikey: config.anonKey,
       ...(config.accessToken ? { Authorization: `Bearer ${config.accessToken}` } : {}),
-    }
+    },
+    config.timeoutMs
   ).then((result) => {
     const refreshedGuestLookupToken = String(result?.guestLookupToken || "").trim();
     if (refreshedGuestLookupToken) {
@@ -203,7 +221,7 @@ export function hasActivePaymentGesture(navigatorRef = globalThis.navigator) {
 }
 
 export async function requestTossPayment({ clientKey, customerKey, payment }) {
-  if (!clientKey) throw new Error("토스페이먼츠 테스트 client key가 필요합니다.");
+  if (!clientKey) throw new Error("토스페이먼츠 client key가 필요합니다.");
   if (!hasActivePaymentGesture()) {
     throw new Error("주문 접수가 완료되었습니다. 주문 화면의 토스 결제하기 버튼을 눌러 결제를 시작해 주세요.");
   }
@@ -214,4 +232,4 @@ export async function requestTossPayment({ clientKey, customerKey, payment }) {
   return checkout.requestPayment(payment);
 }
 
-export { TOSS_SDK_URL };
+export { TOSS_SDK_URL, TOSS_API_TIMEOUT_MS };
