@@ -2,6 +2,12 @@ import "./store-console-extra.mjs";
 import "./store-console-extra-guard.mjs";
 import { createClient } from "https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.110.2/+esm";
 
+const FINAL_AUDIT_GLOBAL_KEY = "__reballAdminFinalAudit20260908";
+const finalAuditGlobal = globalThis[FINAL_AUDIT_GLOBAL_KEY] ||= {
+  initialized: false,
+  thresholdPending: new Set(),
+};
+
 const meta = (name) => document.querySelector(`meta[name="${name}"]`)?.content?.trim() || "";
 const SUPABASE_URL = meta("reball-supabase-url").replace(/\/$/, "");
 const SUPABASE_KEY = meta("reball-supabase-publishable-key");
@@ -26,7 +32,7 @@ const EXTRA_TAB_ROLES = {
 };
 const PRODUCT_THRESHOLD_ROLES = new Set(["owner_admin", "store_manager", "inventory_manager"]);
 const ORDER_PII_ROLES = new Set(["owner_admin", "store_manager", "cs_manager"]);
-const thresholdPending = new Set();
+const thresholdPending = finalAuditGlobal.thresholdPending;
 let currentRoles = [];
 let enhanceTimer = 0;
 let cancelBusy = false;
@@ -124,6 +130,13 @@ function patchDashboardLabels() {
   }
 }
 
+function dedupeThresholdControls() {
+  for (const row of document.querySelectorAll("[data-product-list] [data-variant-id]")) {
+    const controls = [...row.querySelectorAll(":scope > [data-final-threshold-control]")];
+    controls.slice(1).forEach((control) => control.remove());
+  }
+}
+
 function scheduleThresholdEnhancement() {
   clearTimeout(enhanceTimer);
   enhanceTimer = setTimeout(() => enhanceThresholdControls().catch(() => {}), 60);
@@ -131,10 +144,11 @@ function scheduleThresholdEnhancement() {
 
 async function enhanceThresholdControls() {
   if (!supabase || !hasAny(PRODUCT_THRESHOLD_ROLES)) return;
+  dedupeThresholdControls();
   const initialRows = [...document.querySelectorAll("[data-product-list] [data-variant-id]")]
     .filter((row) => {
       const id = row.dataset.variantId;
-      return id && !row.querySelector("[data-final-threshold-control]") && !thresholdPending.has(id);
+      return id && !row.querySelector(":scope > [data-final-threshold-control]") && !thresholdPending.has(id);
     });
   if (!initialRows.length) return;
   const ids = [...new Set(initialRows.map((row) => row.dataset.variantId).filter(Boolean))];
@@ -146,12 +160,10 @@ async function enhanceThresholdControls() {
       .in("id", ids);
     if (error) return;
     const thresholds = new Map((data || []).map((row) => [row.id, Number(row.low_stock_threshold ?? 5)]));
-    // Re-query after the async fetch. Product rerenders can replace the original
-    // DOM nodes while this request is in flight.
     const currentRows = [...document.querySelectorAll("[data-product-list] [data-variant-id]")];
     for (const row of currentRows) {
       const id = row.dataset.variantId;
-      if (!ids.includes(id) || row.querySelector("[data-final-threshold-control]")) continue;
+      if (!ids.includes(id) || row.querySelector(":scope > [data-final-threshold-control]")) continue;
       const threshold = thresholds.get(id);
       if (!Number.isSafeInteger(threshold)) continue;
       const control = document.createElement("div");
@@ -162,6 +174,7 @@ async function enhanceThresholdControls() {
       if (activeControl) row.insertBefore(control, activeControl);
       else row.append(control);
     }
+    dedupeThresholdControls();
   } finally {
     ids.forEach((id) => thresholdPending.delete(id));
   }
@@ -235,40 +248,49 @@ async function cancelFromReturns(orderNo) {
   }
 }
 
-document.addEventListener("click", (event) => {
-  const cancel = event.target.closest?.("[data-extra-cancel]");
-  if (cancel) {
-    event.preventDefault();
-    event.stopImmediatePropagation();
-    cancelFromReturns(cancel.dataset.extraCancel).catch((error) => toast(error?.message || "결제 취소에 실패했습니다.", true));
-    return;
-  }
-  const threshold = event.target.closest?.("[data-final-threshold-save]");
-  if (threshold) saveThreshold(threshold);
-  const refresh = event.target.closest?.("[data-refresh-all]");
-  if (refresh) {
-    setTimeout(() => {
-      const activeExtra = document.querySelector("[data-extra-tab].is-active");
-      if (activeExtra?.dataset.extraTab) {
-        document.querySelector(`[data-extra-reload="${CSS.escape(activeExtra.dataset.extraTab)}"]`)?.click();
-      }
-    }, 0);
-  }
-}, true);
+function bootFinalAudit() {
+  if (finalAuditGlobal.initialized) return;
+  finalAuditGlobal.initialized = true;
 
-const app = document.querySelector("[data-app-panel]");
-const nav = document.querySelector(".sm-tabs");
-const summary = document.querySelector("[data-summary]");
-if (app) new MutationObserver(() => {
-  applyExtraTabPermissions();
-  applyPaymentOnlyOrderRedactionUi();
-  scheduleThresholdEnhancement();
-}).observe(app, { childList: true, subtree: true });
-if (nav) new MutationObserver(applyExtraTabPermissions).observe(nav, { childList: true, subtree: true, attributes: true, attributeFilter: ["hidden"] });
-if (summary) new MutationObserver(patchDashboardLabels).observe(summary, { childList: true, subtree: true });
+  document.addEventListener("click", (event) => {
+    const cancel = event.target.closest?.("[data-extra-cancel]");
+    if (cancel) {
+      event.preventDefault();
+      event.stopImmediatePropagation();
+      cancelFromReturns(cancel.dataset.extraCancel).catch((error) => toast(error?.message || "결제 취소에 실패했습니다.", true));
+      return;
+    }
+    const threshold = event.target.closest?.("[data-final-threshold-save]");
+    if (threshold) saveThreshold(threshold);
+    const refresh = event.target.closest?.("[data-refresh-all]");
+    if (refresh) {
+      setTimeout(() => {
+        const activeExtra = document.querySelector("[data-extra-tab].is-active");
+        if (activeExtra?.dataset.extraTab) {
+          document.querySelector(`[data-extra-reload="${CSS.escape(activeExtra.dataset.extraTab)}"]`)?.click();
+        }
+      }, 0);
+    }
+  }, true);
 
-patchDashboardLabels();
-refreshRoles();
-setTimeout(refreshRoles, 250);
-setTimeout(refreshRoles, 1200);
-supabase?.auth.onAuthStateChange(() => setTimeout(refreshRoles, 0));
+  const app = document.querySelector("[data-app-panel]");
+  const nav = document.querySelector(".sm-tabs");
+  const summary = document.querySelector("[data-summary]");
+  if (app) new MutationObserver(() => {
+    applyExtraTabPermissions();
+    applyPaymentOnlyOrderRedactionUi();
+    dedupeThresholdControls();
+    scheduleThresholdEnhancement();
+  }).observe(app, { childList: true, subtree: true });
+  if (nav) new MutationObserver(applyExtraTabPermissions).observe(nav, { childList: true, subtree: true, attributes: true, attributeFilter: ["hidden"] });
+  if (summary) new MutationObserver(patchDashboardLabels).observe(summary, { childList: true, subtree: true });
+
+  patchDashboardLabels();
+  dedupeThresholdControls();
+  refreshRoles();
+  setTimeout(refreshRoles, 250);
+  setTimeout(refreshRoles, 1200);
+  supabase?.auth.onAuthStateChange(() => setTimeout(refreshRoles, 0));
+}
+
+bootFinalAudit();
