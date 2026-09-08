@@ -1,8 +1,30 @@
 const ADMIN_TIMEOUT_MS = 15_000;
 const DEFAULT_PAGE_SIZE = 50;
-let orderPage = 1;
-let orderPageSize = DEFAULT_PAGE_SIZE;
-let orderHasMore = false;
+const scopes = {
+  orders: { page: 1, pageSize: DEFAULT_PAGE_SIZE, hasMore: false },
+  shipping: { page: 1, pageSize: DEFAULT_PAGE_SIZE, hasMore: false },
+};
+
+const PAGER_CONFIG = {
+  orders: {
+    panel: '[data-panel="orders"]',
+    list: "[data-all-order-list]",
+    reload: "[data-reload-all-orders]",
+    pager: "data-order-pager",
+    prev: "data-order-page-prev",
+    next: "data-order-page-next",
+    label: "data-order-page-label",
+  },
+  shipping: {
+    panel: '[data-panel="shipping"]',
+    list: "[data-shipping-list]",
+    reload: "[data-reload-shipping]",
+    pager: "data-shipping-pager",
+    prev: "data-shipping-page-prev",
+    next: "data-shipping-page-next",
+    label: "data-shipping-page-label",
+  },
+};
 
 function isOrdersViewUrl(url) {
   try {
@@ -13,12 +35,22 @@ function isOrdersViewUrl(url) {
   }
 }
 
-function paginatedOrdersUrl(url) {
+function activeOrdersScope() {
+  const shippingPanel = document.querySelector(PAGER_CONFIG.shipping.panel);
+  if (shippingPanel && !shippingPanel.hidden) return "shipping";
+  const ordersPanel = document.querySelector(PAGER_CONFIG.orders.panel);
+  if (ordersPanel && !ordersPanel.hidden) return "orders";
+  return "";
+}
+
+function paginatedOrdersUrl(url, scope) {
   const parsed = new URL(String(url), location.origin);
+  const state = scopes[scope];
   parsed.pathname = parsed.pathname.replace(/\/admin-console$/, "/admin-orders-page");
   parsed.search = "";
-  parsed.searchParams.set("page", String(orderPage));
-  parsed.searchParams.set("pageSize", String(orderPageSize));
+  parsed.searchParams.set("scope", scope);
+  parsed.searchParams.set("page", String(state.page));
+  parsed.searchParams.set("pageSize", String(state.pageSize));
   return parsed.toString();
 }
 
@@ -29,7 +61,8 @@ function installAdminFetchBoundary() {
 
   globalThis.fetch = async (input, init = {}) => {
     const originalUrl = typeof input === "string" || input instanceof URL ? String(input) : String(input?.url || "");
-    const targetUrl = isOrdersViewUrl(originalUrl) ? paginatedOrdersUrl(originalUrl) : originalUrl;
+    const scope = isOrdersViewUrl(originalUrl) ? activeOrdersScope() : "";
+    const targetUrl = scope ? paginatedOrdersUrl(originalUrl, scope) : originalUrl;
     const shouldTimeout = targetUrl.includes("/functions/v1/") && !init?.signal;
     const controller = shouldTimeout ? new AbortController() : null;
     const timer = controller
@@ -44,13 +77,14 @@ function installAdminFetchBoundary() {
         ? new Request(targetUrl, input)
         : targetUrl !== originalUrl ? targetUrl : input;
       const response = await nativeFetch(requestInput, controller ? { ...init, signal: controller.signal } : init);
-      if (isOrdersViewUrl(originalUrl) && response.ok) {
+      if (scope && response.ok) {
         response.clone().json().then((payload) => {
-          orderPage = Math.max(1, Number(payload?.page) || orderPage);
-          orderPageSize = Math.max(20, Number(payload?.pageSize) || orderPageSize);
-          orderHasMore = payload?.hasMore === true;
+          const state = scopes[scope];
+          state.page = Math.max(1, Number(payload?.page) || state.page);
+          state.pageSize = Math.max(20, Number(payload?.pageSize) || state.pageSize);
+          state.hasMore = payload?.hasMore === true;
           window.dispatchEvent(new CustomEvent("reball:order-pagination", {
-            detail: { page: orderPage, pageSize: orderPageSize, hasMore: orderHasMore },
+            detail: { scope, page: state.page, pageSize: state.pageSize, hasMore: state.hasMore },
           }));
         }).catch(() => undefined);
       }
@@ -76,88 +110,114 @@ function ensurePagerStyles() {
   document.head.appendChild(style);
 }
 
-function ensurePager() {
-  const panel = document.querySelector('[data-panel="orders"]');
-  const list = panel?.querySelector("[data-all-order-list]");
+function pagerNode(scope) {
+  return document.querySelector(`[${PAGER_CONFIG[scope].pager}]`);
+}
+
+function reloadScope(scope) {
+  document.querySelector(PAGER_CONFIG[scope].reload)?.click();
+}
+
+function ensurePager(scope) {
+  const config = PAGER_CONFIG[scope];
+  const panel = document.querySelector(config.panel);
+  const list = panel?.querySelector(config.list);
   if (!panel || !list) return;
   ensurePagerStyles();
 
-  let pager = panel.querySelector("[data-order-pager]");
+  let pager = panel.querySelector(`[${config.pager}]`);
   if (!pager) {
     pager = document.createElement("div");
     pager.className = "sm-order-pager";
-    pager.dataset.orderPager = "true";
+    pager.setAttribute(config.pager, "true");
     pager.innerHTML = `
-      <button class="sm-button sm-button--ghost" type="button" data-order-page-prev>이전</button>
-      <span data-order-page-label></span>
-      <button class="sm-button sm-button--ghost" type="button" data-order-page-next>다음</button>
+      <button class="sm-button sm-button--ghost" type="button" ${config.prev}>이전</button>
+      <span ${config.label}></span>
+      <button class="sm-button sm-button--ghost" type="button" ${config.next}>다음</button>
     `;
     list.before(pager);
-    pager.querySelector("[data-order-page-prev]")?.addEventListener("click", () => {
-      if (orderPage <= 1) return;
-      orderPage -= 1;
-      document.querySelector("[data-reload-all-orders]")?.click();
-      updatePager();
+    pager.querySelector(`[${config.prev}]`)?.addEventListener("click", () => {
+      const state = scopes[scope];
+      if (state.page <= 1) return;
+      state.page -= 1;
+      reloadScope(scope);
+      updatePager(scope);
     });
-    pager.querySelector("[data-order-page-next]")?.addEventListener("click", () => {
-      if (!orderHasMore) return;
-      orderPage += 1;
-      document.querySelector("[data-reload-all-orders]")?.click();
-      updatePager();
+    pager.querySelector(`[${config.next}]`)?.addEventListener("click", () => {
+      const state = scopes[scope];
+      if (!state.hasMore) return;
+      state.page += 1;
+      reloadScope(scope);
+      updatePager(scope);
     });
   }
-  updatePager();
+  updatePager(scope);
 }
 
-function updatePager() {
-  const pager = document.querySelector("[data-order-pager]");
+function updatePager(scope) {
+  const config = PAGER_CONFIG[scope];
+  const state = scopes[scope];
+  const pager = pagerNode(scope);
   if (!pager) return;
-  const label = pager.querySelector("[data-order-page-label]");
-  const previous = pager.querySelector("[data-order-page-prev]");
-  const next = pager.querySelector("[data-order-page-next]");
-  if (label) label.textContent = `${orderPage} 페이지 · ${orderPageSize}건씩`;
-  if (previous) previous.disabled = orderPage <= 1;
-  if (next) next.disabled = !orderHasMore;
+  const label = pager.querySelector(`[${config.label}]`);
+  const previous = pager.querySelector(`[${config.prev}]`);
+  const next = pager.querySelector(`[${config.next}]`);
+  if (label) label.textContent = `${state.page} 페이지 · ${state.pageSize}건씩`;
+  if (previous) previous.disabled = state.page <= 1;
+  if (next) next.disabled = !state.hasMore;
 }
 
-function resetOrdersToFirstPage({ reload = false } = {}) {
-  if (orderPage === 1 && !reload) return;
-  orderPage = 1;
-  orderHasMore = false;
-  updatePager();
-  if (reload) document.querySelector("[data-reload-all-orders]")?.click();
+function resetScopeToFirstPage(scope, { reload = false } = {}) {
+  const state = scopes[scope];
+  const changed = state.page !== 1 || state.hasMore;
+  state.page = 1;
+  state.hasMore = false;
+  updatePager(scope);
+  if (reload && changed) reloadScope(scope);
 }
 
 installAdminFetchBoundary();
 
-window.addEventListener("reball:order-pagination", () => {
-  ensurePager();
-  updatePager();
+window.addEventListener("reball:order-pagination", (event) => {
+  const scope = event?.detail?.scope === "shipping" ? "shipping" : "orders";
+  ensurePager(scope);
+  updatePager(scope);
 });
 
 document.addEventListener("click", (event) => {
   const tab = event.target instanceof Element ? event.target.closest("[data-tab]") : null;
   if (!tab) return;
-  if (tab.dataset.tab === "orders") ensurePager();
-  if (tab.dataset.tab === "shipping") resetOrdersToFirstPage();
+  if (tab.dataset.tab === "orders") ensurePager("orders");
+  if (tab.dataset.tab === "shipping") ensurePager("shipping");
 });
 
 document.addEventListener("input", (event) => {
-  if (event.target instanceof Element && event.target.matches("[data-orders-search]")) {
-    resetOrdersToFirstPage();
+  if (!(event.target instanceof Element)) return;
+  if (event.target.matches("[data-orders-search]")) {
+    resetScopeToFirstPage("orders", { reload: true });
+  }
+  if (event.target.matches("[data-shipping-search]")) {
+    resetScopeToFirstPage("shipping", { reload: true });
   }
 });
 
 document.addEventListener("change", (event) => {
   if (event.target instanceof Element && event.target.matches("[data-order-status-filter]")) {
-    resetOrdersToFirstPage({ reload: true });
+    resetScopeToFirstPage("orders", { reload: true });
   }
 });
 
-const observer = new MutationObserver(() => ensurePager());
+const observer = new MutationObserver(() => {
+  ensurePager("orders");
+  ensurePager("shipping");
+});
 observer.observe(document.documentElement, { childList: true, subtree: true });
 if (document.readyState === "loading") {
-  document.addEventListener("DOMContentLoaded", ensurePager, { once: true });
+  document.addEventListener("DOMContentLoaded", () => {
+    ensurePager("orders");
+    ensurePager("shipping");
+  }, { once: true });
 } else {
-  ensurePager();
+  ensurePager("orders");
+  ensurePager("shipping");
 }
