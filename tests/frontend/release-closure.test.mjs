@@ -74,3 +74,66 @@ test("release routing and deployment authority are closed", () => {
   assert.equal(existsSync("sitemap.xml"), true);
   assert.equal(existsSync("404.html"), true);
 });
+
+test("Codex review blockers stay closed across auth, payment and admin pagination", () => {
+  const runtime = readFileSync("src/frontend/runtime/release-closure.mjs", "utf8");
+  const captcha = readFileSync("src/frontend/auth/captcha-client.mjs", "utf8");
+  const loginIdEdge = readFileSync("supabase/functions/check-login-id/index.ts", "utf8");
+  const pagination = readFileSync("src/frontend/admin/store-manager-pagination.mjs", "utf8");
+  const ordersPage = readFileSync("supabase/functions/admin-orders-page/index.ts", "utf8");
+  const toss = readFileSync("src/frontend/payments/toss-client.mjs", "utf8");
+  const adminAssets = readFileSync("scripts/admin-console-assets.mjs", "utf8");
+  const build = readFileSync("scripts/build.mjs", "utf8");
+  const devServer = readFileSync("scripts/dev-server.mjs", "utf8");
+  const envExample = readFileSync(".env.example", "utf8");
+
+  // Availability checks consume CAPTCHA tokens, so the browser must reset the
+  // provider before the original signup flow can proceed with a fresh token.
+  assert.match(runtime, /resetCaptchaControl\(captchaControl, document\)/);
+  assert.match(captcha, /client\.reset\(widgetId\)/);
+  assert.match(captcha, /client\.remove\(widgetId\)/);
+  assert.match(captcha, /captchaWidgetId/);
+
+  // Retired WELCOME3000 must not inflate the member-facing coupon count.
+  assert.match(runtime, /localStorage\.setItem\("reball\.coupons", "\[\]"\)/);
+
+  // Invalid CAPTCHA traffic must not consume the chosen login ID's subject
+  // bucket. The subject limiter is intentionally after successful CAPTCHA.
+  const preLimitAt = loginIdEdge.indexOf('"auth_login_id_check_pre"');
+  const captchaAt = loginIdEdge.indexOf("await verifyCaptcha");
+  const subjectLimitAt = loginIdEdge.indexOf('"auth_login_id_check", loginId');
+  assert.ok(preLimitAt >= 0 && captchaAt > preLimitAt && subjectLimitAt > captchaAt);
+
+  // payment-confirm is financially ambiguous if a short browser timeout fires
+  // while Toss/the server is still committing. It must not inherit the generic
+  // 15s Edge timeout and defaults to no client confirmation timeout.
+  assert.match(runtime, /isPaymentConfirm/);
+  assert.match(runtime, /!isPaymentConfirm/);
+  assert.match(toss, /confirmTimeoutMs/);
+  assert.match(toss, /const confirmTimeoutMs[\s\S]*?: 0;/);
+
+  // Orders and shipping own independent server pages. Only the visible base
+  // orders/shipping panel is rewritten, so returns/final-audit reads stay on
+  // their own admin-console request rather than inheriting a stale page.
+  assert.match(pagination, /orders:\s*\{ page: 1/);
+  assert.match(pagination, /shipping:\s*\{ page: 1/);
+  assert.match(pagination, /function activeOrdersScope\(/);
+  assert.match(pagination, /scope", "shipping"|scope, "shipping"/);
+  assert.match(pagination, /data-shipping-pager/);
+  assert.match(pagination, /resetScopeToFirstPage\("orders", \{ reload: true \}\)/);
+  assert.match(pagination, /resetScopeToFirstPage\("shipping", \{ reload: true \}\)/);
+  assert.match(ordersPage, /SHIPPING_STATUSES/);
+  assert.match(ordersPage, /orderParams\.set\("status", SHIPPING_STATUSES\)/);
+
+  // Production and the local QA server use the same pagination injection path.
+  assert.match(adminAssets, /store-manager-pagination\.mjs/);
+  assert.match(adminAssets, /data-admin-pagination-assets/);
+  assert.doesNotMatch(build, /injectStoreManagerReleaseAssets/);
+  assert.match(build, /injectAdminConsoleAssets/);
+  assert.match(devServer, /injectAdminConsoleAssets/);
+
+  // Copying the local environment template must not create a provider/key
+  // mismatch before a developer intentionally supplies credentials.
+  assert.match(envExample, /AUTH_CAPTCHA_PROVIDER=\n/);
+  assert.match(envExample, /AUTH_CAPTCHA_SITE_KEY=\n/);
+});
