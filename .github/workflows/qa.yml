@@ -27,6 +27,8 @@ jobs:
         run: npm run lint
       - name: Build
         run: npm run build
+      - name: Release static smoke
+        run: npm run test:release
       - name: Legacy entrypoint check
         run: npm run check:legacy
       - name: Edge function typecheck
