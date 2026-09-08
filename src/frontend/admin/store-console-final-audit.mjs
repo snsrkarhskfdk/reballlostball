@@ -130,10 +130,23 @@ function patchDashboardLabels() {
   }
 }
 
+function thresholdControlFor(variantId) {
+  if (!variantId) return null;
+  return document.querySelector(`[data-final-threshold-control][data-final-threshold-variant="${CSS.escape(variantId)}"]`);
+}
+
 function dedupeThresholdControls() {
-  for (const row of document.querySelectorAll("[data-product-list] [data-variant-id]")) {
-    const controls = [...row.querySelectorAll(":scope > [data-final-threshold-control]")];
-    controls.slice(1).forEach((control) => control.remove());
+  const seen = new Set();
+  for (const control of document.querySelectorAll("[data-final-threshold-control]")) {
+    const variantId = control.dataset.finalThresholdVariant
+      || control.closest("[data-variant-id]")?.dataset.variantId
+      || "";
+    if (!variantId || seen.has(variantId)) {
+      control.remove();
+      continue;
+    }
+    control.dataset.finalThresholdVariant = variantId;
+    seen.add(variantId);
   }
 }
 
@@ -148,7 +161,7 @@ async function enhanceThresholdControls() {
   const initialRows = [...document.querySelectorAll("[data-product-list] [data-variant-id]")]
     .filter((row) => {
       const id = row.dataset.variantId;
-      return id && !row.querySelector(":scope > [data-final-threshold-control]") && !thresholdPending.has(id);
+      return id && !thresholdControlFor(id) && !thresholdPending.has(id);
     });
   if (!initialRows.length) return;
   const ids = [...new Set(initialRows.map((row) => row.dataset.variantId).filter(Boolean))];
@@ -163,12 +176,13 @@ async function enhanceThresholdControls() {
     const currentRows = [...document.querySelectorAll("[data-product-list] [data-variant-id]")];
     for (const row of currentRows) {
       const id = row.dataset.variantId;
-      if (!ids.includes(id) || row.querySelector(":scope > [data-final-threshold-control]")) continue;
+      if (!ids.includes(id) || thresholdControlFor(id)) continue;
       const threshold = thresholds.get(id);
       if (!Number.isSafeInteger(threshold)) continue;
       const control = document.createElement("div");
       control.className = "sm-final-threshold";
       control.dataset.finalThresholdControl = "";
+      control.dataset.finalThresholdVariant = id;
       control.innerHTML = `<label class="sm-muted" for="threshold-${id}">저재고 기준</label><div class="sm-final-threshold-row"><input id="threshold-${id}" class="sm-input" data-final-threshold-input type="number" min="0" max="9999" step="1" value="${threshold}" /><button class="sm-button sm-button--small" type="button" data-final-threshold-save>기준 저장</button></div>`;
       const activeControl = row.querySelector(".sm-status-toggle");
       if (activeControl) row.insertBefore(control, activeControl);
