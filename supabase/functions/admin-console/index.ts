@@ -51,12 +51,15 @@ async function dashboardView(roles: Role[]): Promise<AnyRow> {
   const canProducts = hasAny(roles, PRODUCT_ROLES);
   const canPayments = hasAny(roles, PAYMENT_ROLES);
 
-  const [orders, payments, variants] = await Promise.all([
+  const [orders, payments, refunds, variants] = await Promise.all([
     canOrders
       ? serviceSelect<AnyRow[]>(`/rest/v1/orders?select=id,order_no,status,payment_status,total_krw,created_at,updated_at&order=created_at.desc&limit=500`)
       : Promise.resolve([]),
     canPayments
       ? serviceSelect<AnyRow[]>(`/rest/v1/payments?select=order_id,status,approved_amount,canceled_amount,approved_at,canceled_at,last_reconcile_error,reconcile_attempts&order=created_at.desc&limit=500`)
+      : Promise.resolve([]),
+    canPayments
+      ? serviceSelect<AnyRow[]>(`/rest/v1/payment_refunds?select=cancel_amount,refund_status,requested_at,completed_at&order=requested_at.desc&limit=1000`)
       : Promise.resolve([]),
     canProducts
       ? serviceSelect<AnyRow[]>(`/rest/v1/product_variants?select=id,sku,stock_qty,low_stock_threshold,active,product_id&active=eq.true&limit=1200`)
@@ -66,11 +69,20 @@ async function dashboardView(roles: Role[]): Promise<AnyRow> {
   const metrics: AnyRow = {};
   if (canPayments) {
     const start = new Date(kstDayStartIso()).getTime();
-    const paidToday = payments.filter((p) => p.status === "done" && new Date(String(p.approved_at || 0)).getTime() >= start);
-    const refundsToday = payments.filter((p) => Number(p.canceled_amount || 0) > 0 && new Date(String(p.canceled_at || 0)).getTime() >= start);
-    const grossTodayKrw = paidToday.reduce((sum, p) => sum + Number(p.approved_amount || 0), 0);
-    const refundsTodayKrw = refundsToday.reduce((sum, p) => sum + Number(p.canceled_amount || 0), 0);
-    metrics.paidTodayCount = paidToday.length;
+    // Gross approvals are immutable events. A payment canceled later today must still
+    // remain in today's gross and be offset by the refund ledger, otherwise net sales
+    // can become falsely negative.
+    const approvedToday = payments.filter((p) =>
+      Number(p.approved_amount || 0) > 0
+      && new Date(String(p.approved_at || 0)).getTime() >= start
+    );
+    const completedRefundsToday = refunds.filter((r) =>
+      String(r.refund_status) === "completed"
+      && new Date(String(r.completed_at || 0)).getTime() >= start
+    );
+    const grossTodayKrw = approvedToday.reduce((sum, p) => sum + Number(p.approved_amount || 0), 0);
+    const refundsTodayKrw = completedRefundsToday.reduce((sum, r) => sum + Number(r.cancel_amount || 0), 0);
+    metrics.paidTodayCount = approvedToday.length;
     metrics.grossTodayKrw = grossTodayKrw;
     metrics.refundsTodayKrw = refundsTodayKrw;
     metrics.netTodayKrw = grossTodayKrw - refundsTodayKrw;
