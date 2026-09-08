@@ -3,11 +3,12 @@ import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 
 const root = new URL("../../", import.meta.url);
-const [migration, hardening, extraEdge, extraUi, injector, build, devServer, config] = await Promise.all([
+const [migration, hardening, extraEdge, extraUi, finalAudit, injector, build, devServer, config] = await Promise.all([
   readFile(new URL("supabase/migrations/20260907050000_admin_ops_console_v3_closure.sql", root), "utf8"),
   readFile(new URL("supabase/migrations/20260907051000_admin_ops_console_v3_policy_hardening.sql", root), "utf8"),
   readFile(new URL("supabase/functions/admin-ops-extra/index.ts", root), "utf8"),
   readFile(new URL("src/frontend/admin/store-console-extra.mjs", root), "utf8"),
+  readFile(new URL("src/frontend/admin/store-console-final-audit.mjs", root), "utf8"),
   readFile(new URL("scripts/admin-console-assets.mjs", root), "utf8"),
   readFile(new URL("scripts/build.mjs", root), "utf8"),
   readFile(new URL("scripts/dev-server.mjs", root), "utf8"),
@@ -38,6 +39,7 @@ test("extended mutations are service-role only, role checked and audited", () =>
   assert.match(extraEdge, /enforceRateLimit/);
   assert.match(extraEdge, /admin_ops_mutation_v1/);
   assert.doesNotMatch(extraUi, /SUPABASE_SERVICE_ROLE_KEY|TOSS_SECRET_KEY|TOSS_PAYMENTS_SECRET_KEY/);
+  assert.doesNotMatch(finalAudit, /SUPABASE_SERVICE_ROLE_KEY|TOSS_SECRET_KEY|TOSS_PAYMENTS_SECRET_KEY/);
 });
 
 test("last owner removal and customer-created support rows are hardened against races and spoofed state", () => {
@@ -51,26 +53,46 @@ test("last owner removal and customer-created support rows are hardened against 
   assert.match(hardening, /handled_by is null/);
 });
 
-test("new product registration is atomic and low-stock configuration is bounded", () => {
+test("new product registration is atomic and low-stock configuration is bounded and editable", () => {
   assert.match(migration, /insert into public\.products/);
   assert.match(migration, /insert into public\.product_variants/);
   assert.match(migration, /low_stock_threshold/);
   assert.match(migration, /v_threshold not between 0 and 9999/);
   assert.match(extraUi, /data-product-create-form-extra/);
   assert.match(extraUi, /lowStockThreshold/);
+  assert.match(finalAudit, /data-final-threshold-input/);
+  assert.match(finalAudit, /action: "threshold_set"/);
+  assert.match(finalAudit, /저재고 기준 이하/);
 });
 
-test("cover photo no longer overwrites every SKU thumbnail and sales CSV blocks formula injection", () => {
+test("cover photo protection and CSV formula-injection protection remain in force", () => {
   assert.match(extraUi, /대표 SKU 하나에만 반영/);
   assert.match(extraUi, /variants:\[\{id:target\.id,thumbnailUrl:publicUrl\}\]/);
   assert.match(extraUi, /\^\[=\+\\-@\]/);
   assert.match(extraUi, /csvCell/);
+  assert.match(finalAudit, /import "\.\/store-console-extra\.mjs"/);
+});
+
+test("returns cancellation supports the refund-account requirement for completed virtual accounts", () => {
+  assert.match(finalAudit, /method !== "virtual_account"/);
+  assert.match(finalAudit, /new Set\(\["done", "partial_canceled"\]\)/);
+  assert.match(finalAudit, /refundReceiveAccount/);
+  assert.match(finalAudit, /Idempotency-Key/);
+  assert.match(finalAudit, /data-extra-cancel/);
+  assert.match(finalAudit, /stopImmediatePropagation/);
+});
+
+test("final audit keeps extension permissions deterministic after base-tab rerenders", () => {
+  assert.match(finalAudit, /EXTRA_TAB_ROLES/);
+  assert.match(finalAudit, /applyExtraTabPermissions/);
+  assert.match(finalAudit, /MutationObserver/);
+  assert.match(finalAudit, /data-extra-tab/);
 });
 
 test("extended console assets are injected in both production build and local E2E server", () => {
   assert.match(injector, /store-console-extra\.css/);
-  assert.match(injector, /store-console-extra\.mjs/);
-  assert.match(injector, /store-console-extra-guard\.mjs/);
+  assert.match(injector, /store-console-final-audit\.css/);
+  assert.match(injector, /store-console-final-audit\.mjs/);
   assert.match(build, /injectAdminConsoleAssets\(injectPublicConfig\(storeManagerHtml\)\)/);
   assert.match(devServer, /configuredStoreManagerHtml/);
   assert.match(devServer, /injectAdminConsoleAssets/);
