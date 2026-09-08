@@ -16,6 +16,7 @@ const DEFERRED_MY_TABS = new Set([
   "payments",
   "notifications",
 ]);
+let patchQueued = false;
 
 function metaContent(name) {
   return document.querySelector(`meta[name="${name}"]`)?.content?.trim() || "";
@@ -80,8 +81,8 @@ function redirectLegacyAdmin() {
 function setSignupCheckMessage(message, status = "idle") {
   const node = document.querySelector("[data-login-id-message]");
   if (!node) return;
-  node.textContent = message;
-  node.dataset.status = status;
+  if (node.textContent !== message) node.textContent = message;
+  if (node.dataset.status !== status) node.dataset.status = status;
 }
 
 async function handleServerLoginIdCheck(event) {
@@ -169,8 +170,10 @@ function removeDeferredCustomerActions(root = document) {
     if (title !== "회원가입") return;
     const lead = header.querySelector("p");
     const sub = header.querySelector("span");
-    if (lead) lead.textContent = "리볼회원으로 주문과 배송지를 안전하게 관리하세요.";
-    if (sub) sub.textContent = "현재는 이메일 인증 기반 ID/PW 회원가입을 제공합니다.";
+    const leadCopy = "리볼회원으로 주문과 배송지를 안전하게 관리하세요.";
+    const subCopy = "현재는 이메일 인증 기반 ID/PW 회원가입을 제공합니다.";
+    if (lead && lead.textContent !== leadCopy) lead.textContent = leadCopy;
+    if (sub && sub.textContent !== subCopy) sub.textContent = subCopy;
   });
 
   root.querySelectorAll(".signup-divider").forEach((divider) => {
@@ -194,7 +197,7 @@ function patchPromotionCopy(root = document) {
     const text = node.textContent || "";
     if (/신규.*쿠폰|회원가입.*3,?000원|WELCOME3000|신규 리볼회원 가입 시/.test(text)) {
       if (node.matches(".coupon-card")) node.remove();
-      else node.textContent = RETIRED_PROMO_MESSAGE;
+      else if (node.textContent !== RETIRED_PROMO_MESSAGE) node.textContent = RETIRED_PROMO_MESSAGE;
     }
   });
 }
@@ -205,6 +208,15 @@ function patchReleaseDom(root = document) {
   patchPromotionCopy(root);
 }
 
+function scheduleReleasePatch() {
+  if (patchQueued) return;
+  patchQueued = true;
+  queueMicrotask(() => {
+    patchQueued = false;
+    patchReleaseDom(document);
+  });
+}
+
 retireExpiredWelcomePromotion();
 installEdgeRequestTimeout();
 redirectLegacyAdmin();
@@ -212,10 +224,10 @@ redirectLegacyAdmin();
 document.addEventListener("click", handleServerLoginIdCheck, true);
 window.addEventListener("hashchange", redirectLegacyAdmin);
 
-const observer = new MutationObserver(() => patchReleaseDom(document));
+const observer = new MutationObserver(scheduleReleasePatch);
 observer.observe(document.documentElement, { childList: true, subtree: true });
 if (document.readyState === "loading") {
-  document.addEventListener("DOMContentLoaded", () => patchReleaseDom(document), { once: true });
+  document.addEventListener("DOMContentLoaded", scheduleReleasePatch, { once: true });
 } else {
-  patchReleaseDom(document);
+  scheduleReleasePatch();
 }
