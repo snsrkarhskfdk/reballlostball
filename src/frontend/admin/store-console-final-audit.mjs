@@ -25,6 +25,7 @@ const EXTRA_TAB_ROLES = {
   settlement: new Set(["owner_admin", "payments_manager"]),
 };
 const PRODUCT_THRESHOLD_ROLES = new Set(["owner_admin", "store_manager", "inventory_manager"]);
+const ORDER_PII_ROLES = new Set(["owner_admin", "store_manager", "cs_manager"]);
 const thresholdPending = new Set();
 let currentRoles = [];
 let enhanceTimer = 0;
@@ -67,6 +68,10 @@ function hasAny(allowed) {
   return currentRoles.some((role) => allowed.has(role));
 }
 
+function isPaymentOnlyOperator() {
+  return currentRoles.includes("payments_manager") && !hasAny(ORDER_PII_ROLES);
+}
+
 function applyExtraTabPermissions() {
   for (const button of document.querySelectorAll("[data-extra-tab]")) {
     const allowed = EXTRA_TAB_ROLES[button.dataset.extraTab];
@@ -85,6 +90,19 @@ function applyExtraTabPermissions() {
   }
 }
 
+function applyPaymentOnlyOrderRedactionUi() {
+  if (!isPaymentOnlyOperator()) return;
+  for (const card of document.querySelectorAll("[data-all-order-list] .sm-order")) {
+    if (card.dataset.finalPiiRedacted === "true") continue;
+    card.dataset.finalPiiRedacted = "true";
+    const boxes = card.querySelectorAll(".sm-order-grid .sm-order-box");
+    if (boxes[0]) boxes[0].innerHTML = "<b>고객 배송정보 비공개</b><br><span class=\"sm-muted\">결제·환불 담당자에게는 수취인·주소·연락처를 제공하지 않습니다.</span>";
+    if (boxes[1]) boxes[1].innerHTML = "<b>상품 상세 비공개</b><br><span class=\"sm-muted\">결제 확인에 필요한 금액·결제상태만 표시합니다.</span>";
+    card.querySelector(".sm-note-list")?.remove();
+    card.querySelector(".sm-note-form")?.remove();
+  }
+}
+
 async function refreshRoles() {
   if (!supabase) return;
   const { data: { session: active } } = await supabase.auth.getSession();
@@ -96,6 +114,7 @@ async function refreshRoles() {
   const { data, error } = await supabase.from("user_roles").select("role").eq("user_id", active.user.id);
   currentRoles = error ? [] : (data || []).map((row) => row.role).filter(Boolean);
   applyExtraTabPermissions();
+  applyPaymentOnlyOrderRedactionUi();
   scheduleThresholdEnhancement();
 }
 
@@ -112,13 +131,13 @@ function scheduleThresholdEnhancement() {
 
 async function enhanceThresholdControls() {
   if (!supabase || !hasAny(PRODUCT_THRESHOLD_ROLES)) return;
-  const rows = [...document.querySelectorAll("[data-product-list] [data-variant-id]")]
+  const initialRows = [...document.querySelectorAll("[data-product-list] [data-variant-id]")]
     .filter((row) => {
       const id = row.dataset.variantId;
       return id && !row.querySelector("[data-final-threshold-control]") && !thresholdPending.has(id);
     });
-  if (!rows.length) return;
-  const ids = rows.map((row) => row.dataset.variantId).filter(Boolean);
+  if (!initialRows.length) return;
+  const ids = [...new Set(initialRows.map((row) => row.dataset.variantId).filter(Boolean))];
   ids.forEach((id) => thresholdPending.add(id));
   try {
     const { data, error } = await supabase
@@ -127,14 +146,18 @@ async function enhanceThresholdControls() {
       .in("id", ids);
     if (error) return;
     const thresholds = new Map((data || []).map((row) => [row.id, Number(row.low_stock_threshold ?? 5)]));
-    for (const row of rows) {
-      if (!row.isConnected || row.querySelector("[data-final-threshold-control]")) continue;
-      const threshold = thresholds.get(row.dataset.variantId);
+    // Re-query after the async fetch. Product rerenders can replace the original
+    // DOM nodes while this request is in flight.
+    const currentRows = [...document.querySelectorAll("[data-product-list] [data-variant-id]")];
+    for (const row of currentRows) {
+      const id = row.dataset.variantId;
+      if (!ids.includes(id) || row.querySelector("[data-final-threshold-control]")) continue;
+      const threshold = thresholds.get(id);
       if (!Number.isSafeInteger(threshold)) continue;
       const control = document.createElement("div");
       control.className = "sm-final-threshold";
       control.dataset.finalThresholdControl = "";
-      control.innerHTML = `<label class="sm-muted" for="threshold-${row.dataset.variantId}">저재고 기준</label><div class="sm-final-threshold-row"><input id="threshold-${row.dataset.variantId}" class="sm-input" data-final-threshold-input type="number" min="0" max="9999" step="1" value="${threshold}" /><button class="sm-button sm-button--small" type="button" data-final-threshold-save>기준 저장</button></div>`;
+      control.innerHTML = `<label class="sm-muted" for="threshold-${id}">저재고 기준</label><div class="sm-final-threshold-row"><input id="threshold-${id}" class="sm-input" data-final-threshold-input type="number" min="0" max="9999" step="1" value="${threshold}" /><button class="sm-button sm-button--small" type="button" data-final-threshold-save>기준 저장</button></div>`;
       const activeControl = row.querySelector(".sm-status-toggle");
       if (activeControl) row.insertBefore(control, activeControl);
       else row.append(control);
@@ -212,8 +235,6 @@ async function cancelFromReturns(orderNo) {
   }
 }
 
-// The older Returns tab did not request a refund account for completed virtual-account payments.
-// Capture the click before its legacy bubble handler and route every cancellation through the safe path.
 document.addEventListener("click", (event) => {
   const cancel = event.target.closest?.("[data-extra-cancel]");
   if (cancel) {
@@ -238,7 +259,11 @@ document.addEventListener("click", (event) => {
 const app = document.querySelector("[data-app-panel]");
 const nav = document.querySelector(".sm-tabs");
 const summary = document.querySelector("[data-summary]");
-if (app) new MutationObserver(() => { applyExtraTabPermissions(); scheduleThresholdEnhancement(); }).observe(app, { childList: true, subtree: true });
+if (app) new MutationObserver(() => {
+  applyExtraTabPermissions();
+  applyPaymentOnlyOrderRedactionUi();
+  scheduleThresholdEnhancement();
+}).observe(app, { childList: true, subtree: true });
 if (nav) new MutationObserver(applyExtraTabPermissions).observe(nav, { childList: true, subtree: true, attributes: true, attributeFilter: ["hidden"] });
 if (summary) new MutationObserver(patchDashboardLabels).observe(summary, { childList: true, subtree: true });
 
