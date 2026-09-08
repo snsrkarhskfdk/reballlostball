@@ -118,12 +118,15 @@ test("Codex review blockers stay closed across auth, payment and admin paginatio
   assert.match(pagination, /orders:\s*\{ page: 1/);
   assert.match(pagination, /shipping:\s*\{ page: 1/);
   assert.match(pagination, /function activeOrdersScope\(/);
-  assert.match(pagination, /scope", "shipping"|scope, "shipping"/);
+  assert.match(pagination, /parsed\.searchParams\.set\("scope", scope\)/);
+  assert.match(pagination, /scope === "shipping"/);
   assert.match(pagination, /data-shipping-pager/);
   assert.match(pagination, /resetScopeToFirstPage\("orders", \{ reload: true \}\)/);
   assert.match(pagination, /resetScopeToFirstPage\("shipping", \{ reload: true \}\)/);
   assert.match(ordersPage, /SHIPPING_STATUSES/);
   assert.match(ordersPage, /orderParams\.set\("status", SHIPPING_STATUSES\)/);
+  assert.match(ordersPage, /limit: String\(pageSize \+ 1\)/);
+  assert.match(ordersPage, /hasMore = fetchedOrders\.length > pageSize/);
 
   // Production and the local QA server use the same pagination injection path.
   assert.match(adminAssets, /store-manager-pagination\.mjs/);
