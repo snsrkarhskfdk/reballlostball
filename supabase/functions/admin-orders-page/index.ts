@@ -11,11 +11,14 @@ import { serviceSelect, sessionUser } from "../_shared/supabase.ts";
 
 type Role = "customer" | "cs_manager" | "inventory_manager" | "payments_manager" | "store_manager" | "owner_admin";
 type AnyRow = Record<string, unknown>;
+type OrderScope = "orders" | "shipping";
 
 const ORDER_ROLES = new Set<Role>(["cs_manager", "payments_manager", "store_manager", "owner_admin"]);
 const ORDER_PII_ROLES = new Set<Role>(["cs_manager", "store_manager", "owner_admin"]);
+const SHIPPING_ROLES = new Set<Role>(["cs_manager", "store_manager", "owner_admin"]);
 const PAYMENT_ROLES = new Set<Role>(["payments_manager", "owner_admin"]);
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+const SHIPPING_STATUSES = "in.(paid,shipping_ready,shipped,delivered)";
 
 async function rolesFor(userId: string): Promise<Role[]> {
   const params = new URLSearchParams({ select: "role", user_id: `eq.${userId}`, limit: "20" });
@@ -33,6 +36,10 @@ function boundedInteger(value: string | null, fallback: number, min: number, max
   return Math.min(max, Math.max(min, number));
 }
 
+function orderScope(value: string | null): OrderScope {
+  return value === "shipping" ? "shipping" : "orders";
+}
+
 Deno.serve(async (req: Request) => {
   if (req.method === "OPTIONS") {
     try { return optionsResponse(req); } catch (error) { return publicErrorResponse(req, error); }
@@ -48,9 +55,14 @@ Deno.serve(async (req: Request) => {
     if (!hasAny(roles, ORDER_ROLES)) {
       throw new HttpError(403, "ADMIN_ACCESS_DENIED", "주문 정보를 조회할 권한이 없습니다.");
     }
-    await enforceRateLimit(req, "admin_orders_page", user.id, 240, 300, 300);
 
     const url = new URL(req.url);
+    const scope = orderScope(url.searchParams.get("scope"));
+    if (scope === "shipping" && !hasAny(roles, SHIPPING_ROLES)) {
+      throw new HttpError(403, "ADMIN_ACCESS_DENIED", "배송 정보를 조회할 권한이 없습니다.");
+    }
+    await enforceRateLimit(req, `admin_orders_page_${scope}`, user.id, 240, 300, 300);
+
     const page = boundedInteger(url.searchParams.get("page"), 1, 1, 100000);
     const pageSize = boundedInteger(url.searchParams.get("pageSize"), 50, 20, 100);
     const offset = (page - 1) * pageSize;
@@ -65,6 +77,8 @@ Deno.serve(async (req: Request) => {
       limit: String(pageSize),
       offset: String(offset),
     });
+    if (scope === "shipping") orderParams.set("status", SHIPPING_STATUSES);
+
     const orders = await serviceSelect<AnyRow[]>(`/rest/v1/orders?${orderParams}`);
     const orderIds = orders.map((row) => cleanString(row.id, 36).toLowerCase()).filter((id) => UUID_PATTERN.test(id));
 
@@ -115,6 +129,7 @@ Deno.serve(async (req: Request) => {
       roles,
       canPayments,
       canOrderPii,
+      scope,
       page,
       pageSize,
       hasMore: orders.length === pageSize,
