@@ -23,8 +23,20 @@ type ProfileRow = {
 
 type OrderSummaryRow = {
   profile_id?: string | null;
+  status?: string | null;
   total_krw?: number | null;
+  refund_amount?: number | null;
 };
+
+const PURCHASE_STATUSES = new Set([
+  "paid",
+  "partially_canceled",
+  "shipping_ready",
+  "shipped",
+  "delivered",
+]);
+const PAGE_SIZE = 1000;
+const MAX_PAGES = 100;
 
 async function canReadMemberData(userId: string): Promise<boolean> {
   const params = new URLSearchParams({
@@ -41,25 +53,43 @@ async function canReadMemberData(userId: string): Promise<boolean> {
   );
 }
 
-function fetchProfiles(): Promise<ProfileRow[]> {
-  const params = new URLSearchParams({
-    select:
-      "id,login_id,email,auth_email,name,phone,marketing_email,marketing_sms,created_at",
-    order: "created_at.desc",
-    limit: "200",
-  });
-  return serviceSelect<ProfileRow[]>(`/rest/v1/profiles?${params}`);
+async function pagedSelect<T>(
+  table: string,
+  select: string,
+  order = "",
+): Promise<{ rows: T[]; truncated: boolean }> {
+  const rows: T[] = [];
+  for (let page = 0; page < MAX_PAGES; page += 1) {
+    const params = new URLSearchParams({
+      select,
+      limit: String(PAGE_SIZE),
+      offset: String(page * PAGE_SIZE),
+    });
+    if (order) params.set("order", order);
+    const batch = await serviceSelect<T[]>(`/rest/v1/${table}?${params}`);
+    rows.push(...batch);
+    if (batch.length < PAGE_SIZE) return { rows, truncated: false };
+  }
+  return { rows, truncated: true };
 }
 
-async function fetchOrders(): Promise<OrderSummaryRow[]> {
-  const params = new URLSearchParams({
-    select: "profile_id,total_krw",
-    limit: "1000",
-  });
+async function fetchProfiles(): Promise<{ rows: ProfileRow[]; truncated: boolean }> {
+  return pagedSelect<ProfileRow>(
+    "profiles",
+    "id,login_id,email,auth_email,name,phone,marketing_email,marketing_sms,created_at",
+    "created_at.desc",
+  );
+}
+
+async function fetchOrders(): Promise<{ rows: OrderSummaryRow[]; truncated: boolean }> {
   try {
-    return await serviceSelect<OrderSummaryRow[]>(`/rest/v1/orders?${params}`);
+    return await pagedSelect<OrderSummaryRow>(
+      "orders",
+      "profile_id,status,total_krw,refund_amount",
+      "created_at.desc",
+    );
   } catch {
-    return [];
+    return { rows: [], truncated: false };
   }
 }
 
@@ -95,21 +125,25 @@ Deno.serve(async (req: Request) => {
       );
     }
 
-    const [profiles, orders] = await Promise.all([
+    const [profileResult, orderResult] = await Promise.all([
       fetchProfiles(),
       fetchOrders(),
     ]);
     const orderTotals = new Map<string, { count: number; totalKrw: number }>();
-    for (const order of orders) {
-      if (!order.profile_id) continue;
+    for (const order of orderResult.rows) {
+      if (!order.profile_id || !PURCHASE_STATUSES.has(String(order.status || ""))) continue;
+      const gross = Number(order.total_krw) || 0;
+      const refunded = Math.max(0, Number(order.refund_amount) || 0);
+      const net = Math.max(0, gross - refunded);
+      if (net <= 0) continue;
       const current = orderTotals.get(order.profile_id) ||
         { count: 0, totalKrw: 0 };
       current.count += 1;
-      current.totalKrw += Number(order.total_krw) || 0;
+      current.totalKrw += net;
       orderTotals.set(order.profile_id, current);
     }
 
-    const members = profiles.map((profile) => {
+    const members = profileResult.rows.map((profile) => {
       const totals = orderTotals.get(profile.id) || { count: 0, totalKrw: 0 };
       return {
         id: profile.id,
@@ -127,7 +161,10 @@ Deno.serve(async (req: Request) => {
       };
     });
 
-    return jsonResponse(req, { members });
+    return jsonResponse(req, {
+      members,
+      truncated: profileResult.truncated || orderResult.truncated,
+    });
   } catch (error) {
     if (!(error instanceof HttpError)) {
       safeLog("admin-members", req, "UNEXPECTED_ERROR");
