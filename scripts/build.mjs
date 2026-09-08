@@ -48,9 +48,9 @@ await writeFile(
   "utf8",
 );
 
-for (const optionalFile of ["CNAME", ".nojekyll"]) {
-  if (existsSync(optionalFile)) {
-    await copyFile(optionalFile, `${outputDir}/${optionalFile}`);
+for (const rootStaticFile of ["robots.txt", "sitemap.xml", "404.html"]) {
+  if (existsSync(rootStaticFile)) {
+    await copyFile(rootStaticFile, `${outputDir}/${rootStaticFile}`);
   }
 }
 
