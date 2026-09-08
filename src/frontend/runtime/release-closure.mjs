@@ -4,6 +4,11 @@ import { resetCaptchaControl } from "../auth/captcha-client.mjs";
 
 const RETIRED_PROMO_MESSAGE = "현재 운영 중인 신규회원 할인 쿠폰은 없습니다. 새 혜택은 공지사항에서 별도로 안내합니다.";
 const EDGE_TIMEOUT_MS = 15_000;
+const CAPTCHA_CONSUMING_AUTH_PATHS = [
+  "/functions/v1/signup-with-login-id",
+  "/functions/v1/login-with-identifier",
+  "/functions/v1/auth-assist",
+];
 const DEFERRED_MY_TABS = new Set([
   "points",
   "coupons",
@@ -24,10 +29,6 @@ function metaContent(name) {
 }
 
 function retireExpiredWelcomePromotion() {
-  // WELCOME3000 expired on 2026-06-30 and there is no active server-side
-  // benefit policy. Keep a non-promotional sentinel only as an internal
-  // fallback for the legacy consult answer, while forcing customer coupon
-  // state to an actual empty collection before app.js initializes.
   defaultCoupons.splice(0, defaultCoupons.length, {
     id: "NO_ACTIVE_SIGNUP_PROMO",
     title: "신규회원 할인 미운영",
@@ -48,6 +49,19 @@ function retireExpiredWelcomePromotion() {
   } catch {}
 }
 
+function requestMethod(input, init) {
+  return String(init?.method || (typeof Request !== "undefined" && input instanceof Request ? input.method : "GET")).toUpperCase();
+}
+
+function consumesAuthCaptcha(url) {
+  return CAPTCHA_CONSUMING_AUTH_PATHS.some((path) => url.includes(path));
+}
+
+async function resetRenderedAuthCaptchas() {
+  const controls = [...document.querySelectorAll("form [data-captcha-control]")];
+  await Promise.all(controls.map((control) => resetCaptchaControl(control, document).catch(() => false)));
+}
+
 function installEdgeRequestTimeout() {
   const nativeFetch = globalThis.fetch?.bind(globalThis);
   if (!nativeFetch || globalThis.__reballEdgeTimeoutInstalled) return;
@@ -55,19 +69,27 @@ function installEdgeRequestTimeout() {
 
   globalThis.fetch = async (input, init = {}) => {
     const url = typeof input === "string" || input instanceof URL ? String(input) : String(input?.url || "");
+    const method = requestMethod(input, init);
     const isPaymentConfirm = url.includes("/functions/v1/payment-confirm");
-    const shouldTimeout = url.includes("/functions/v1/") && !isPaymentConfirm && !init?.signal;
-    if (!shouldTimeout) return nativeFetch(input, init);
-
-    const controller = new AbortController();
-    const timer = globalThis.setTimeout(
-      () => controller.abort(new DOMException("요청 시간이 초과되었습니다.", "TimeoutError")),
-      EDGE_TIMEOUT_MS
-    );
+    // Generic aborts are safe only for reads. Mutations may commit after the
+    // browser gives up, so POST/PATCH/DELETE operations own their recovery and
+    // idempotency instead of inheriting a blind global timeout.
+    const shouldTimeout = url.includes("/functions/v1/") && method === "GET" && !isPaymentConfirm && !init?.signal;
+    const controller = shouldTimeout ? new AbortController() : null;
+    const timer = controller
+      ? globalThis.setTimeout(
+          () => controller.abort(new DOMException("요청 시간이 초과되었습니다.", "TimeoutError")),
+          EDGE_TIMEOUT_MS
+        )
+      : 0;
     try {
-      return await nativeFetch(input, { ...init, signal: controller.signal });
+      return await nativeFetch(input, controller ? { ...init, signal: controller.signal } : init);
     } finally {
-      globalThis.clearTimeout(timer);
+      if (timer) globalThis.clearTimeout(timer);
+      // Turnstile tokens are single-use even when authentication fails. Reset
+      // after every server auth attempt so wrong passwords, duplicate signup,
+      // and recovery failures never strand the next retry with a stale token.
+      if (consumesAuthCaptcha(url)) await resetRenderedAuthCaptchas();
     }
   };
 }
@@ -134,9 +156,6 @@ async function handleServerLoginIdCheck(event) {
   } catch (error) {
     setSignupCheckMessage(error?.message || "아이디 중복확인을 완료하지 못했습니다.", "error");
   } finally {
-    // Turnstile/hCaptcha response tokens are single-use. Always clear and
-    // reset the provider widget after the server consumes an availability
-    // check, including taken-ID and error paths.
     resetReady = await resetCaptchaControl(captchaControl, document).catch(() => false);
     button.disabled = false;
     button.removeAttribute("aria-busy");
@@ -152,9 +171,6 @@ async function handleServerLoginIdCheck(event) {
     return;
   }
 
-  // The legacy SPA owns signup state internally. Re-enter its original click
-  // handler only after the server authority has returned available=true and a
-  // fresh CAPTCHA challenge is ready for the eventual signup submission.
   button.dataset.serverAuthorityPass = loginId;
   button.click();
 }
