@@ -114,6 +114,22 @@ test("daily dashboard accounting keeps canceled same-day approvals in gross and 
   assert.match(adminConsole, /grossTodayKrw - refundsTodayKrw/);
 });
 
+test("payment-only operators receive financial order fields without customer shipping PII", () => {
+  assert.match(adminConsole, /ORDER_PII_ROLES/);
+  assert.match(adminConsole, /const safeOrderSelect = "id,order_no,status,payment_status,payment_method,payment_provider,subtotal_krw,shipping_krw,discount_krw,refund_amount,total_krw,created_at,updated_at"/);
+  assert.match(adminConsole, /select: canOrderPii \? fullOrderSelect : safeOrderSelect/);
+  assert.match(adminConsole, /piiRedacted: !canOrderPii/);
+  assert.match(adminConsole, /canOrderPii\s*\? serviceSelect<AnyRow\[\]>/);
+  assert.match(adminConsole, /requireAny\(roles, ORDER_PII_ROLES, "주문 메모를 남길 권한이 없습니다\."\)/);
+  const returnsStart = extraEdge.indexOf("async function returnsView");
+  const returnsEnd = extraEdge.indexOf("async function inquiriesView", returnsStart);
+  const returnsBody = extraEdge.slice(returnsStart, returnsEnd);
+  assert.doesNotMatch(returnsBody, /address_snapshot|receiver|tracking_number|shipping_carrier/);
+  assert.match(finalAudit, /isPaymentOnlyOperator/);
+  assert.match(finalAudit, /고객 배송정보 비공개/);
+  assert.match(finalAudit, /상품 상세 비공개/);
+});
+
 test("final audit keeps extension permissions deterministic after base-tab rerenders", () => {
   assert.match(finalAudit, /EXTRA_TAB_ROLES/);
   assert.match(finalAudit, /applyExtraTabPermissions/);
