@@ -96,7 +96,12 @@ test("member purchase totals exclude failed or fully canceled orders and subtrac
   assert.match(adminMembers, /gross - refunded/);
   assert.match(adminMembers, /Math\.max\(0, gross - refunded\)/);
   assert.match(adminMembers, /pagedSelect/);
-  assert.doesNotMatch(adminMembers, /fetchOrders\(\)[\s\S]*catch/);
+  const fetchOrdersStart = adminMembers.indexOf("function fetchOrders()");
+  const fetchOrdersEnd = adminMembers.indexOf("Deno.serve", fetchOrdersStart);
+  assert.ok(fetchOrdersStart >= 0 && fetchOrdersEnd > fetchOrdersStart, "fetchOrders function boundary must exist");
+  const fetchOrdersBody = adminMembers.slice(fetchOrdersStart, fetchOrdersEnd);
+  assert.match(fetchOrdersBody, /return pagedSelect<OrderSummaryRow>/);
+  assert.doesNotMatch(fetchOrdersBody, /catch/);
 });
 
 test("daily dashboard accounting keeps canceled same-day approvals in gross and uses refund ledger events", () => {
