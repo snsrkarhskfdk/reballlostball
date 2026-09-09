@@ -124,11 +124,6 @@ function markPendingOrderAccepted() {
   savePendingOrderAttempt({ ...pending, serverAccepted: true });
 }
 
-function isDefinitiveCreateOrderRejection(response) {
-  const status = Number(response?.status) || 0;
-  return status >= 400 && status < 500 && ![401, 403, 408, 409, 425, 429].includes(status);
-}
-
 function startNewActorAttempt(actorMarker, init, headers) {
   const newKey = freshOrderIdempotencyKey();
   if (!newKey) {
@@ -201,9 +196,14 @@ function installEdgeRequestTimeout() {
     const timer = controller ? globalThis.setTimeout(() => controller.abort(new DOMException("요청 시간이 초과되었습니다.", "TimeoutError")), EDGE_TIMEOUT_MS) : 0;
     try {
       const response = await nativeFetch(input, controller ? { ...stabilizedInit, signal: controller.signal } : stabilizedInit);
-      if (isCreateOrder) {
-        if (response.ok) markPendingOrderAccepted();
-        else if (isDefinitiveCreateOrderRejection(response)) clearPendingOrderAttempt();
+      if (isCreateOrder && response.ok) {
+        // Keep the same key across every pre-success validation or stock retry,
+        // even when the request body changes. app.js retains its first generated
+        // key in memory, and clearing this capability on a 4xx would let a later
+        // retry accidentally fall back to an abandoned actor's cached key. The
+        // server itself decides whether this key already names an order before
+        // it reads mutable cart data, so retaining it is the safest authority.
+        markPendingOrderAccepted();
       }
       return response;
     } finally {
