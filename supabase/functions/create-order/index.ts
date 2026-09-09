@@ -18,9 +18,93 @@ import {
 } from "../_shared/http.ts";
 import { assertMockPaymentProviderAllowed } from "../_shared/payments.ts";
 import { enforceRateLimit } from "../_shared/security.ts";
-import { rpc, sessionUser } from "../_shared/supabase.ts";
+import { rpc, serviceSelect, sessionUser } from "../_shared/supabase.ts";
 
 const serviceDatabase = { rpc };
+type SessionUser = { id: string; email?: string } | null;
+type ExistingOrder = {
+  profile_id?: string | null;
+  request_fingerprint?: string | null;
+  guest_lookup_token_hash?: string | null;
+};
+
+async function existingOrderRow(idempotencyKey: string): Promise<ExistingOrder | null> {
+  const params = new URLSearchParams({
+    select: "profile_id,request_fingerprint,guest_lookup_token_hash",
+    idempotency_key: `eq.${idempotencyKey}`,
+    limit: "1",
+  });
+  const rows = await serviceSelect<ExistingOrder[]>(`/rest/v1/orders?${params}`);
+  return rows[0] || null;
+}
+
+async function recoverExistingOrder(idempotencyKey: string, user: SessionUser): Promise<Record<string, unknown> | null> {
+  const existing = await existingOrderRow(idempotencyKey);
+  if (!existing) return null;
+
+  const existingProfileId = typeof existing.profile_id === "string" ? existing.profile_id : null;
+  const actorProfileId = user?.id || null;
+  if (existingProfileId !== actorProfileId) {
+    // Never let the same browser retry silently cross the member/guest boundary.
+    // The database unique key would also reject this, but fail before exposing
+    // any order material or attempting a second mutation.
+    throw new HttpError(409, "IDEMPOTENCY_ACTOR_MISMATCH", "이전 주문 시도의 로그인 상태를 다시 확인해 주세요.");
+  }
+
+  let guestLookupToken: string | null = null;
+  let guestTokenHash: string | null = null;
+  if (!user) {
+    const fingerprint = cleanString(existing.request_fingerprint, 64).toLowerCase();
+    const storedHash = cleanString(existing.guest_lookup_token_hash, 64).toLowerCase();
+    const secret = Deno.env.get("GUEST_ORDER_TOKEN_SECRET") || "";
+    if (!/^[0-9a-f]{64}$/.test(fingerprint) || !/^[0-9a-f]{64}$/.test(storedHash) || secret.length < 16) {
+      throw new HttpError(503, "ORDER_RECOVERY_UNAVAILABLE", "기존 주문을 안전하게 복구할 수 없습니다.");
+    }
+    guestLookupToken = await hmacSha256Base64Url(secret, `guest-order:${idempotencyKey}:${fingerprint}`);
+    guestTokenHash = await sha256Hex(guestLookupToken);
+    if (guestTokenHash !== storedHash) {
+      throw new HttpError(503, "ORDER_RECOVERY_INTEGRITY_FAILED", "기존 주문을 안전하게 복구할 수 없습니다.");
+    }
+  }
+
+  const order = await rpc<Record<string, unknown> | null>("get_order_v1", {
+    p_order_no: null,
+    p_actor_user_id: actorProfileId,
+    p_guest_token_hash: guestTokenHash,
+    p_idempotency_key: idempotencyKey,
+  }).catch(async (error) => {
+    // Production's current get_order_v1 signature may not yet accept an
+    // idempotency-key argument. Fall back to the authoritative order number by
+    // looking it up without exposing it to the browser first.
+    if (!(error instanceof HttpError)) throw error;
+    const params = new URLSearchParams({
+      select: "order_no",
+      idempotency_key: `eq.${idempotencyKey}`,
+      limit: "1",
+    });
+    const rows = await serviceSelect<Array<{ order_no?: string }>>(`/rest/v1/orders?${params}`);
+    const orderNo = cleanString(rows[0]?.order_no, 64).toUpperCase();
+    if (!orderNo) return null;
+    return rpc<Record<string, unknown> | null>("get_order_v1", {
+      p_order_no: orderNo,
+      p_actor_user_id: actorProfileId,
+      p_guest_token_hash: guestTokenHash,
+    });
+  });
+  if (!order) return null;
+
+  const status = cleanString(order.status, 40).toLowerCase();
+  return {
+    ...order,
+    duplicate: true,
+    recovered: true,
+    lookupToken: guestLookupToken,
+    guestLookupToken,
+    // Only a genuinely payment-ready recovered order may open a new Toss
+    // payment window. Ambiguous/paid states remain on their existing recovery path.
+    skipPayment: status !== "payment_ready",
+  };
+}
 
 Deno.serve(async (req: Request) => {
   if (req.method === "OPTIONS") {
@@ -40,10 +124,17 @@ Deno.serve(async (req: Request) => {
     if (!/^[A-Za-z0-9_-]{16,128}$/.test(idempotencyKey)) {
       throw new HttpError(400, "IDEMPOTENCY_KEY_REQUIRED", "주문 요청 키를 확인해 주세요.");
     }
+    await enforceRateLimit(req, "commerce_create_order", user?.id || idempotencyKey, 12, 900, 900);
+
+    // Resolve an earlier ambiguous attempt before reading mutable cart/address
+    // inputs. This makes the idempotency key, not the rehydrated browser cart,
+    // the recovery authority after a timeout or reload.
+    const recoveredBeforeCreate = await recoverExistingOrder(idempotencyKey, user);
+    if (recoveredBeforeCreate) return jsonResponse(req, recoveredBeforeCreate, 200);
+
     const items = normalizeItems(body.items).map(({ variantId, quantity }) => ({ variantId, quantity }));
     const address = normalizeAddress(body.address ?? body.customer);
     const paymentMethod = normalizePaymentMethod(body.paymentMethod);
-    await enforceRateLimit(req, "commerce_create_order", user?.id || idempotencyKey, 12, 900, 900);
 
     const providerName = cleanString(Deno.env.get("PAYMENT_PROVIDER") || "toss_payments", 40);
     if (!new Set(["toss_payments", "mock"]).has(providerName)) {
@@ -63,16 +154,30 @@ Deno.serve(async (req: Request) => {
     }
 
     await serviceDatabase.rpc("expire_order_reservations_v1", { p_limit: 25 }).catch(() => undefined);
-    const order = await serviceDatabase.rpc<Record<string, unknown>>("create_order_v1", {
-      p_profile_id: user?.id || null,
-      p_idempotency_key: idempotencyKey,
-      p_request_fingerprint: fingerprint,
-      p_items: items,
-      p_address: address,
-      p_payment_method: paymentMethod,
-      p_payment_provider: providerName,
-      p_guest_token_hash: guestTokenHash,
-    });
+    let order: Record<string, unknown>;
+    try {
+      order = await serviceDatabase.rpc<Record<string, unknown>>("create_order_v1", {
+        p_profile_id: user?.id || null,
+        p_idempotency_key: idempotencyKey,
+        p_request_fingerprint: fingerprint,
+        p_items: items,
+        p_address: address,
+        p_payment_method: paymentMethod,
+        p_payment_provider: providerName,
+        p_guest_token_hash: guestTokenHash,
+      });
+    } catch (error) {
+      // A previous request can commit in the narrow race between the pre-check
+      // above and create_order_v1's advisory lock. A 409 here is therefore
+      // recovered by the same idempotency authority instead of surfacing a
+      // false failure or encouraging the customer to create another order.
+      if (error instanceof HttpError && error.status === 409) {
+        const racedRecovery = await recoverExistingOrder(idempotencyKey, user);
+        if (racedRecovery) return jsonResponse(req, racedRecovery, 200);
+      }
+      throw error;
+    }
+
     const successUrl = Deno.env.get("TOSS_SUCCESS_URL") || "";
     const failUrl = Deno.env.get("TOSS_FAIL_URL") || "";
     const tossMethod = {
