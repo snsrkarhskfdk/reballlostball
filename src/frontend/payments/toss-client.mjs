@@ -158,8 +158,16 @@ function clearPendingConfirmation(orderId, storage = globalThis.sessionStorage) 
 
 function confirmationRetryable(error) {
   const code = String(error?.code || "").toUpperCase();
+  const status = Number(error?.status) || 0;
   if (RECOVERABLE_CONFIRM_CODES.has(code)) return true;
-  return !code && (!Number(error?.status) || Number(error?.status) >= 500);
+  // Any coded or uncoded 5xx is non-definitive for payment confirmation: Toss
+  // may already have charged the customer while a later local finalize step
+  // failed. Retrying the exact confirmation tuple is server-idempotent and is
+  // safer than deleting it and falling back to a new prepare-payment attempt.
+  if (status >= 500) return true;
+  if ([408, 425, 429].includes(status)) return true;
+  // Browser/network failures frequently carry neither a code nor a status.
+  return !code && status === 0;
 }
 
 function sleep(ms) {
