@@ -49,6 +49,34 @@ function safeIdempotencyKey(value) {
   return /^[A-Za-z0-9_-]{16,128}$/.test(key) ? key : "";
 }
 
+function decodeJwtSubject(token) {
+  try {
+    const payloadSegment = String(token || "").split(".")[1] || "";
+    if (!payloadSegment) return "";
+    const normalized = payloadSegment.replace(/-/g, "+").replace(/_/g, "/");
+    const padded = normalized.padEnd(Math.ceil(normalized.length / 4) * 4, "=");
+    const payload = JSON.parse(atob(padded));
+    const subject = String(payload?.sub || "").trim().toLowerCase();
+    return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/.test(subject) ? subject : "";
+  } catch {
+    return "";
+  }
+}
+
+function orderActorMarker(headers) {
+  const authorization = String(headers?.get?.("Authorization") || "").trim();
+  if (!authorization) return "guest";
+  const token = authorization.replace(/^Bearer\s+/i, "").trim();
+  const subject = decodeJwtSubject(token);
+  return subject ? `user:${subject}` : "authenticated";
+}
+
+function safeActorMarker(value, legacyAuthenticated = false) {
+  const marker = String(value || "").trim().toLowerCase();
+  if (marker === "guest" || marker === "authenticated" || /^user:[0-9a-f-]{36}$/.test(marker)) return marker;
+  return legacyAuthenticated ? "authenticated" : "guest";
+}
+
 function loadPendingOrderAttempt() {
   try {
     const value = JSON.parse(sessionStorage.getItem(PENDING_ORDER_ATTEMPT_SESSION_KEY) || "null");
@@ -56,7 +84,7 @@ function loadPendingOrderAttempt() {
     if (!idempotencyKey) return null;
     return {
       idempotencyKey,
-      authenticated: value?.authenticated === true,
+      actorMarker: safeActorMarker(value?.actorMarker, value?.authenticated === true),
       serverAccepted: value?.serverAccepted === true,
       createdAt: Number(value?.createdAt) || Date.now(),
     };
@@ -67,9 +95,11 @@ function loadPendingOrderAttempt() {
 
 function savePendingOrderAttempt(attempt) {
   try {
+    const idempotencyKey = safeIdempotencyKey(attempt?.idempotencyKey);
+    if (!idempotencyKey) return false;
     sessionStorage.setItem(PENDING_ORDER_ATTEMPT_SESSION_KEY, JSON.stringify({
-      idempotencyKey: safeIdempotencyKey(attempt?.idempotencyKey),
-      authenticated: attempt?.authenticated === true,
+      idempotencyKey,
+      actorMarker: safeActorMarker(attempt?.actorMarker),
       serverAccepted: attempt?.serverAccepted === true,
       createdAt: Number(attempt?.createdAt) || Date.now(),
     }));
@@ -91,8 +121,6 @@ function markPendingOrderAccepted() {
 
 function isDefinitiveCreateOrderRejection(response) {
   const status = Number(response?.status) || 0;
-  // Auth/rate/conflict responses may simply mean the browser must restore the
-  // same actor/session before it can recover the earlier idempotency key.
   return status >= 400 && status < 500 && ![401, 403, 408, 409, 425, 429].includes(status);
 }
 
@@ -101,25 +129,20 @@ function stabilizeCreateOrderRequest(url, method, init) {
   const headers = new Headers(init?.headers || {});
   const incomingKey = safeIdempotencyKey(headers.get("Idempotency-Key"));
   if (!incomingKey) return init;
-  const authenticated = /^Bearer\s+\S+/i.test(headers.get("Authorization") || "");
+  const actorMarker = orderActorMarker(headers);
   const pending = loadPendingOrderAttempt();
 
   if (pending) {
-    if (pending.authenticated !== authenticated) {
-      throw new Error("이전 주문 시도와 현재 로그인 상태가 다릅니다. 같은 로그인 상태로 복구한 뒤 다시 시도해 주세요.");
+    if (pending.actorMarker !== actorMarker) {
+      throw new Error("이전 주문 시도와 현재 계정이 다릅니다. 같은 계정으로 복구한 뒤 다시 시도해 주세요.");
     }
-    // The server now treats the stable idempotency key as recovery authority:
-    // if an earlier request committed, it returns that existing order before
-    // reading the mutable rehydrated cart; if it did not commit, the current
-    // cart may safely create exactly one order under the same key. No customer
-    // address or order body needs to be persisted in browser storage.
     headers.set("Idempotency-Key", pending.idempotencyKey);
     return { ...init, headers };
   }
 
   savePendingOrderAttempt({
     idempotencyKey: incomingKey,
-    authenticated,
+    actorMarker,
     serverAccepted: false,
     createdAt: Date.now(),
   });
