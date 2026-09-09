@@ -23,6 +23,7 @@ import { rpc, serviceSelect, sessionUser } from "../_shared/supabase.ts";
 const serviceDatabase = { rpc };
 type SessionUser = { id: string; email?: string } | null;
 type ExistingOrder = {
+  order_no?: string | null;
   profile_id?: string | null;
   request_fingerprint?: string | null;
   guest_lookup_token_hash?: string | null;
@@ -30,7 +31,7 @@ type ExistingOrder = {
 
 async function existingOrderRow(idempotencyKey: string): Promise<ExistingOrder | null> {
   const params = new URLSearchParams({
-    select: "profile_id,request_fingerprint,guest_lookup_token_hash",
+    select: "order_no,profile_id,request_fingerprint,guest_lookup_token_hash",
     idempotency_key: `eq.${idempotencyKey}`,
     limit: "1",
   });
@@ -42,12 +43,10 @@ async function recoverExistingOrder(idempotencyKey: string, user: SessionUser): 
   const existing = await existingOrderRow(idempotencyKey);
   if (!existing) return null;
 
+  const orderNo = cleanString(existing.order_no, 64).toUpperCase();
   const existingProfileId = typeof existing.profile_id === "string" ? existing.profile_id : null;
   const actorProfileId = user?.id || null;
-  if (existingProfileId !== actorProfileId) {
-    // Never let the same browser retry silently cross the member/guest boundary.
-    // The database unique key would also reject this, but fail before exposing
-    // any order material or attempting a second mutation.
+  if (!orderNo || existingProfileId !== actorProfileId) {
     throw new HttpError(409, "IDEMPOTENCY_ACTOR_MISMATCH", "이전 주문 시도의 로그인 상태를 다시 확인해 주세요.");
   }
 
@@ -68,28 +67,9 @@ async function recoverExistingOrder(idempotencyKey: string, user: SessionUser): 
   }
 
   const order = await rpc<Record<string, unknown> | null>("get_order_v1", {
-    p_order_no: null,
+    p_order_no: orderNo,
     p_actor_user_id: actorProfileId,
     p_guest_token_hash: guestTokenHash,
-    p_idempotency_key: idempotencyKey,
-  }).catch(async (error) => {
-    // Production's current get_order_v1 signature may not yet accept an
-    // idempotency-key argument. Fall back to the authoritative order number by
-    // looking it up without exposing it to the browser first.
-    if (!(error instanceof HttpError)) throw error;
-    const params = new URLSearchParams({
-      select: "order_no",
-      idempotency_key: `eq.${idempotencyKey}`,
-      limit: "1",
-    });
-    const rows = await serviceSelect<Array<{ order_no?: string }>>(`/rest/v1/orders?${params}`);
-    const orderNo = cleanString(rows[0]?.order_no, 64).toUpperCase();
-    if (!orderNo) return null;
-    return rpc<Record<string, unknown> | null>("get_order_v1", {
-      p_order_no: orderNo,
-      p_actor_user_id: actorProfileId,
-      p_guest_token_hash: guestTokenHash,
-    });
   });
   if (!order) return null;
 
@@ -100,8 +80,6 @@ async function recoverExistingOrder(idempotencyKey: string, user: SessionUser): 
     recovered: true,
     lookupToken: guestLookupToken,
     guestLookupToken,
-    // Only a genuinely payment-ready recovered order may open a new Toss
-    // payment window. Ambiguous/paid states remain on their existing recovery path.
     skipPayment: status !== "payment_ready",
   };
 }
@@ -126,9 +104,6 @@ Deno.serve(async (req: Request) => {
     }
     await enforceRateLimit(req, "commerce_create_order", user?.id || idempotencyKey, 12, 900, 900);
 
-    // Resolve an earlier ambiguous attempt before reading mutable cart/address
-    // inputs. This makes the idempotency key, not the rehydrated browser cart,
-    // the recovery authority after a timeout or reload.
     const recoveredBeforeCreate = await recoverExistingOrder(idempotencyKey, user);
     if (recoveredBeforeCreate) return jsonResponse(req, recoveredBeforeCreate, 200);
 
@@ -167,10 +142,6 @@ Deno.serve(async (req: Request) => {
         p_guest_token_hash: guestTokenHash,
       });
     } catch (error) {
-      // A previous request can commit in the narrow race between the pre-check
-      // above and create_order_v1's advisory lock. A 409 here is therefore
-      // recovered by the same idempotency authority instead of surfacing a
-      // false failure or encouraging the customer to create another order.
       if (error instanceof HttpError && error.status === 409) {
         const racedRecovery = await recoverExistingOrder(idempotencyKey, user);
         if (racedRecovery) return jsonResponse(req, racedRecovery, 200);
