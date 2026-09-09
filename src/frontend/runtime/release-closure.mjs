@@ -5,23 +5,15 @@ import { pendingTossConfirmation } from "../payments/toss-client.mjs";
 
 const RETIRED_PROMO_MESSAGE = "현재 운영 중인 신규회원 할인 쿠폰은 없습니다. 새 혜택은 공지사항에서 별도로 안내합니다.";
 const EDGE_TIMEOUT_MS = 15_000;
+const PENDING_ORDER_ATTEMPT_KEY = "reball.pendingOrderAttempt.v1";
 const CAPTCHA_CONSUMING_AUTH_PATHS = [
   "/functions/v1/signup-with-login-id",
   "/functions/v1/login-with-identifier",
   "/functions/v1/auth-assist",
 ];
 const DEFERRED_MY_TABS = new Set([
-  "points",
-  "coupons",
-  "receipts",
-  "recent",
-  "posts",
-  "inquiry",
-  "inquiries",
-  "reviews",
-  "review-write",
-  "payments",
-  "notifications",
+  "points", "coupons", "receipts", "recent", "posts", "inquiry", "inquiries", "reviews",
+  "review-write", "payments", "notifications",
 ]);
 let patchQueued = false;
 
@@ -31,19 +23,12 @@ function metaContent(name) {
 
 function retireExpiredWelcomePromotion() {
   defaultCoupons.splice(0, defaultCoupons.length, {
-    id: "NO_ACTIVE_SIGNUP_PROMO",
-    title: "신규회원 할인 미운영",
-    benefit: "현재 적용 가능한 할인 없음",
-    benefitAmount: 0,
-    period: "",
-    status: "미운영",
-    useCount: 0,
+    id: "NO_ACTIVE_SIGNUP_PROMO", title: "신규회원 할인 미운영", benefit: "현재 적용 가능한 할인 없음",
+    benefitAmount: 0, period: "", status: "미운영", useCount: 0,
   });
   for (let index = noticeItems.length - 1; index >= 0; index -= 1) {
     const notice = noticeItems[index];
-    if (/3,?000원|WELCOME3000|신규 회원.*쿠폰/i.test(`${notice?.title || ""} ${notice?.body || ""}`)) {
-      noticeItems.splice(index, 1);
-    }
+    if (/3,?000원|WELCOME3000|신규 회원.*쿠폰/i.test(`${notice?.title || ""} ${notice?.body || ""}`)) noticeItems.splice(index, 1);
   }
   try { localStorage.setItem("reball.coupons", "[]"); } catch {}
 }
@@ -61,6 +46,61 @@ async function resetRenderedAuthCaptchas() {
   await Promise.all(controls.map((control) => resetCaptchaControl(control, document).catch(() => false)));
 }
 
+function safeIdempotencyKey(value) {
+  const key = String(value || "").trim();
+  return /^[A-Za-z0-9_-]{16,128}$/.test(key) ? key : "";
+}
+
+async function requestBodyFingerprint(body) {
+  if (typeof body !== "string" || !globalThis.crypto?.subtle) return "";
+  try {
+    const bytes = new TextEncoder().encode(body);
+    const digest = await globalThis.crypto.subtle.digest("SHA-256", bytes);
+    return Array.from(new Uint8Array(digest), (value) => value.toString(16).padStart(2, "0")).join("");
+  } catch {
+    return "";
+  }
+}
+
+function loadPendingOrderAttempt() {
+  try {
+    const value = JSON.parse(sessionStorage.getItem(PENDING_ORDER_ATTEMPT_KEY) || "null");
+    const idempotencyKey = safeIdempotencyKey(value?.idempotencyKey);
+    const fingerprint = /^[0-9a-f]{64}$/.test(String(value?.fingerprint || "")) ? value.fingerprint : "";
+    return idempotencyKey && fingerprint ? { idempotencyKey, fingerprint } : null;
+  } catch {
+    return null;
+  }
+}
+
+function savePendingOrderAttempt(attempt) {
+  try { sessionStorage.setItem(PENDING_ORDER_ATTEMPT_KEY, JSON.stringify(attempt)); } catch {}
+}
+
+function clearPendingOrderAttempt() {
+  try { sessionStorage.removeItem(PENDING_ORDER_ATTEMPT_KEY); } catch {}
+}
+
+async function stabilizeCreateOrderRequest(url, method, init) {
+  if (method !== "POST" || !url.includes("/functions/v1/create-order")) return init;
+  const fingerprint = await requestBodyFingerprint(init?.body);
+  if (!fingerprint) return init;
+  const headers = new Headers(init?.headers || {});
+  const incomingKey = safeIdempotencyKey(headers.get("Idempotency-Key"));
+  if (!incomingKey) return init;
+  const pending = loadPendingOrderAttempt();
+  const idempotencyKey = pending?.fingerprint === fingerprint ? pending.idempotencyKey : incomingKey;
+  headers.set("Idempotency-Key", idempotencyKey);
+  savePendingOrderAttempt({ idempotencyKey, fingerprint });
+  return { ...init, headers };
+}
+
+function createOrderResultIsDefinitive(response) {
+  if (response?.ok) return true;
+  const status = Number(response?.status) || 0;
+  return status >= 400 && status < 500 && ![408, 425, 429].includes(status);
+}
+
 function installEdgeRequestTimeout() {
   const nativeFetch = globalThis.fetch?.bind(globalThis);
   if (!nativeFetch || globalThis.__reballEdgeTimeoutInstalled) return;
@@ -70,16 +110,17 @@ function installEdgeRequestTimeout() {
     const url = typeof input === "string" || input instanceof URL ? String(input) : String(input?.url || "");
     const method = requestMethod(input, init);
     const isPaymentConfirm = url.includes("/functions/v1/payment-confirm");
-    const shouldTimeout = url.includes("/functions/v1/") && method === "GET" && !isPaymentConfirm && !init?.signal;
+    const isCreateOrder = method === "POST" && url.includes("/functions/v1/create-order");
+    const stabilizedInit = isCreateOrder ? await stabilizeCreateOrderRequest(url, method, init) : init;
+    const shouldTimeout = url.includes("/functions/v1/") && method === "GET" && !isPaymentConfirm && !stabilizedInit?.signal;
     const controller = shouldTimeout ? new AbortController() : null;
     const timer = controller
-      ? globalThis.setTimeout(
-          () => controller.abort(new DOMException("요청 시간이 초과되었습니다.", "TimeoutError")),
-          EDGE_TIMEOUT_MS
-        )
+      ? globalThis.setTimeout(() => controller.abort(new DOMException("요청 시간이 초과되었습니다.", "TimeoutError")), EDGE_TIMEOUT_MS)
       : 0;
     try {
-      return await nativeFetch(input, controller ? { ...init, signal: controller.signal } : init);
+      const response = await nativeFetch(input, controller ? { ...stabilizedInit, signal: controller.signal } : stabilizedInit);
+      if (isCreateOrder && createOrderResultIsDefinitive(response)) clearPendingOrderAttempt();
+      return response;
     } finally {
       if (timer) globalThis.clearTimeout(timer);
       if (consumesAuthCaptcha(url)) await resetRenderedAuthCaptchas();
@@ -109,11 +150,7 @@ function retrySavedPaymentConfirmation(event) {
   if (!pending) return;
   event.preventDefault();
   event.stopImmediatePropagation();
-  const params = new URLSearchParams({
-    paymentKey: pending.paymentKey,
-    orderId: pending.orderId,
-    amount: String(pending.amount),
-  });
+  const params = new URLSearchParams({ paymentKey: pending.paymentKey, orderId: pending.orderId, amount: String(pending.amount) });
   location.assign(`/payment/success?${params}`);
 }
 
@@ -179,17 +216,14 @@ async function handleServerLoginIdCheck(event) {
 }
 
 function removeDeferredCustomerActions(root = document) {
-  root.querySelectorAll("[data-my-tab]").forEach((node) => {
-    if (DEFERRED_MY_TABS.has(node.dataset.myTab)) node.remove();
-  });
+  root.querySelectorAll("[data-my-tab]").forEach((node) => { if (DEFERRED_MY_TABS.has(node.dataset.myTab)) node.remove(); });
   root.querySelectorAll([
-    "[data-social-signup]", "[data-return-request]", "[data-return-order]", "[data-review-order]",
-    "[data-seller-question]", "[data-post-delete]", "[data-notification-toggle]", "[data-print-receipt]",
-    "[data-coupon-form]", ".signup-benefit-banner", ".signup-coupon-note", ".login-social-stack", ".social-signup-row",
+    "[data-social-signup]", "[data-return-request]", "[data-return-order]", "[data-review-order]", "[data-seller-question]",
+    "[data-post-delete]", "[data-notification-toggle]", "[data-print-receipt]", "[data-coupon-form]", ".signup-benefit-banner",
+    ".signup-coupon-note", ".login-social-stack", ".social-signup-row",
   ].join(",")).forEach((node) => node.remove());
   root.querySelectorAll(".signup-choice-header").forEach((header) => {
-    const title = header.querySelector("h1")?.textContent?.trim();
-    if (title !== "회원가입") return;
+    if (header.querySelector("h1")?.textContent?.trim() !== "회원가입") return;
     const lead = header.querySelector("p");
     const sub = header.querySelector("span");
     const leadCopy = "리볼회원으로 주문과 배송지를 안전하게 관리하세요.";
@@ -211,9 +245,7 @@ function patchAdminLinks(root = document) {
 }
 
 function patchPromotionCopy(root = document) {
-  root.querySelectorAll(".consult-chip-row [data-consult-question]").forEach((node) => {
-    if (/쿠폰|혜택/.test(node.textContent || "")) node.remove();
-  });
+  root.querySelectorAll(".consult-chip-row [data-consult-question]").forEach((node) => { if (/쿠폰|혜택/.test(node.textContent || "")) node.remove(); });
   root.querySelectorAll(".consult-message--assistant p, .coupon-card").forEach((node) => {
     const text = node.textContent || "";
     if (/신규.*쿠폰|회원가입.*3,?000원|WELCOME3000|신규 리볼회원 가입 시/.test(text)) {
@@ -248,8 +280,5 @@ window.addEventListener("hashchange", redirectLegacyAdmin);
 
 const observer = new MutationObserver(scheduleReleasePatch);
 observer.observe(document.documentElement, { childList: true, subtree: true });
-if (document.readyState === "loading") {
-  document.addEventListener("DOMContentLoaded", scheduleReleasePatch, { once: true });
-} else {
-  scheduleReleasePatch();
-}
+if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", scheduleReleasePatch, { once: true });
+else scheduleReleasePatch();
