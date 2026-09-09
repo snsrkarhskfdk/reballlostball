@@ -82,8 +82,8 @@ test("토스 성공 복귀값은 서버 payment-confirm으로 전달한다", asy
     amount: 18000,
     guestLookupToken: "guest-token",
   });
-  assert.throws(
-    () => confirmTossPayment({ baseUrl: "x", anonKey: "x" }, { paymentKey: "", orderId: "bad", amount: 0 }),
+  await assert.rejects(
+    confirmTossPayment({ baseUrl: "x", anonKey: "x" }, { paymentKey: "", orderId: "bad", amount: 0 }),
     /올바르지 않습니다/
   );
 });
