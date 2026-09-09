@@ -49,6 +49,11 @@ function safeIdempotencyKey(value) {
   return /^[A-Za-z0-9_-]{16,128}$/.test(key) ? key : "";
 }
 
+function freshOrderIdempotencyKey() {
+  if (typeof globalThis.crypto?.randomUUID !== "function") return "";
+  return `order_${globalThis.crypto.randomUUID().replaceAll("-", "")}`;
+}
+
 function decodeJwtSubject(token) {
   try {
     const payloadSegment = String(token || "").split(".")[1] || "";
@@ -124,15 +129,21 @@ function isDefinitiveCreateOrderRejection(response) {
   return status >= 400 && status < 500 && ![401, 403, 408, 409, 425, 429].includes(status);
 }
 
-function startNewActorAttempt(incomingKey, actorMarker, init, headers) {
+function startNewActorAttempt(actorMarker, init, headers) {
+  const newKey = freshOrderIdempotencyKey();
+  if (!newKey) {
+    const error = new Error("새 주문 요청 키를 안전하게 생성할 수 없습니다. 페이지를 새로고침한 뒤 다시 시도해 주세요.");
+    error.code = "ORDER_IDEMPOTENCY_ROTATION_FAILED";
+    throw error;
+  }
   clearPendingOrderAttempt();
   savePendingOrderAttempt({
-    idempotencyKey: incomingKey,
+    idempotencyKey: newKey,
     actorMarker,
     serverAccepted: false,
     createdAt: Date.now(),
   });
-  headers.set("Idempotency-Key", incomingKey);
+  headers.set("Idempotency-Key", newKey);
   return { ...init, headers };
 }
 
@@ -154,11 +165,11 @@ function stabilizeCreateOrderRequest(url, method, init) {
         error.code = "PENDING_ORDER_ACTOR_MISMATCH";
         throw error;
       }
-      // Payment cannot start until create-order returns successfully, so an
-      // abandoned create attempt cannot already contain a charge. It may have
-      // produced an unpaid reservation under the previous actor, which expires
-      // independently. Never reuse its idempotency key for the new actor.
-      return startNewActorAttempt(incomingKey, actorMarker, init, headers);
+      // Never reuse either the old pending key or app.js's still-cached
+      // checkoutIdempotencyKey after an actor switch. Payment cannot start until
+      // create-order returns successfully, so the old attempt may at most be an
+      // unpaid reservation that expires independently.
+      return startNewActorAttempt(actorMarker, init, headers);
     }
     headers.set("Idempotency-Key", pending.idempotencyKey);
     return { ...init, headers };
