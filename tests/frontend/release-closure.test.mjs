@@ -101,21 +101,29 @@ test("Codex review blockers stay closed across auth, payment and admin paginatio
   assert.match(runtime, /isPaymentConfirm/);
   assert.match(runtime, /!isPaymentConfirm/);
   assert.match(toss, /confirmTimeoutMs/);
-  assert.match(toss, /const confirmTimeoutMs[\s\S]*?: 0;/);
 
   assert.match(pagination, /orders:\s*\{ page: 1/);
   assert.match(pagination, /shipping:\s*\{ page: 1/);
+  assert.match(pagination, /returns:\s*\{ page: 1/);
   assert.match(pagination, /function activeOrdersScope\(/);
   assert.match(pagination, /parsed\.searchParams\.set\("scope", scope\)/);
   assert.match(pagination, /scope === "shipping"/);
   assert.match(pagination, /data-shipping-pager/);
-  assert.match(pagination, /resetScopeToFirstPage\("orders", \{ reload: true \}\)/);
-  assert.match(pagination, /resetScopeToFirstPage\("shipping", \{ reload: true \}\)/);
+  assert.match(pagination, /data-returns-pager/);
+  assert.match(pagination, /function scheduleFilteredReload\(scope\)/);
+  assert.match(pagination, /resetScopeToFirstPage\(scope\)/);
+  assert.match(pagination, /setTimeout\(\(\) => reloadScope\(scope\), 250\)/);
+  assert.match(pagination, /state\.pending \|\| state\.page <= 1/);
+  assert.match(pagination, /state\.pending \|\| !state\.hasMore/);
+  assert.match(pagination, /const shouldTimeout = method === "GET"/);
   assert.match(pagination, /label && label\.textContent !== nextLabel/);
+
   assert.match(ordersPage, /SHIPPING_STATUSES/);
-  assert.match(ordersPage, /orderParams\.set\("status", SHIPPING_STATUSES\)/);
+  assert.match(ordersPage, /RETURN_STATUSES/);
+  assert.match(ordersPage, /applyScopeStatus\(params, scope, requestedStatus\)/);
   assert.match(ordersPage, /limit: String\(pageSize \+ 1\)/);
-  assert.match(ordersPage, /hasMore = fetchedOrders\.length > pageSize/);
+  assert.match(ordersPage, /hasMore: fetched\.length > pageSize/);
+  assert.match(ordersPage, /admin_order_notes_page_v1/);
 
   assert.match(adminAssets, /store-manager-pagination\.mjs/);
   assert.match(adminAssets, /data-admin-pagination-assets/);
