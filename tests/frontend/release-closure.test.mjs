@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import { existsSync, readFileSync } from "node:fs";
 import { todayIso } from "../../src/frontend/account/presentation.mjs";
 import { checkLoginIdAvailability } from "../../src/frontend/auth/login-id-client.mjs";
+import { PENDING_ORDER_ATTEMPT_SESSION_KEY, saveCartSession } from "../../src/frontend/core/storage.mjs";
 import { injectPublicConfig } from "../../scripts/public-config.mjs";
 
 test("Korea business date does not drift to UTC date", () => {
@@ -26,6 +27,19 @@ test("login ID availability is decided by the server endpoint", async () => {
   );
   assert.deepEqual(requestBody, { loginId: "reballuser", captchaToken: "captcha-proof" });
   assert.equal(result.available, false);
+});
+
+test("empty cart hydration never clears an unresolved create-order recovery attempt", () => {
+  const values = new Map([
+    [PENDING_ORDER_ATTEMPT_SESSION_KEY, JSON.stringify({ idempotencyKey: "order_1234567890abcdef", fingerprint: "a".repeat(64), body: "{}" })],
+  ]);
+  const storage = {
+    getItem: (key) => values.has(key) ? values.get(key) : null,
+    setItem: (key, value) => values.set(key, String(value)),
+    removeItem: (key) => values.delete(key),
+  };
+  saveCartSession(storage, []);
+  assert.ok(storage.getItem(PENDING_ORDER_ATTEMPT_SESSION_KEY));
 });
 
 test("production build refuses missing Turnstile public config", () => {
@@ -100,7 +114,12 @@ test("Codex review blockers stay closed across auth, payment and admin paginatio
 
   assert.match(runtime, /isPaymentConfirm/);
   assert.match(runtime, /!isPaymentConfirm/);
+  assert.match(runtime, /body: pending\.body/);
+  assert.match(runtime, /serverAccepted/);
+  assert.match(runtime, /finalizeAcceptedOrderAttemptOnRoute/);
   assert.match(toss, /confirmTimeoutMs/);
+  assert.match(toss, /if \(status >= 500\) return true/);
+  assert.match(toss, /PAYMENT_CONFIRM_RECOVERY_REQUIRED/);
 
   assert.match(pagination, /orders:\s*\{ page: 1/);
   assert.match(pagination, /shipping:\s*\{ page: 1/);
@@ -116,13 +135,15 @@ test("Codex review blockers stay closed across auth, payment and admin paginatio
   assert.match(pagination, /state\.pending \|\| state\.page <= 1/);
   assert.match(pagination, /state\.pending \|\| !state\.hasMore/);
   assert.match(pagination, /const shouldTimeout = method === "GET"/);
-  assert.match(pagination, /label && label\.textContent !== nextLabel/);
+  assert.match(pagination, /searchTruncated/);
+  assert.match(pagination, /일부 결과만 확인됨/);
 
   assert.match(ordersPage, /SHIPPING_STATUSES/);
   assert.match(ordersPage, /RETURN_STATUSES/);
   assert.match(ordersPage, /applyScopeStatus\(params, scope, requestedStatus\)/);
   assert.match(ordersPage, /limit: String\(pageSize \+ 1\)/);
   assert.match(ordersPage, /hasMore: fetched\.length > pageSize/);
+  assert.match(ordersPage, /searchTruncated/);
   assert.match(ordersPage, /admin_order_notes_page_v1/);
 
   assert.match(adminAssets, /store-manager-pagination\.mjs/);
