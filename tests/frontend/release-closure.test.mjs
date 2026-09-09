@@ -74,6 +74,7 @@ test("release routing and deployment authority are closed", () => {
   assert.match(index, /rel="canonical" href="https:\/\/reballlostball\.com\/"/);
   assert.match(index, /https:\/\/reballlostball\.com\/assets\/figma\/og-image\.png/);
   assert.match(index, /runtime\/release-closure\.mjs/);
+  assert.match(index, /runtime\/payment-confirm-recovery-guard\.mjs/);
   assert.doesNotMatch(index, /fonts\.googleapis\.com/);
 
   const manifest = JSON.parse(readFileSync("assets/figma/site.webmanifest", "utf8"));
@@ -91,6 +92,7 @@ test("release routing and deployment authority are closed", () => {
 
 test("Codex review blockers stay closed across auth, payment, order recovery and admin pagination", () => {
   const runtime = readFileSync("src/frontend/runtime/release-closure.mjs", "utf8");
+  const paymentRecoveryGuard = readFileSync("src/frontend/runtime/payment-confirm-recovery-guard.mjs", "utf8");
   const captcha = readFileSync("src/frontend/auth/captcha-client.mjs", "utf8");
   const loginIdEdge = readFileSync("supabase/functions/check-login-id/index.ts", "utf8");
   const createOrderEdge = readFileSync("supabase/functions/create-order/index.ts", "utf8");
@@ -117,9 +119,12 @@ test("Codex review blockers stay closed across auth, payment, order recovery and
   assert.match(runtime, /isPaymentConfirm/);
   assert.match(runtime, /!isPaymentConfirm/);
   assert.match(runtime, /pending\.idempotencyKey/);
-  assert.match(runtime, /authenticated/);
+  assert.match(runtime, /actorMarker/);
   assert.match(runtime, /serverAccepted/);
   assert.match(runtime, /finalizeAcceptedOrderAttemptOnRoute/);
+  assert.match(runtime, /globalThis\.confirm/);
+  assert.match(runtime, /PENDING_ORDER_ACTOR_MISMATCH/);
+  assert.match(runtime, /startNewActorAttempt/);
   assert.doesNotMatch(runtime, /pending\.body/);
   assert.doesNotMatch(runtime, /requestBodyFingerprint/);
   assert.match(createOrderEdge, /recoverExistingOrder\(idempotencyKey, user\)/);
@@ -131,6 +136,10 @@ test("Codex review blockers stay closed across auth, payment, order recovery and
   assert.match(toss, /confirmTimeoutMs/);
   assert.match(toss, /if \(status >= 500\) return true/);
   assert.match(toss, /PAYMENT_CONFIRM_RECOVERY_REQUIRED/);
+  assert.match(toss, /PAYMENT_CONFIRM_AUTH_REQUIRED/);
+  assert.match(paymentRecoveryGuard, /removeAttribute\("data-payment-retry"\)/);
+  assert.match(paymentRecoveryGuard, /data-payment-confirm-recovery/);
+  assert.match(paymentRecoveryGuard, /pendingTossConfirmation/);
 
   assert.match(adminShippingEdge, /from "\.\.\/_shared\/http\.ts"/);
   assert.match(adminShippingEdge, /from "\.\.\/_shared\/security\.ts"/);
@@ -162,6 +171,7 @@ test("Codex review blockers stay closed across auth, payment, order recovery and
   assert.match(ordersPage, /hasMore: fetched\.length > pageSize/);
   assert.match(ordersPage, /searchTruncated/);
   assert.match(ordersPage, /admin_order_notes_page_v1/);
+  assert.match(ordersPage, /admin_order_latest_payments_v1/);
 
   assert.match(adminAssets, /store-manager-pagination\.mjs/);
   assert.match(adminAssets, /data-admin-pagination-assets/);
