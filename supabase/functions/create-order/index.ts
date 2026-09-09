@@ -29,6 +29,16 @@ type ExistingOrder = {
   guest_lookup_token_hash?: string | null;
 };
 
+const DEFAULT_ENABLED_PAYMENT_METHODS = ["card", "transfer", "easy_pay"];
+
+function enabledPaymentMethods(): Set<string> {
+  const configured = cleanString(Deno.env.get("ENABLED_PAYMENT_METHODS"), 160)
+    .split(",")
+    .map((value) => value.trim().toLowerCase())
+    .filter(Boolean);
+  return new Set(configured.length ? configured : DEFAULT_ENABLED_PAYMENT_METHODS);
+}
+
 async function existingOrderRow(idempotencyKey: string): Promise<ExistingOrder | null> {
   const params = new URLSearchParams({
     select: "order_no,profile_id,request_fingerprint,guest_lookup_token_hash",
@@ -97,19 +107,27 @@ Deno.serve(async (req: Request) => {
       throw new HttpError(401, "AUTH_REQUIRED", "로그인 상태를 확인해 주세요.");
     }
 
-    const suppliedIdempotencyKey = cleanString(req.headers.get("idempotency-key") || body.idempotencyKey, 128);
-    const idempotencyKey = suppliedIdempotencyKey || crypto.randomUUID();
+    const idempotencyKey = cleanString(req.headers.get("idempotency-key") || body.idempotencyKey, 128);
     if (!/^[A-Za-z0-9_-]{16,128}$/.test(idempotencyKey)) {
+      // Never silently invent a server key. A request that can be retried by a
+      // browser/network boundary must carry a stable client capability or it can
+      // create duplicate orders and reservations after an ambiguous response.
       throw new HttpError(400, "IDEMPOTENCY_KEY_REQUIRED", "주문 요청 키를 확인해 주세요.");
     }
     await enforceRateLimit(req, "commerce_create_order", user?.id || idempotencyKey, 12, 900, 900);
 
+    // The stable idempotency key is recovery authority. Resolve an earlier
+    // committed attempt before reading mutable cart/address fields, because live
+    // stock may already have changed after a timed-out first response.
     const recoveredBeforeCreate = await recoverExistingOrder(idempotencyKey, user);
     if (recoveredBeforeCreate) return jsonResponse(req, recoveredBeforeCreate, 200);
 
     const items = normalizeItems(body.items).map(({ variantId, quantity }) => ({ variantId, quantity }));
     const address = normalizeAddress(body.address ?? body.customer);
     const paymentMethod = normalizePaymentMethod(body.paymentMethod);
+    if (!enabledPaymentMethods().has(paymentMethod)) {
+      throw new HttpError(400, "PAYMENT_METHOD_UNAVAILABLE", "현재 사용할 수 없는 결제수단입니다.");
+    }
 
     const providerName = cleanString(Deno.env.get("PAYMENT_PROVIDER") || "toss_payments", 40);
     if (!new Set(["toss_payments", "mock"]).has(providerName)) {
