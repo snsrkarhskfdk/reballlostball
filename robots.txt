@@ -1,0 +1,5 @@
+User-agent: *
+Allow: /
+Disallow: /store-manager
+
+Sitemap: https://reballlostball.com/sitemap.xml

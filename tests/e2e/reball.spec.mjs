@@ -7,8 +7,7 @@ const routes = [
   ["checkout", "/#/checkout"],
   ["login", "/#/login"],
   ["signup", "/#/signup"],
-  ["guest order", "/#/guest-order"],
-  ["admin", "/#/admin"],
+  ["guest order", "/#/login/order"],
 ];
 
 test("development entry uses the production HTML and app module", async ({ page }) => {
@@ -42,6 +41,15 @@ test("checkout exposes the server-required five-digit postal code", async ({ pag
   await expect(postal).toHaveAttribute("pattern", "[0-9]{5}");
 });
 
+test("checkout exposes only the current Toss payment authority and never the retired direct settlement account", async ({ page }) => {
+  await page.goto("/#/checkout");
+  const policies = page.locator(".checkout-policy-stack");
+  await expect(policies).toContainText("토스페이먼츠 결제 안내");
+  await expect(policies).toContainText("카드·계좌이체·간편결제는 토스페이먼츠 결제창에서 안전하게 진행됩니다.");
+  await expect(policies).not.toContainText("예금주");
+  await expect(page.locator('input[name="payment"][value="virtual"], input[name="payment"][value="virtual_account"]')).toHaveCount(0);
+});
+
 test("Toss success return confirms on the server and removes paymentKey from the URL", async ({ page }) => {
   let confirmationPayload;
   await page.route("**/functions/v1/payment-confirm", async (route) => {
@@ -51,15 +59,8 @@ test("Toss success return confirms on the server and removes paymentKey from the
       contentType: "application/json",
       body: JSON.stringify({
         order: {
-          id: "order-1",
-          orderNumber: "RB-20260826-001",
-          status: "paid",
-          paymentStatus: "paid",
-          deliveryStatus: "preparing",
-          amount: 17000,
-          paidAmount: 17000,
-          paymentMethod: "card",
-          items: [],
+          id: "order-1", orderNumber: "RB-20260826-001", status: "paid", paymentStatus: "paid",
+          deliveryStatus: "preparing", amount: 17000, paidAmount: 17000, paymentMethod: "card", items: [],
         },
       }),
     });
@@ -73,14 +74,7 @@ test("Toss success return confirms on the server and removes paymentKey from the
 
 test("mock card confirmation failure never renders a completed order, scrubs provider secrets, and retains retry context", async ({ page }) => {
   await page.route("**/functions/v1/payment-confirm", async (route) => {
-    await route.fulfill({
-      status: 409,
-      contentType: "application/json",
-      body: JSON.stringify({
-        error: "Mock card was rejected",
-        code: "MOCK_CARD_DECLINED",
-      }),
-    });
+    await route.fulfill({ status: 409, contentType: "application/json", body: JSON.stringify({ error: "Mock card was rejected", code: "MOCK_CARD_DECLINED" }) });
   });
   await page.goto("/?payment=success&paymentKey=pk_fail&orderId=order-2&amount=17000#/payment/success");
   await expect(page).toHaveURL(/#\/payment\/fail\?orderId=ORDER-2$/);
@@ -103,45 +97,40 @@ test("home keeps five semantic stages while placing purchasable products directl
   await page.goto("/#/");
   const stages = page.locator("main [data-home-stage]");
   await expect(stages).toHaveCount(5);
-  expect(await stages.evaluateAll((nodes) => nodes.map((node) => node.getAttribute("data-home-stage")))).toEqual([
-    "1", "3", "2", "4", "5",
-  ]);
+  expect(await stages.evaluateAll((nodes) => nodes.map((node) => node.getAttribute("data-home-stage")))).toEqual(["1", "3", "2", "4", "5"]);
   await expect(page.locator("main .home-stage--store")).toHaveCount(0);
   await expect(page.locator("footer .footer-store-business")).toHaveCount(1);
 });
 
-test("forged local admin state cannot reveal the admin shell", async ({ page }) => {
+async function seedForgedAdminState(page) {
   await page.addInitScript(() => {
     localStorage.setItem("reball.adminUser", JSON.stringify({ id: "admin", role: "owner_admin" }));
     localStorage.setItem("reball.adminCredentials", JSON.stringify({ id: "admin", password: "forged" }));
   });
+}
+
+test("legacy admin route is retired and forged local state cannot reveal the operations console", async ({ page }) => {
+  await seedForgedAdminState(page);
   await page.goto("/#/admin");
-  await expect(page.locator("[data-admin-login-form]")).toBeVisible();
-  await expect(page.locator("[data-admin-shell]")).toHaveCount(0);
+  await expect(page).toHaveURL(/\/store-manager$/);
+  await expect(page.locator("[data-login-panel]")).toBeVisible();
+  await expect(page.locator("[data-app-panel]")).toBeHidden();
+});
+
+test("bookmarked legacy admin route with query is also retired", async ({ page }) => {
+  await seedForgedAdminState(page);
+  await page.goto("/#/admin?source=bookmark&next=orders");
+  await expect(page).toHaveURL(/\/store-manager$/);
+  await expect(page.locator("[data-login-panel]")).toBeVisible();
+  await expect(page.locator("[data-app-panel]")).toBeHidden();
 });
 
 test("legacy sensitive localStorage is purged", async ({ page }) => {
   await page.addInitScript(() => {
-    for (const key of [
-      "reball.ephemeralOrders",
-      "reball.adminUser",
-      "reball.adminCredentials",
-      "reball.adminCustomers",
-      "reball.pendingSignupEmail",
-    ]) localStorage.setItem(key, "sensitive-test-value");
+    for (const key of ["reball.ephemeralOrders", "reball.adminUser", "reball.adminCredentials", "reball.adminCustomers", "reball.pendingSignupEmail"]) localStorage.setItem(key, "sensitive-test-value");
   });
   await page.goto("/#/");
-  const remaining = await page.evaluate(() =>
-    Object.keys(localStorage).filter((key) =>
-      [
-        "reball.ephemeralOrders",
-        "reball.adminUser",
-        "reball.adminCredentials",
-        "reball.adminCustomers",
-        "reball.pendingSignupEmail",
-      ].includes(key)
-    )
-  );
+  const remaining = await page.evaluate(() => Object.keys(localStorage).filter((key) => ["reball.ephemeralOrders", "reball.adminUser", "reball.adminCredentials", "reball.adminCustomers", "reball.pendingSignupEmail"].includes(key)));
   expect(remaining).toEqual([]);
 });
 
@@ -149,10 +138,7 @@ test("product is purchasable only with a server-backed exact variant", async ({ 
   await page.goto("/#/product/titleist-pro-v1-v1x-lostball");
   const buy = page.locator("[data-add-detail]");
   await expect(buy).toHaveCount(1);
-  const state = await buy.evaluate((button) => ({
-    disabled: button.disabled,
-    variantId: button.getAttribute("data-variant-id"),
-  }));
+  const state = await buy.evaluate((button) => ({ disabled: button.disabled, variantId: button.getAttribute("data-variant-id") }));
   if (!state.disabled) expect(state.variantId).toBeTruthy();
 });
 
@@ -160,9 +146,7 @@ for (const width of [360, 390, 768, 1024, 1440]) {
   test(`viewport ${width}px has no document-level horizontal overflow`, async ({ page }) => {
     await page.setViewportSize({ width, height: 900 });
     await page.goto("/#/");
-    const overflow = await page.evaluate(
-      () => document.documentElement.scrollWidth > document.documentElement.clientWidth + 1
-    );
+    const overflow = await page.evaluate(() => document.documentElement.scrollWidth > document.documentElement.clientWidth + 1);
     expect(overflow).toBe(false);
   });
 }

@@ -1,9 +1,30 @@
+const ORDER_REQUEST_TIMEOUT_MS = 15_000;
+
 function endpoint(baseUrl, name) {
   return `${String(baseUrl).replace(/\/$/, "")}/functions/v1/${name}`;
 }
 
-async function requestJson(fetchImpl, url, { anonKey, accessToken, body, headers = {} }) {
-  const response = await fetchImpl(url, {
+async function fetchWithTimeout(fetchImpl, url, init, timeoutMs = ORDER_REQUEST_TIMEOUT_MS) {
+  if (init?.signal) return fetchImpl(url, init);
+  const controller = new AbortController();
+  const timer = globalThis.setTimeout(
+    () => controller.abort(new DOMException("요청 시간이 초과되었습니다.", "TimeoutError")),
+    Math.max(1, Number(timeoutMs) || ORDER_REQUEST_TIMEOUT_MS)
+  );
+  try {
+    return await fetchImpl(url, { ...init, signal: controller.signal });
+  } catch (error) {
+    if (error?.name === "AbortError" || error?.name === "TimeoutError") {
+      throw new Error("주문 서버 연결 시간이 초과되었습니다. 장바구니는 유지됩니다. 다시 시도해 주세요.");
+    }
+    throw error;
+  } finally {
+    globalThis.clearTimeout(timer);
+  }
+}
+
+async function requestJson(fetchImpl, url, { anonKey, accessToken, body, headers = {}, timeoutMs }) {
+  const response = await fetchWithTimeout(fetchImpl, url, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
@@ -12,7 +33,7 @@ async function requestJson(fetchImpl, url, { anonKey, accessToken, body, headers
       ...headers,
     },
     body: JSON.stringify(body),
-  });
+  }, timeoutMs);
   const payload = await response.json().catch(() => ({}));
   if (!response.ok) {
     const error = new Error(payload?.message || "요청을 처리하지 못했습니다.");
@@ -55,6 +76,7 @@ export function createOrderRequest(config, payload) {
     accessToken: config.accessToken,
     body: payload,
     headers: { "Idempotency-Key": idempotencyKey },
+    timeoutMs: config.timeoutMs,
   });
 }
 
@@ -63,6 +85,7 @@ export function lookupGuestOrderRequest(config, payload) {
     anonKey: config.anonKey,
     accessToken: "",
     body: payload,
+    timeoutMs: config.timeoutMs,
   });
 }
 
@@ -97,7 +120,7 @@ export function normalizeServerOrder(payload) {
   return {
     id,
     dbId: source.id ?? "",
-    date: source.createdAt ?? source.created_at ?? new Date().toLocaleString("ko-KR"),
+    date: source.createdAt ?? source.created_at ?? new Date().toLocaleString("ko-KR", { timeZone: "Asia/Seoul" }),
     status,
     paymentStatus: source.paymentStatus ?? source.payment_status ?? "ready",
     delivery: source.deliveryStatus ?? source.delivery_status ?? delivery,
@@ -117,3 +140,5 @@ export function normalizeServerOrder(payload) {
     items,
   };
 }
+
+export { ORDER_REQUEST_TIMEOUT_MS };
