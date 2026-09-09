@@ -172,14 +172,13 @@ function confirmationRetryable(error) {
 
 function confirmationAuthRecoveryRequired(error, config) {
   const status = Number(error?.status) || 0;
+  const code = String(error?.code || "").toUpperCase();
   const hadAuthenticatedSession = Boolean(String(config?.accessToken || "").trim());
-  // payment-confirm returns AUTH_REQUIRED when an Authorization header exists
-  // but its session expired. That says nothing definitive about the provider
-  // charge result, so retain the exact tuple and require re-authentication
-  // instead of deleting the only safe idempotent recovery path. A guest 403 is
-  // deliberately not treated this way because it means the guest capability is
-  // missing/invalid rather than an expired member session.
-  return hadAuthenticatedSession && (status === 401 || status === 403);
+  // payment-confirm returns 401 AUTH_REQUIRED when an Authorization header is
+  // present but no valid member session can be resolved. Preserve the tuple so
+  // the customer can re-authenticate and retry the same confirmation. A 403 is
+  // an access/ownership denial, not session expiry, and must remain definitive.
+  return hadAuthenticatedSession && status === 401 && (!code || code === "AUTH_REQUIRED");
 }
 
 function sleep(ms) {
