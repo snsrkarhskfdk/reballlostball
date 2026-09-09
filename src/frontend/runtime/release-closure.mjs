@@ -6,6 +6,7 @@ import { pendingTossConfirmation } from "../payments/toss-client.mjs";
 
 const RETIRED_PROMO_MESSAGE = "현재 운영 중인 신규회원 할인 쿠폰은 없습니다. 새 혜택은 공지사항에서 별도로 안내합니다.";
 const EDGE_TIMEOUT_MS = 15_000;
+const MAX_PENDING_ORDER_BODY_BYTES = 96 * 1024;
 const CAPTCHA_CONSUMING_AUTH_PATHS = [
   "/functions/v1/signup-with-login-id",
   "/functions/v1/login-with-identifier",
@@ -49,6 +50,17 @@ function safeIdempotencyKey(value) {
   return /^[A-Za-z0-9_-]{16,128}$/.test(key) ? key : "";
 }
 
+function safePendingOrderBody(value) {
+  if (typeof value !== "string" || value.length < 2 || value.length > MAX_PENDING_ORDER_BODY_BYTES) return "";
+  try {
+    const parsed = JSON.parse(value);
+    if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) return "";
+    return value;
+  } catch {
+    return "";
+  }
+}
+
 async function requestBodyFingerprint(body) {
   if (typeof body !== "string" || !globalThis.crypto?.subtle) return "";
   try {
@@ -64,29 +76,73 @@ function loadPendingOrderAttempt() {
   try {
     const value = JSON.parse(sessionStorage.getItem(PENDING_ORDER_ATTEMPT_SESSION_KEY) || "null");
     const idempotencyKey = safeIdempotencyKey(value?.idempotencyKey);
-    const fingerprint = /^[0-9a-f]{64}$/.test(String(value?.fingerprint || "")) ? value.fingerprint : "";
-    return idempotencyKey && fingerprint ? { idempotencyKey, fingerprint } : null;
+    const fingerprint = /^[0-9a-f]{64}$/.test(String(value?.fingerprint || "")) ? String(value.fingerprint) : "";
+    const body = safePendingOrderBody(value?.body);
+    if (!idempotencyKey || !fingerprint || !body) return null;
+    return {
+      idempotencyKey,
+      fingerprint,
+      body,
+      serverAccepted: value?.serverAccepted === true,
+      createdAt: Number(value?.createdAt) || Date.now(),
+    };
   } catch {
     return null;
   }
 }
 
 function savePendingOrderAttempt(attempt) {
-  try { sessionStorage.setItem(PENDING_ORDER_ATTEMPT_SESSION_KEY, JSON.stringify(attempt)); } catch {}
+  try {
+    sessionStorage.setItem(PENDING_ORDER_ATTEMPT_SESSION_KEY, JSON.stringify(attempt));
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+function clearPendingOrderAttempt() {
+  try { sessionStorage.removeItem(PENDING_ORDER_ATTEMPT_SESSION_KEY); } catch {}
+}
+
+function markPendingOrderAccepted() {
+  const pending = loadPendingOrderAttempt();
+  if (!pending) return;
+  savePendingOrderAttempt({ ...pending, serverAccepted: true });
+}
+
+function isDefinitiveCreateOrderRejection(response) {
+  const status = Number(response?.status) || 0;
+  return status >= 400 && status < 500 && ![408, 425, 429].includes(status);
 }
 
 async function stabilizeCreateOrderRequest(url, method, init) {
   if (method !== "POST" || !url.includes("/functions/v1/create-order")) return init;
-  const fingerprint = await requestBodyFingerprint(init?.body);
-  if (!fingerprint) return init;
+  const incomingBody = safePendingOrderBody(init?.body);
+  const incomingFingerprint = await requestBodyFingerprint(incomingBody);
   const headers = new Headers(init?.headers || {});
   const incomingKey = safeIdempotencyKey(headers.get("Idempotency-Key"));
-  if (!incomingKey) return init;
+  if (!incomingKey || !incomingBody || !incomingFingerprint) return init;
+
   const pending = loadPendingOrderAttempt();
-  const idempotencyKey = pending?.fingerprint === fingerprint ? pending.idempotencyKey : incomingKey;
-  headers.set("Idempotency-Key", idempotencyKey);
-  savePendingOrderAttempt({ idempotencyKey, fingerprint });
-  return { ...init, headers };
+  if (pending) {
+    // An unresolved create-order is a single immutable attempt. Live inventory
+    // can change after a server commit but before a timed-out browser reload;
+    // the reconstructed cart may then be clamped or emptied. Replaying the
+    // original tab-scoped body + key guarantees the server sees the identical
+    // request fingerprint instead of accidentally creating a second order.
+    headers.set("Idempotency-Key", pending.idempotencyKey);
+    return { ...init, headers, body: pending.body };
+  }
+
+  savePendingOrderAttempt({
+    idempotencyKey: incomingKey,
+    fingerprint: incomingFingerprint,
+    body: incomingBody,
+    serverAccepted: false,
+    createdAt: Date.now(),
+  });
+  headers.set("Idempotency-Key", incomingKey);
+  return { ...init, headers, body: incomingBody };
 }
 
 function installEdgeRequestTimeout() {
@@ -104,10 +160,12 @@ function installEdgeRequestTimeout() {
     const controller = shouldTimeout ? new AbortController() : null;
     const timer = controller ? globalThis.setTimeout(() => controller.abort(new DOMException("요청 시간이 초과되었습니다.", "TimeoutError")), EDGE_TIMEOUT_MS) : 0;
     try {
-      // create-order deliberately retains its persisted key even after a 2xx
-      // fetch response. The app clears it only when saveCartSession commits an
-      // empty cart, closing the tiny response-received/app-crashed race.
-      return await nativeFetch(input, controller ? { ...stabilizedInit, signal: controller.signal } : stabilizedInit);
+      const response = await nativeFetch(input, controller ? { ...stabilizedInit, signal: controller.signal } : stabilizedInit);
+      if (isCreateOrder) {
+        if (response.ok) markPendingOrderAccepted();
+        else if (isDefinitiveCreateOrderRejection(response)) clearPendingOrderAttempt();
+      }
+      return response;
     } finally {
       if (timer) globalThis.clearTimeout(timer);
       if (consumesAuthCaptcha(url)) await resetRenderedAuthCaptchas();
@@ -118,6 +176,12 @@ function installEdgeRequestTimeout() {
 function normalizedHashRoute(hash = location.hash) {
   const raw = String(hash || "").replace(/^#/, "");
   return raw.split("?", 1)[0].split("#", 1)[0];
+}
+
+function finalizeAcceptedOrderAttemptOnRoute() {
+  const pending = loadPendingOrderAttempt();
+  if (!pending?.serverAccepted) return;
+  if (/^\/order\/[A-Z0-9_-]{6,64}$/i.test(normalizedHashRoute())) clearPendingOrderAttempt();
 }
 
 function redirectLegacyAdmin() {
@@ -265,9 +329,13 @@ function scheduleReleasePatch() {
 retireExpiredWelcomePromotion();
 installEdgeRequestTimeout();
 redirectLegacyAdmin();
+finalizeAcceptedOrderAttemptOnRoute();
 document.addEventListener("click", retrySavedPaymentConfirmation, true);
 document.addEventListener("click", handleServerLoginIdCheck, true);
-window.addEventListener("hashchange", redirectLegacyAdmin);
+window.addEventListener("hashchange", () => {
+  redirectLegacyAdmin();
+  finalizeAcceptedOrderAttemptOnRoute();
+});
 const observer = new MutationObserver(scheduleReleasePatch);
 observer.observe(document.documentElement, { childList: true, subtree: true });
 if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", scheduleReleasePatch, { once: true });
