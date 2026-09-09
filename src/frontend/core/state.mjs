@@ -1,10 +1,34 @@
-function activeCouponsOnly(coupons) {
+function koreaDateKey(date = new Date()) {
+  try {
+    return new Intl.DateTimeFormat("en-CA", {
+      timeZone: "Asia/Seoul",
+      year: "numeric",
+      month: "2-digit",
+      day: "2-digit",
+    }).format(date).replaceAll("-", "");
+  } catch {
+    return "";
+  }
+}
+
+function couponPeriodExpired(coupon, now = new Date()) {
+  const period = String(coupon?.period || "");
+  const dates = period.match(/\b\d{4}[.-]\d{2}[.-]\d{2}\b/g) || [];
+  if (!dates.length) return false;
+  const end = dates.at(-1).replace(/[.-]/g, "");
+  const today = koreaDateKey(now);
+  return /^\d{8}$/.test(end) && /^\d{8}$/.test(today) && end < today;
+}
+
+function activeCouponsOnly(coupons, now = new Date()) {
   if (!Array.isArray(coupons)) return [];
+  const inactiveStatuses = new Set(["미운영", "종료", "만료", "inactive", "expired", "retired"]);
   return coupons.filter((coupon) => {
     if (!coupon || typeof coupon !== "object") return false;
-    if (String(coupon.id || "") === "NO_ACTIVE_SIGNUP_PROMO") return false;
-    return !new Set(["미운영", "종료", "만료", "inactive", "expired", "retired"])
-      .has(String(coupon.status || "").trim().toLowerCase());
+    const id = String(coupon.id || "").trim().toUpperCase();
+    if (id === "NO_ACTIVE_SIGNUP_PROMO" || id === "WELCOME3000") return false;
+    if (inactiveStatuses.has(String(coupon.status || "").trim().toLowerCase())) return false;
+    return !couponPeriodExpired(coupon, now);
   });
 }
 
@@ -73,4 +97,4 @@ export function createAppState({
   };
 }
 
-export { activeCouponsOnly };
+export { activeCouponsOnly, couponPeriodExpired, koreaDateKey };
