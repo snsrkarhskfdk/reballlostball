@@ -94,6 +94,7 @@ test("Codex review blockers stay closed across auth, payment, order recovery and
   const captcha = readFileSync("src/frontend/auth/captcha-client.mjs", "utf8");
   const loginIdEdge = readFileSync("supabase/functions/check-login-id/index.ts", "utf8");
   const createOrderEdge = readFileSync("supabase/functions/create-order/index.ts", "utf8");
+  const adminShippingEdge = readFileSync("supabase/functions/admin-shipping/index.ts", "utf8");
   const pagination = readFileSync("src/frontend/admin/store-manager-pagination.mjs", "utf8");
   const ordersPage = readFileSync("supabase/functions/admin-orders-page/index.ts", "utf8");
   const toss = readFileSync("src/frontend/payments/toss-client.mjs", "utf8");
@@ -130,6 +131,12 @@ test("Codex review blockers stay closed across auth, payment, order recovery and
   assert.match(toss, /confirmTimeoutMs/);
   assert.match(toss, /if \(status >= 500\) return true/);
   assert.match(toss, /PAYMENT_CONFIRM_RECOVERY_REQUIRED/);
+
+  assert.match(adminShippingEdge, /from "\.\.\/_shared\/http\.ts"/);
+  assert.match(adminShippingEdge, /from "\.\.\/_shared\/security\.ts"/);
+  assert.match(adminShippingEdge, /enforceRateLimit\(req, "admin_shipping_update"/);
+  assert.match(adminShippingEdge, /SHIPPING_TRACKING_REQUIRED/);
+  assert.doesNotMatch(adminShippingEdge, /class HttpError extends Error/);
 
   assert.match(pagination, /orders:\s*\{ page: 1/);
   assert.match(pagination, /shipping:\s*\{ page: 1/);
