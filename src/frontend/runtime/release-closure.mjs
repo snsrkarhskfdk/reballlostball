@@ -1,19 +1,18 @@
 import { defaultCoupons, noticeItems } from "../catalog/content.mjs";
 import { checkLoginIdAvailability } from "../auth/login-id-client.mjs";
 import { resetCaptchaControl } from "../auth/captcha-client.mjs";
+import { PENDING_ORDER_ATTEMPT_SESSION_KEY } from "../core/storage.mjs";
 import { pendingTossConfirmation } from "../payments/toss-client.mjs";
 
 const RETIRED_PROMO_MESSAGE = "현재 운영 중인 신규회원 할인 쿠폰은 없습니다. 새 혜택은 공지사항에서 별도로 안내합니다.";
 const EDGE_TIMEOUT_MS = 15_000;
-const PENDING_ORDER_ATTEMPT_KEY = "reball.pendingOrderAttempt.v1";
 const CAPTCHA_CONSUMING_AUTH_PATHS = [
   "/functions/v1/signup-with-login-id",
   "/functions/v1/login-with-identifier",
   "/functions/v1/auth-assist",
 ];
 const DEFERRED_MY_TABS = new Set([
-  "points", "coupons", "receipts", "recent", "posts", "inquiry", "inquiries", "reviews",
-  "review-write", "payments", "notifications",
+  "points", "coupons", "receipts", "recent", "posts", "inquiry", "inquiries", "reviews", "review-write", "payments", "notifications",
 ]);
 let patchQueued = false;
 
@@ -23,8 +22,7 @@ function metaContent(name) {
 
 function retireExpiredWelcomePromotion() {
   defaultCoupons.splice(0, defaultCoupons.length, {
-    id: "NO_ACTIVE_SIGNUP_PROMO", title: "신규회원 할인 미운영", benefit: "현재 적용 가능한 할인 없음",
-    benefitAmount: 0, period: "", status: "미운영", useCount: 0,
+    id: "NO_ACTIVE_SIGNUP_PROMO", title: "신규회원 할인 미운영", benefit: "현재 적용 가능한 할인 없음", benefitAmount: 0, period: "", status: "미운영", useCount: 0,
   });
   for (let index = noticeItems.length - 1; index >= 0; index -= 1) {
     const notice = noticeItems[index];
@@ -64,7 +62,7 @@ async function requestBodyFingerprint(body) {
 
 function loadPendingOrderAttempt() {
   try {
-    const value = JSON.parse(sessionStorage.getItem(PENDING_ORDER_ATTEMPT_KEY) || "null");
+    const value = JSON.parse(sessionStorage.getItem(PENDING_ORDER_ATTEMPT_SESSION_KEY) || "null");
     const idempotencyKey = safeIdempotencyKey(value?.idempotencyKey);
     const fingerprint = /^[0-9a-f]{64}$/.test(String(value?.fingerprint || "")) ? value.fingerprint : "";
     return idempotencyKey && fingerprint ? { idempotencyKey, fingerprint } : null;
@@ -74,11 +72,7 @@ function loadPendingOrderAttempt() {
 }
 
 function savePendingOrderAttempt(attempt) {
-  try { sessionStorage.setItem(PENDING_ORDER_ATTEMPT_KEY, JSON.stringify(attempt)); } catch {}
-}
-
-function clearPendingOrderAttempt() {
-  try { sessionStorage.removeItem(PENDING_ORDER_ATTEMPT_KEY); } catch {}
+  try { sessionStorage.setItem(PENDING_ORDER_ATTEMPT_SESSION_KEY, JSON.stringify(attempt)); } catch {}
 }
 
 async function stabilizeCreateOrderRequest(url, method, init) {
@@ -95,12 +89,6 @@ async function stabilizeCreateOrderRequest(url, method, init) {
   return { ...init, headers };
 }
 
-function createOrderResultIsDefinitive(response) {
-  if (response?.ok) return true;
-  const status = Number(response?.status) || 0;
-  return status >= 400 && status < 500 && ![408, 425, 429].includes(status);
-}
-
 function installEdgeRequestTimeout() {
   const nativeFetch = globalThis.fetch?.bind(globalThis);
   if (!nativeFetch || globalThis.__reballEdgeTimeoutInstalled) return;
@@ -114,13 +102,12 @@ function installEdgeRequestTimeout() {
     const stabilizedInit = isCreateOrder ? await stabilizeCreateOrderRequest(url, method, init) : init;
     const shouldTimeout = url.includes("/functions/v1/") && method === "GET" && !isPaymentConfirm && !stabilizedInit?.signal;
     const controller = shouldTimeout ? new AbortController() : null;
-    const timer = controller
-      ? globalThis.setTimeout(() => controller.abort(new DOMException("요청 시간이 초과되었습니다.", "TimeoutError")), EDGE_TIMEOUT_MS)
-      : 0;
+    const timer = controller ? globalThis.setTimeout(() => controller.abort(new DOMException("요청 시간이 초과되었습니다.", "TimeoutError")), EDGE_TIMEOUT_MS) : 0;
     try {
-      const response = await nativeFetch(input, controller ? { ...stabilizedInit, signal: controller.signal } : stabilizedInit);
-      if (isCreateOrder && createOrderResultIsDefinitive(response)) clearPendingOrderAttempt();
-      return response;
+      // create-order deliberately retains its persisted key even after a 2xx
+      // fetch response. The app clears it only when saveCartSession commits an
+      // empty cart, closing the tiny response-received/app-crashed race.
+      return await nativeFetch(input, controller ? { ...stabilizedInit, signal: controller.signal } : stabilizedInit);
     } finally {
       if (timer) globalThis.clearTimeout(timer);
       if (consumesAuthCaptcha(url)) await resetRenderedAuthCaptchas();
@@ -150,8 +137,8 @@ function retrySavedPaymentConfirmation(event) {
   if (!pending) return;
   event.preventDefault();
   event.stopImmediatePropagation();
-  const params = new URLSearchParams({ paymentKey: pending.paymentKey, orderId: pending.orderId, amount: String(pending.amount) });
-  location.assign(`/payment/success?${params}`);
+  const params = new URLSearchParams({ payment: "success", paymentKey: pending.paymentKey, orderId: pending.orderId, amount: String(pending.amount) });
+  location.assign(`/?${params}#/payment/success`);
 }
 
 function setSignupCheckMessage(message, status = "idle") {
@@ -218,9 +205,8 @@ async function handleServerLoginIdCheck(event) {
 function removeDeferredCustomerActions(root = document) {
   root.querySelectorAll("[data-my-tab]").forEach((node) => { if (DEFERRED_MY_TABS.has(node.dataset.myTab)) node.remove(); });
   root.querySelectorAll([
-    "[data-social-signup]", "[data-return-request]", "[data-return-order]", "[data-review-order]", "[data-seller-question]",
-    "[data-post-delete]", "[data-notification-toggle]", "[data-print-receipt]", "[data-coupon-form]", ".signup-benefit-banner",
-    ".signup-coupon-note", ".login-social-stack", ".social-signup-row",
+    "[data-social-signup]", "[data-return-request]", "[data-return-order]", "[data-review-order]", "[data-seller-question]", "[data-post-delete]",
+    "[data-notification-toggle]", "[data-print-receipt]", "[data-coupon-form]", ".signup-benefit-banner", ".signup-coupon-note", ".login-social-stack", ".social-signup-row",
   ].join(",")).forEach((node) => node.remove());
   root.querySelectorAll(".signup-choice-header").forEach((header) => {
     if (header.querySelector("h1")?.textContent?.trim() !== "회원가입") return;
@@ -253,6 +239,12 @@ function patchPromotionCopy(root = document) {
       else if (node.textContent !== RETIRED_PROMO_MESSAGE) node.textContent = RETIRED_PROMO_MESSAGE;
     }
   });
+  root.querySelectorAll("[data-payment-retry]").forEach((button) => {
+    const orderId = String(button.dataset.paymentRetry || "").trim().toUpperCase();
+    if (pendingTossConfirmation(orderId, globalThis.sessionStorage) && button.textContent !== "결제 결과 다시 확인") {
+      button.textContent = "결제 결과 다시 확인";
+    }
+  });
 }
 
 function patchReleaseDom(root = document) {
@@ -273,11 +265,9 @@ function scheduleReleasePatch() {
 retireExpiredWelcomePromotion();
 installEdgeRequestTimeout();
 redirectLegacyAdmin();
-
 document.addEventListener("click", retrySavedPaymentConfirmation, true);
 document.addEventListener("click", handleServerLoginIdCheck, true);
 window.addEventListener("hashchange", redirectLegacyAdmin);
-
 const observer = new MutationObserver(scheduleReleasePatch);
 observer.observe(document.documentElement, { childList: true, subtree: true });
 if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", scheduleReleasePatch, { once: true });
