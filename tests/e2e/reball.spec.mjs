@@ -41,6 +41,15 @@ test("checkout exposes the server-required five-digit postal code", async ({ pag
   await expect(postal).toHaveAttribute("pattern", "[0-9]{5}");
 });
 
+test("checkout exposes only the current Toss payment authority and never the retired direct settlement account", async ({ page }) => {
+  await page.goto("/#/checkout");
+  const policies = page.locator(".checkout-policy-stack");
+  await expect(policies).toContainText("토스페이먼츠 결제 안내");
+  await expect(policies).toContainText("카드·계좌이체·간편결제는 토스페이먼츠 결제창에서 안전하게 진행됩니다.");
+  await expect(policies).not.toContainText("예금주");
+  await expect(page.locator('input[name="payment"][value="virtual"], input[name="payment"][value="virtual_account"]')).toHaveCount(0);
+});
+
 test("Toss success return confirms on the server and removes paymentKey from the URL", async ({ page }) => {
   let confirmationPayload;
   await page.route("**/functions/v1/payment-confirm", async (route) => {
