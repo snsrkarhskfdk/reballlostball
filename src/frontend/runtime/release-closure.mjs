@@ -6,7 +6,6 @@ import { pendingTossConfirmation } from "../payments/toss-client.mjs";
 
 const RETIRED_PROMO_MESSAGE = "현재 운영 중인 신규회원 할인 쿠폰은 없습니다. 새 혜택은 공지사항에서 별도로 안내합니다.";
 const EDGE_TIMEOUT_MS = 15_000;
-const MAX_PENDING_ORDER_BODY_BYTES = 96 * 1024;
 const CAPTCHA_CONSUMING_AUTH_PATHS = [
   "/functions/v1/signup-with-login-id",
   "/functions/v1/login-with-identifier",
@@ -50,39 +49,14 @@ function safeIdempotencyKey(value) {
   return /^[A-Za-z0-9_-]{16,128}$/.test(key) ? key : "";
 }
 
-function safePendingOrderBody(value) {
-  if (typeof value !== "string" || value.length < 2 || value.length > MAX_PENDING_ORDER_BODY_BYTES) return "";
-  try {
-    const parsed = JSON.parse(value);
-    if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) return "";
-    return value;
-  } catch {
-    return "";
-  }
-}
-
-async function requestBodyFingerprint(body) {
-  if (typeof body !== "string" || !globalThis.crypto?.subtle) return "";
-  try {
-    const bytes = new TextEncoder().encode(body);
-    const digest = await globalThis.crypto.subtle.digest("SHA-256", bytes);
-    return Array.from(new Uint8Array(digest), (value) => value.toString(16).padStart(2, "0")).join("");
-  } catch {
-    return "";
-  }
-}
-
 function loadPendingOrderAttempt() {
   try {
     const value = JSON.parse(sessionStorage.getItem(PENDING_ORDER_ATTEMPT_SESSION_KEY) || "null");
     const idempotencyKey = safeIdempotencyKey(value?.idempotencyKey);
-    const fingerprint = /^[0-9a-f]{64}$/.test(String(value?.fingerprint || "")) ? String(value.fingerprint) : "";
-    const body = safePendingOrderBody(value?.body);
-    if (!idempotencyKey || !fingerprint || !body) return null;
+    if (!idempotencyKey) return null;
     return {
       idempotencyKey,
-      fingerprint,
-      body,
+      authenticated: value?.authenticated === true,
       serverAccepted: value?.serverAccepted === true,
       createdAt: Number(value?.createdAt) || Date.now(),
     };
@@ -93,7 +67,12 @@ function loadPendingOrderAttempt() {
 
 function savePendingOrderAttempt(attempt) {
   try {
-    sessionStorage.setItem(PENDING_ORDER_ATTEMPT_SESSION_KEY, JSON.stringify(attempt));
+    sessionStorage.setItem(PENDING_ORDER_ATTEMPT_SESSION_KEY, JSON.stringify({
+      idempotencyKey: safeIdempotencyKey(attempt?.idempotencyKey),
+      authenticated: attempt?.authenticated === true,
+      serverAccepted: attempt?.serverAccepted === true,
+      createdAt: Number(attempt?.createdAt) || Date.now(),
+    }));
     return true;
   } catch {
     return false;
@@ -112,37 +91,40 @@ function markPendingOrderAccepted() {
 
 function isDefinitiveCreateOrderRejection(response) {
   const status = Number(response?.status) || 0;
-  return status >= 400 && status < 500 && ![408, 425, 429].includes(status);
+  // Auth/rate/conflict responses may simply mean the browser must restore the
+  // same actor/session before it can recover the earlier idempotency key.
+  return status >= 400 && status < 500 && ![401, 403, 408, 409, 425, 429].includes(status);
 }
 
-async function stabilizeCreateOrderRequest(url, method, init) {
+function stabilizeCreateOrderRequest(url, method, init) {
   if (method !== "POST" || !url.includes("/functions/v1/create-order")) return init;
-  const incomingBody = safePendingOrderBody(init?.body);
-  const incomingFingerprint = await requestBodyFingerprint(incomingBody);
   const headers = new Headers(init?.headers || {});
   const incomingKey = safeIdempotencyKey(headers.get("Idempotency-Key"));
-  if (!incomingKey || !incomingBody || !incomingFingerprint) return init;
-
+  if (!incomingKey) return init;
+  const authenticated = /^Bearer\s+\S+/i.test(headers.get("Authorization") || "");
   const pending = loadPendingOrderAttempt();
+
   if (pending) {
-    // An unresolved create-order is a single immutable attempt. Live inventory
-    // can change after a server commit but before a timed-out browser reload;
-    // the reconstructed cart may then be clamped or emptied. Replaying the
-    // original tab-scoped body + key guarantees the server sees the identical
-    // request fingerprint instead of accidentally creating a second order.
+    if (pending.authenticated !== authenticated) {
+      throw new Error("이전 주문 시도와 현재 로그인 상태가 다릅니다. 같은 로그인 상태로 복구한 뒤 다시 시도해 주세요.");
+    }
+    // The server now treats the stable idempotency key as recovery authority:
+    // if an earlier request committed, it returns that existing order before
+    // reading the mutable rehydrated cart; if it did not commit, the current
+    // cart may safely create exactly one order under the same key. No customer
+    // address or order body needs to be persisted in browser storage.
     headers.set("Idempotency-Key", pending.idempotencyKey);
-    return { ...init, headers, body: pending.body };
+    return { ...init, headers };
   }
 
   savePendingOrderAttempt({
     idempotencyKey: incomingKey,
-    fingerprint: incomingFingerprint,
-    body: incomingBody,
+    authenticated,
     serverAccepted: false,
     createdAt: Date.now(),
   });
   headers.set("Idempotency-Key", incomingKey);
-  return { ...init, headers, body: incomingBody };
+  return { ...init, headers };
 }
 
 function installEdgeRequestTimeout() {
@@ -155,7 +137,7 @@ function installEdgeRequestTimeout() {
     const method = requestMethod(input, init);
     const isPaymentConfirm = url.includes("/functions/v1/payment-confirm");
     const isCreateOrder = method === "POST" && url.includes("/functions/v1/create-order");
-    const stabilizedInit = isCreateOrder ? await stabilizeCreateOrderRequest(url, method, init) : init;
+    const stabilizedInit = isCreateOrder ? stabilizeCreateOrderRequest(url, method, init) : init;
     const shouldTimeout = url.includes("/functions/v1/") && method === "GET" && !isPaymentConfirm && !stabilizedInit?.signal;
     const controller = shouldTimeout ? new AbortController() : null;
     const timer = controller ? globalThis.setTimeout(() => controller.abort(new DOMException("요청 시간이 초과되었습니다.", "TimeoutError")), EDGE_TIMEOUT_MS) : 0;
