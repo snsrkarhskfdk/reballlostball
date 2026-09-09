@@ -184,19 +184,16 @@ Deno.serve(async (req: Request) => {
     let payments: AnyRow[] = [];
     let noteEvents: AnyRow[] = [];
     if (orderIds.length) {
-      const paymentParams = new URLSearchParams({
-        select: "order_id,provider,method,status,requested_amount,approved_amount,canceled_amount,approved_at,canceled_at,reconcile_attempts,last_reconcile_error,transaction_id,approval_no",
-        order: "created_at.desc",
-        limit: String(Math.min(500, pageSize * 3)),
-        order_id: `in.(${orderIds.join(",")})`,
-      });
       [payments, noteEvents] = await Promise.all([
-        serviceSelect<AnyRow[]>(`/rest/v1/payments?${paymentParams}`),
+        rpc<AnyRow[]>("admin_order_latest_payments_v1", { p_order_ids: orderIds }),
         canOrderPii ? rpc<AnyRow[]>("admin_order_notes_page_v1", { p_order_ids: orderIds, p_limit_per_order: 5 }) : Promise.resolve([]),
       ]);
     }
 
-    const paymentMap = new Map(payments.map((payment) => {
+    const paymentMap = new Map<string, AnyRow>();
+    for (const payment of payments) {
+      const orderId = String(payment.order_id || "");
+      if (!orderId || paymentMap.has(orderId)) continue;
       const safePayment = canPayments ? payment : {
         order_id: payment.order_id,
         method: payment.method,
@@ -207,8 +204,8 @@ Deno.serve(async (req: Request) => {
         approved_at: payment.approved_at,
         canceled_at: payment.canceled_at,
       };
-      return [String(payment.order_id), safePayment];
-    }));
+      paymentMap.set(orderId, safePayment);
+    }
     const notes = new Map<string, AnyRow[]>();
     for (const event of noteEvents) {
       const id = String(event.order_id || "");
