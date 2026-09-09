@@ -1,9 +1,9 @@
 const ADMIN_TIMEOUT_MS = 15_000;
 const DEFAULT_PAGE_SIZE = 50;
 const scopes = {
-  orders: { page: 1, pageSize: DEFAULT_PAGE_SIZE, hasMore: false, pending: false, requestSeq: 0 },
-  shipping: { page: 1, pageSize: DEFAULT_PAGE_SIZE, hasMore: false, pending: false, requestSeq: 0 },
-  returns: { page: 1, pageSize: DEFAULT_PAGE_SIZE, hasMore: false, pending: false, requestSeq: 0 },
+  orders: { page: 1, pageSize: DEFAULT_PAGE_SIZE, hasMore: false, pending: false, requestSeq: 0, searchTruncated: false },
+  shipping: { page: 1, pageSize: DEFAULT_PAGE_SIZE, hasMore: false, pending: false, requestSeq: 0, searchTruncated: false },
+  returns: { page: 1, pageSize: DEFAULT_PAGE_SIZE, hasMore: false, pending: false, requestSeq: 0, searchTruncated: false },
 };
 
 const PAGER_CONFIG = {
@@ -63,7 +63,16 @@ function paginatedOrdersUrl(url, scope) {
 
 function dispatchPagination(scope) {
   const state = scopes[scope];
-  window.dispatchEvent(new CustomEvent("reball:order-pagination", { detail: { scope, page: state.page, pageSize: state.pageSize, hasMore: state.hasMore, pending: state.pending } }));
+  window.dispatchEvent(new CustomEvent("reball:order-pagination", {
+    detail: {
+      scope,
+      page: state.page,
+      pageSize: state.pageSize,
+      hasMore: state.hasMore,
+      pending: state.pending,
+      searchTruncated: state.searchTruncated,
+    },
+  }));
 }
 
 async function applyPaginationPayload(scope, response, requestSeq) {
@@ -74,6 +83,7 @@ async function applyPaginationPayload(scope, response, requestSeq) {
     state.page = Math.max(1, Number(payload?.page) || state.page);
     state.pageSize = Math.max(20, Number(payload?.pageSize) || state.pageSize);
     state.hasMore = payload?.hasMore === true;
+    state.searchTruncated = payload?.searchTruncated === true;
   }
   state.pending = false;
   dispatchPagination(scope);
@@ -91,6 +101,7 @@ function registerScopedRequest(nativeFetch, originalUrl, init, scope) {
   const requestSeq = ++state.requestSeq;
   const token = ++ordersRequestToken;
   state.pending = true;
+  state.searchTruncated = false;
   dispatchPagination(scope);
   const targetUrl = paginatedOrdersUrl(originalUrl, scope);
   const promise = timedRead(nativeFetch, targetUrl, init);
@@ -155,6 +166,7 @@ function installAdminFetchBoundary() {
       const state = scopes[scope];
       if (request.requestSeq === state.requestSeq) {
         state.pending = false;
+        state.searchTruncated = false;
         dispatchPagination(scope);
       }
       if (error?.name === "AbortError" || error?.name === "TimeoutError") throw new Error("관리자 서버 연결 시간이 초과되었습니다. 새로고침 후 다시 시도해 주세요.");
@@ -167,7 +179,7 @@ function ensurePagerStyles() {
   if (document.querySelector("[data-order-pager-style]")) return;
   const style = document.createElement("style");
   style.dataset.orderPagerStyle = "true";
-  style.textContent = `.sm-order-pager{display:flex;align-items:center;justify-content:flex-end;gap:10px;margin:12px 0 16px}.sm-order-pager span{min-width:150px;text-align:center;font-size:13px;color:#5f6b64}.sm-order-pager button:disabled{opacity:.42;cursor:not-allowed}`;
+  style.textContent = `.sm-order-pager{display:flex;align-items:center;justify-content:flex-end;gap:10px;margin:12px 0 16px}.sm-order-pager span{min-width:150px;text-align:center;font-size:13px;color:#5f6b64}.sm-order-pager span[data-search-truncated="true"]{max-width:520px;color:#8a4b08;font-weight:700}.sm-order-pager button:disabled{opacity:.42;cursor:not-allowed}`;
   document.head.appendChild(style);
 }
 
@@ -185,7 +197,7 @@ function ensurePager(scope) {
     pager = document.createElement("div");
     pager.className = "sm-order-pager";
     pager.setAttribute(config.pager, "true");
-    pager.innerHTML = `<button class="sm-button sm-button--ghost" type="button" ${config.prev}>이전</button><span ${config.label}></span><button class="sm-button sm-button--ghost" type="button" ${config.next}>다음</button>`;
+    pager.innerHTML = `<button class="sm-button sm-button--ghost" type="button" ${config.prev}>이전</button><span ${config.label} aria-live="polite"></span><button class="sm-button sm-button--ghost" type="button" ${config.next}>다음</button>`;
     list.before(pager);
     pager.querySelector(`[${config.prev}]`)?.addEventListener("click", () => {
       const state = scopes[scope];
@@ -209,8 +221,10 @@ function updatePager(scope) {
   const label = pager.querySelector(`[${config.label}]`);
   const previous = pager.querySelector(`[${config.prev}]`);
   const next = pager.querySelector(`[${config.next}]`);
-  const nextLabel = `${state.page} 페이지 · ${state.pageSize}건씩${state.pending ? " · 불러오는 중" : ""}`;
+  const truncationCopy = state.searchTruncated ? " · 일부 결과만 확인됨 · 정확한 주문번호로 검색하세요" : "";
+  const nextLabel = `${state.page} 페이지 · ${state.pageSize}건씩${state.pending ? " · 불러오는 중" : ""}${truncationCopy}`;
   if (label && label.textContent !== nextLabel) label.textContent = nextLabel;
+  if (label) label.dataset.searchTruncated = state.searchTruncated ? "true" : "false";
   const previousDisabled = state.pending || state.page <= 1;
   const nextDisabled = state.pending || !state.hasMore;
   if (previous && previous.disabled !== previousDisabled) previous.disabled = previousDisabled;
@@ -219,7 +233,10 @@ function updatePager(scope) {
 
 function resetScopeToFirstPage(scope) {
   const state = scopes[scope];
-  state.page = 1; state.hasMore = false; updatePager(scope);
+  state.page = 1;
+  state.hasMore = false;
+  state.searchTruncated = false;
+  updatePager(scope);
 }
 
 function scheduleFilteredReload(scope) {
