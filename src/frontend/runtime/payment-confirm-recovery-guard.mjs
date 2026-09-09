@@ -15,6 +15,12 @@ function recoveryLocation(pending) {
   return `/?${params}#/payment/success`;
 }
 
+function currentOrderRouteId() {
+  const raw = String(location.hash || "").replace(/^#/, "").split("?", 1)[0];
+  const match = raw.match(/^\/order\/([A-Z0-9_-]{6,64})$/i);
+  return safeOrderId(match?.[1]);
+}
+
 function replaceWithRecoveryButton(button) {
   if (!(button instanceof HTMLButtonElement)) return;
   const orderId = safeOrderId(button.dataset.paymentRetry);
@@ -38,8 +44,30 @@ function replaceWithRecoveryButton(button) {
   button.replaceWith(replacement);
 }
 
+function ensureOrderRouteRecoveryButton(root = document) {
+  const orderId = currentOrderRouteId();
+  if (!orderId) return;
+  const pending = pendingTossConfirmation(orderId, globalThis.sessionStorage);
+  if (!pending) return;
+  if (root.querySelector?.(`[data-payment-confirm-recovery="${CSS.escape(orderId)}"]`)) return;
+
+  // An expired authenticated session can send the customer through login before
+  // they revisit the order. app.js does not normally render a payment button for
+  // payment_auth_started, so make the preserved confirmation tuple reachable
+  // again from the authoritative order screen after re-authentication.
+  const actions = root.querySelector?.(".complete-page .action-row, .payment-return-page .complete-actions");
+  if (!actions) return;
+  const button = document.createElement("button");
+  button.type = "button";
+  button.className = "primary-btn";
+  button.dataset.paymentConfirmRecovery = orderId;
+  button.textContent = "결제 결과 다시 확인";
+  actions.prepend(button);
+}
+
 function reconcileRecoveryButtons(root = document) {
   root.querySelectorAll?.("[data-payment-retry]").forEach(replaceWithRecoveryButton);
+  ensureOrderRouteRecoveryButton(root);
 }
 
 let queued = false;
