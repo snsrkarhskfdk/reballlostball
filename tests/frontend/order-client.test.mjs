@@ -8,7 +8,7 @@ import {
   orderLinePayload,
   normalizeServerOrder,
 } from "../../src/frontend/commerce/order-client.mjs";
-import { confirmTossPayment, loadTossSdk } from "../../src/frontend/payments/toss-client.mjs";
+import { confirmTossPayment, loadTossSdk, pendingTossConfirmation } from "../../src/frontend/payments/toss-client.mjs";
 
 test("주문 line payload는 variantId와 quantity만 허용한다", () => {
   assert.deepEqual(
@@ -86,6 +86,36 @@ test("토스 성공 복귀값은 서버 payment-confirm으로 전달한다", asy
     confirmTossPayment({ baseUrl: "x", anonKey: "x" }, { paymentKey: "", orderId: "bad", amount: 0 }),
     /올바르지 않습니다/
   );
+});
+
+test("코드가 붙은 5xx 결제승인 실패도 새 결제를 만들지 않고 동일 승인정보를 보존한다", async () => {
+  const values = new Map();
+  const storage = {
+    getItem: (key) => values.has(key) ? values.get(key) : null,
+    setItem: (key, value) => values.set(key, String(value)),
+    removeItem: (key) => values.delete(key),
+  };
+  await assert.rejects(
+    confirmTossPayment(
+      {
+        baseUrl: "https://example.supabase.co",
+        anonKey: "anon",
+        storage,
+        confirmAutoAttempts: 1,
+        fetchImpl: async () => new Response(JSON.stringify({ code: "INTERNAL_ERROR", message: "finalize failed" }), {
+          status: 500,
+          headers: { "Content-Type": "application/json" },
+        }),
+      },
+      { paymentKey: "payment-key", orderId: "ORDER_654321", amount: 18000 }
+    ),
+    (error) => error?.code === "PAYMENT_CONFIRM_RECOVERY_REQUIRED"
+  );
+  assert.deepEqual(pendingTossConfirmation("ORDER_654321", storage), {
+    orderId: "ORDER_654321",
+    paymentKey: "payment-key",
+    amount: 18000,
+  });
 });
 
 test("서버 주문의 결제·배송·상품 스냅샷을 UI 모델로 보존한다", () => {
