@@ -49,7 +49,8 @@ function ensureOrderRouteRecoveryButton(root = document) {
   if (!orderId) return;
   const pending = pendingTossConfirmation(orderId, globalThis.sessionStorage);
   if (!pending) return;
-  if (root.querySelector?.(`[data-payment-confirm-recovery="${CSS.escape(orderId)}"]`)) return;
+  // safeOrderId restricts the value to selector-safe ASCII.
+  if (root.querySelector?.(`[data-payment-confirm-recovery="${orderId}"]`)) return;
 
   // An expired authenticated session can send the customer through login before
   // they revisit the order. app.js does not normally render a payment button for
