@@ -1,3 +1,13 @@
+function activeCouponsOnly(coupons) {
+  if (!Array.isArray(coupons)) return [];
+  return coupons.filter((coupon) => {
+    if (!coupon || typeof coupon !== "object") return false;
+    if (String(coupon.id || "") === "NO_ACTIVE_SIGNUP_PROMO") return false;
+    return !new Set(["미운영", "종료", "만료", "inactive", "expired", "retired"])
+      .has(String(coupon.status || "").trim().toLowerCase());
+  });
+}
+
 export function createAppState({
   route = "/",
   products = [],
@@ -27,7 +37,7 @@ export function createAppState({
     addresses: [],
     paymentMethods: [],
     notifications,
-    coupons,
+    coupons: activeCouponsOnly(coupons),
     posts,
     activeBanner: 0,
     pendingScrollTarget: null,
@@ -62,3 +72,5 @@ export function createAppState({
     adminGateBusy: false,
   };
 }
+
+export { activeCouponsOnly };
