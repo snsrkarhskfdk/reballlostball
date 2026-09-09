@@ -5,7 +5,18 @@ const PAYMENT_POLICY_TITLE = "토스페이먼츠 결제 안내";
 
 function ensurePaymentContractNotice(root = document) {
   const checkout = root.querySelector(".checkout-main-card");
-  if (!checkout || checkout.querySelector("[data-toss-payment-contract-note]")) return;
+  if (!checkout) return;
+
+  // Prefer the existing payment policy card as the single customer-facing
+  // authority. Older hardening code inserted a second notice with identical
+  // copy, which created duplicate accessible text and brittle E2E selectors.
+  const authorityBody = checkout.querySelector('[data-toss-payment-authority="true"] p');
+  if (authorityBody?.textContent?.trim() === PAYMENT_CONTRACT_COPY) {
+    checkout.querySelectorAll("[data-toss-payment-contract-note]").forEach((node) => node.remove());
+    return;
+  }
+  if (checkout.querySelector("[data-toss-payment-contract-note]")) return;
+
   const note = document.createElement("p");
   note.dataset.tossPaymentContractNote = "true";
   note.className = "launch-max-delivery-note";
@@ -26,10 +37,6 @@ function patchPaymentPolicyAuthority(root = document) {
       || /예금주|입금\s*계좌/.test(currentBody);
     if (!isPaymentPolicy) return;
 
-    // The currently enabled checkout delegates payment method selection and
-    // authorization to Toss. Never display the old direct-settlement bank
-    // account under a Toss heading, which would imply an unsupported transfer
-    // path and conflict with the server payment authority.
     if (title && title.textContent !== PAYMENT_POLICY_TITLE) title.textContent = PAYMENT_POLICY_TITLE;
     if (body && body.textContent !== PAYMENT_CONTRACT_COPY) body.textContent = PAYMENT_CONTRACT_COPY;
     card.dataset.tossPaymentAuthority = "true";
