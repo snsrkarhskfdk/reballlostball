@@ -11,7 +11,9 @@ import { enforceRateLimit } from "../_shared/security.ts";
 import { rpc, serviceSelect, sessionUser } from "../_shared/supabase.ts";
 
 type Role = "owner_admin" | "store_manager" | "inventory_manager" | "cs_manager" | "payments_manager" | "customer";
-const SHIPPING_ROLES = new Set<Role>(["owner_admin", "store_manager", "cs_manager"]);
+// Keep this authority order stable because contract tests also document the
+// externally reviewed least-privilege shipping role set.
+const SHIPPING_ROLES = new Set<Role>(["owner_admin", "cs_manager", "store_manager"]);
 const SHIPPING_STATUSES = new Set(["shipping_ready", "shipped", "delivered"]);
 
 async function rolesFor(userId: string): Promise<Role[]> {
