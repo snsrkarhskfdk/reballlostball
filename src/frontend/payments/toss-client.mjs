@@ -3,11 +3,15 @@ import { saveGuestLookupSession } from "../core/storage.mjs";
 const TOSS_SDK_URL = "https://js.tosspayments.com/v2/standard";
 const TOSS_SDK_TIMEOUT_MS = 15_000;
 const TOSS_API_TIMEOUT_MS = 15_000;
+const TOSS_CONFIRM_TIMEOUT_MS = 30_000;
+const TOSS_CONFIRM_AUTO_ATTEMPTS = 3;
 const PAYMENT_RETURN_STORAGE_PREFIX = "reball.paymentReturnToken.";
+const PAYMENT_CONFIRM_STORAGE_PREFIX = "reball.paymentConfirm.";
 const RECOVERABLE_CONFIRM_CODES = new Set([
   "PAYMENT_RESULT_UNKNOWN",
   "PAYMENT_RESPONSE_MISMATCH",
   "PAYMENT_RECONCILIATION_PENDING",
+  "CLIENT_TIMEOUT",
 ]);
 let tossSdkPromise = null;
 
@@ -47,7 +51,7 @@ async function postJson(fetchImpl, url, body, headers = {}, timeoutMs = TOSS_API
     return payload;
   } catch (error) {
     if (error?.name === "AbortError" || error?.name === "TimeoutError") {
-      throw requestError("결제 서버 연결 시간이 초과되었습니다. 같은 주문에서 다시 시도해 주세요.", {
+      throw requestError("결제 서버 연결 시간이 초과되었습니다. 같은 주문에서 다시 확인해 주세요.", {
         code: "CLIENT_TIMEOUT",
       });
     }
@@ -85,6 +89,11 @@ export function paymentReturnStorageKey(orderId) {
   return safeId ? `${PAYMENT_RETURN_STORAGE_PREFIX}${safeId}` : "";
 }
 
+function paymentConfirmStorageKey(orderId) {
+  const safeId = safeOrderId(orderId);
+  return safeId ? `${PAYMENT_CONFIRM_STORAGE_PREFIX}${safeId}` : "";
+}
+
 export function rememberPaymentReturnToken(orderId, token, storage = globalThis.sessionStorage) {
   const key = paymentReturnStorageKey(orderId);
   const safeToken = safeReturnToken(token);
@@ -112,12 +121,44 @@ function clearPaymentReturnToken(orderId, storage = globalThis.sessionStorage) {
   try { storage.removeItem(key); } catch {}
 }
 
+function rememberPendingConfirmation(confirmation, storage = globalThis.sessionStorage) {
+  const orderId = safeOrderId(confirmation?.orderId);
+  const paymentKey = String(confirmation?.paymentKey || "").trim();
+  const amount = Number(confirmation?.amount);
+  const key = paymentConfirmStorageKey(orderId);
+  if (!key || paymentKey.length < 6 || !Number.isSafeInteger(amount) || amount < 1 || !storage?.setItem) return false;
+  try {
+    storage.setItem(key, JSON.stringify({ orderId, paymentKey, amount }));
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+export function pendingTossConfirmation(orderId, storage = globalThis.sessionStorage) {
+  const key = paymentConfirmStorageKey(orderId);
+  if (!key || !storage?.getItem) return null;
+  try {
+    const parsed = JSON.parse(storage.getItem(key) || "null");
+    const safeId = safeOrderId(parsed?.orderId);
+    const paymentKey = String(parsed?.paymentKey || "").trim();
+    const amount = Number(parsed?.amount);
+    if (safeId !== safeOrderId(orderId) || paymentKey.length < 6 || !Number.isSafeInteger(amount) || amount < 1) return null;
+    return { orderId: safeId, paymentKey, amount };
+  } catch {
+    return null;
+  }
+}
+
+function clearPendingConfirmation(orderId, storage = globalThis.sessionStorage) {
+  const key = paymentConfirmStorageKey(orderId);
+  if (!key || !storage?.removeItem) return;
+  try { storage.removeItem(key); } catch {}
+}
+
 function confirmationRetryable(error) {
   const code = String(error?.code || "").toUpperCase();
   if (RECOVERABLE_CONFIRM_CODES.has(code)) return true;
-  // A transport failure is also ambiguous: the server/provider may have
-  // committed before the browser lost the response. Retrying the same tuple is
-  // safer than starting a new preparation flow.
   return !code && (!Number(error?.status) || Number(error?.status) >= 500);
 }
 
@@ -163,6 +204,7 @@ export async function confirmTossPayment(config, confirmation) {
     throw new Error("결제 승인 정보가 올바르지 않습니다.");
   }
 
+  rememberPendingConfirmation({ orderId, paymentKey, amount }, storage);
   const paymentReturnToken = explicitReturnToken
     ? rememberPaymentReturnToken(orderId, explicitReturnToken, storage)
     : browserPaymentReturnToken(orderId, { locationLike, storage });
@@ -178,13 +220,17 @@ export async function confirmTossPayment(config, confirmation) {
     ...(config.accessToken ? { Authorization: `Bearer ${config.accessToken}` } : {}),
   };
   const confirmUrl = `${String(config.baseUrl).replace(/\/$/, "")}/functions/v1/payment-confirm`;
-  const confirmTimeoutMs = Number(config.confirmTimeoutMs) > 0
-    ? Number(config.confirmTimeoutMs)
-    : 0;
+  const configuredTimeout = Number(config.confirmTimeoutMs);
+  const confirmTimeoutMs = Number.isFinite(configuredTimeout) && configuredTimeout > 0
+    ? configuredTimeout
+    : TOSS_CONFIRM_TIMEOUT_MS;
+  const configuredAttempts = Number(config.confirmAutoAttempts);
+  const maxAttempts = Number.isSafeInteger(configuredAttempts) && configuredAttempts > 0
+    ? Math.min(5, configuredAttempts)
+    : TOSS_CONFIRM_AUTO_ATTEMPTS;
   const fetchImpl = config.fetchImpl ?? fetch;
-  let retryIndex = 0;
 
-  while (true) {
+  for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
     try {
       const result = await postJson(fetchImpl, confirmUrl, confirmBody, confirmHeaders, confirmTimeoutMs);
       const refreshedGuestLookupToken = String(result?.guestLookupToken || "").trim();
@@ -195,18 +241,34 @@ export async function confirmTossPayment(config, confirmation) {
         });
       }
       clearPaymentReturnToken(orderId, storage);
+      clearPendingConfirmation(orderId, storage);
       return result;
     } catch (error) {
-      if (!confirmationRetryable(error)) throw error;
-      retryIndex += 1;
-      const delayMs = Math.min(10_000, 750 * (2 ** Math.min(retryIndex - 1, 4)));
+      if (!confirmationRetryable(error)) {
+        clearPendingConfirmation(orderId, storage);
+        throw error;
+      }
+      if (attempt >= maxAttempts) {
+        throw requestError(
+          "결제 승인 결과가 아직 확정되지 않았습니다. 같은 주문의 ‘결제 결과 다시 확인’으로 안전하게 재확인해 주세요.",
+          { code: "PAYMENT_CONFIRM_RECOVERY_REQUIRED", status: Number(error?.status) || 0, payload: error?.payload || null }
+        );
+      }
+      const delayMs = Math.min(5_000, 750 * (2 ** (attempt - 1)));
       await sleep(delayMs);
-      // Repeat the exact same paymentKey/orderId/amount/capability tuple. The
-      // server derives a stable idempotency key from this tuple, so an unknown
-      // provider result cannot fall through to prepare-payment or create a new
-      // authorization attempt.
     }
   }
+
+  throw requestError("결제 승인 결과를 확인하지 못했습니다.", { code: "PAYMENT_CONFIRM_RECOVERY_REQUIRED" });
+}
+
+export async function retryPendingTossConfirmation(config, orderId) {
+  const storage = config.storage ?? globalThis.sessionStorage;
+  const pending = pendingTossConfirmation(orderId, storage);
+  if (!pending) {
+    throw requestError("다시 확인할 결제 승인 정보가 없습니다.", { code: "PAYMENT_CONFIRM_NOT_PENDING" });
+  }
+  return confirmTossPayment(config, pending);
 }
 
 export function loadTossSdk(documentRef = document, { timeoutMs = TOSS_SDK_TIMEOUT_MS } = {}) {
@@ -284,4 +346,10 @@ export async function requestTossPayment({ clientKey, customerKey, payment }) {
   return checkout.requestPayment(payment);
 }
 
-export { TOSS_SDK_URL, TOSS_API_TIMEOUT_MS, RECOVERABLE_CONFIRM_CODES };
+export {
+  TOSS_SDK_URL,
+  TOSS_API_TIMEOUT_MS,
+  TOSS_CONFIRM_TIMEOUT_MS,
+  TOSS_CONFIRM_AUTO_ATTEMPTS,
+  RECOVERABLE_CONFIRM_CODES,
+};
