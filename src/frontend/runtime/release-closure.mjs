@@ -124,6 +124,18 @@ function isDefinitiveCreateOrderRejection(response) {
   return status >= 400 && status < 500 && ![401, 403, 408, 409, 425, 429].includes(status);
 }
 
+function startNewActorAttempt(incomingKey, actorMarker, init, headers) {
+  clearPendingOrderAttempt();
+  savePendingOrderAttempt({
+    idempotencyKey: incomingKey,
+    actorMarker,
+    serverAccepted: false,
+    createdAt: Date.now(),
+  });
+  headers.set("Idempotency-Key", incomingKey);
+  return { ...init, headers };
+}
+
 function stabilizeCreateOrderRequest(url, method, init) {
   if (method !== "POST" || !url.includes("/functions/v1/create-order")) return init;
   const headers = new Headers(init?.headers || {});
@@ -134,7 +146,19 @@ function stabilizeCreateOrderRequest(url, method, init) {
 
   if (pending) {
     if (pending.actorMarker !== actorMarker) {
-      throw new Error("이전 주문 시도와 현재 계정이 다릅니다. 같은 계정으로 복구한 뒤 다시 시도해 주세요.");
+      const proceed = typeof globalThis.confirm === "function" && globalThis.confirm(
+        "이전 로그인 상태의 주문 접수 시도가 아직 남아 있습니다. 새 계정으로 새 주문을 시작하면 이전 주문이 별도로 존재할 수 있습니다. 그래도 새 주문을 시작할까요?"
+      );
+      if (!proceed) {
+        const error = new Error("이전 주문 시도를 유지했습니다. 같은 계정으로 복구하거나 새 주문 시작을 다시 승인해 주세요.");
+        error.code = "PENDING_ORDER_ACTOR_MISMATCH";
+        throw error;
+      }
+      // Payment cannot start until create-order returns successfully, so an
+      // abandoned create attempt cannot already contain a charge. It may have
+      // produced an unpaid reservation under the previous actor, which expires
+      // independently. Never reuse its idempotency key for the new actor.
+      return startNewActorAttempt(incomingKey, actorMarker, init, headers);
     }
     headers.set("Idempotency-Key", pending.idempotencyKey);
     return { ...init, headers };
