@@ -118,6 +118,36 @@ test("코드가 붙은 5xx 결제승인 실패도 새 결제를 만들지 않고
   });
 });
 
+test("회원 세션 만료 401은 승인정보를 삭제하지 않고 재로그인 복구를 요구한다", async () => {
+  const values = new Map();
+  const storage = {
+    getItem: (key) => values.has(key) ? values.get(key) : null,
+    setItem: (key, value) => values.set(key, String(value)),
+    removeItem: (key) => values.delete(key),
+  };
+  await assert.rejects(
+    confirmTossPayment(
+      {
+        baseUrl: "https://example.supabase.co",
+        anonKey: "anon",
+        accessToken: "expired-member-token",
+        storage,
+        fetchImpl: async () => new Response(JSON.stringify({ code: "AUTH_REQUIRED", message: "login expired" }), {
+          status: 401,
+          headers: { "Content-Type": "application/json" },
+        }),
+      },
+      { paymentKey: "payment-key", orderId: "ORDER_AUTH01", amount: 18000 }
+    ),
+    (error) => error?.code === "PAYMENT_CONFIRM_AUTH_REQUIRED"
+  );
+  assert.deepEqual(pendingTossConfirmation("ORDER_AUTH01", storage), {
+    orderId: "ORDER_AUTH01",
+    paymentKey: "payment-key",
+    amount: 18000,
+  });
+});
+
 test("서버 주문의 결제·배송·상품 스냅샷을 UI 모델로 보존한다", () => {
   const order = normalizeServerOrder({
     orderNo: "RB-ORDER-123456",
