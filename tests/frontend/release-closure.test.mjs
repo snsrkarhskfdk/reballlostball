@@ -29,9 +29,9 @@ test("login ID availability is decided by the server endpoint", async () => {
   assert.equal(result.available, false);
 });
 
-test("empty cart hydration never clears an unresolved create-order recovery attempt", () => {
+test("empty cart hydration never clears an unresolved create-order recovery capability", () => {
   const values = new Map([
-    [PENDING_ORDER_ATTEMPT_SESSION_KEY, JSON.stringify({ idempotencyKey: "order_1234567890abcdef", fingerprint: "a".repeat(64), body: "{}" })],
+    [PENDING_ORDER_ATTEMPT_SESSION_KEY, JSON.stringify({ idempotencyKey: "order_1234567890abcdef", authenticated: false, serverAccepted: false })],
   ]);
   const storage = {
     getItem: (key) => values.has(key) ? values.get(key) : null,
@@ -89,10 +89,11 @@ test("release routing and deployment authority are closed", () => {
   assert.equal(existsSync("404.html"), true);
 });
 
-test("Codex review blockers stay closed across auth, payment and admin pagination", () => {
+test("Codex review blockers stay closed across auth, payment, order recovery and admin pagination", () => {
   const runtime = readFileSync("src/frontend/runtime/release-closure.mjs", "utf8");
   const captcha = readFileSync("src/frontend/auth/captcha-client.mjs", "utf8");
   const loginIdEdge = readFileSync("supabase/functions/check-login-id/index.ts", "utf8");
+  const createOrderEdge = readFileSync("supabase/functions/create-order/index.ts", "utf8");
   const pagination = readFileSync("src/frontend/admin/store-manager-pagination.mjs", "utf8");
   const ordersPage = readFileSync("supabase/functions/admin-orders-page/index.ts", "utf8");
   const toss = readFileSync("src/frontend/payments/toss-client.mjs", "utf8");
@@ -114,9 +115,18 @@ test("Codex review blockers stay closed across auth, payment and admin paginatio
 
   assert.match(runtime, /isPaymentConfirm/);
   assert.match(runtime, /!isPaymentConfirm/);
-  assert.match(runtime, /body: pending\.body/);
+  assert.match(runtime, /pending\.idempotencyKey/);
+  assert.match(runtime, /authenticated/);
   assert.match(runtime, /serverAccepted/);
   assert.match(runtime, /finalizeAcceptedOrderAttemptOnRoute/);
+  assert.doesNotMatch(runtime, /pending\.body/);
+  assert.doesNotMatch(runtime, /requestBodyFingerprint/);
+  assert.match(createOrderEdge, /recoverExistingOrder\(idempotencyKey, user\)/);
+  assert.match(createOrderEdge, /idempotency_key/);
+  assert.match(createOrderEdge, /IDEMPOTENCY_ACTOR_MISMATCH/);
+  assert.match(createOrderEdge, /racedRecovery/);
+  assert.match(createOrderEdge, /guest-order:\$\{idempotencyKey\}:\$\{fingerprint\}/);
+
   assert.match(toss, /confirmTimeoutMs/);
   assert.match(toss, /if \(status >= 500\) return true/);
   assert.match(toss, /PAYMENT_CONFIRM_RECOVERY_REQUIRED/);
