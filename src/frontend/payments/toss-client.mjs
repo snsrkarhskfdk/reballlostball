@@ -170,6 +170,18 @@ function confirmationRetryable(error) {
   return !code && status === 0;
 }
 
+function confirmationAuthRecoveryRequired(error, config) {
+  const status = Number(error?.status) || 0;
+  const hadAuthenticatedSession = Boolean(String(config?.accessToken || "").trim());
+  // payment-confirm returns AUTH_REQUIRED when an Authorization header exists
+  // but its session expired. That says nothing definitive about the provider
+  // charge result, so retain the exact tuple and require re-authentication
+  // instead of deleting the only safe idempotent recovery path. A guest 403 is
+  // deliberately not treated this way because it means the guest capability is
+  // missing/invalid rather than an expired member session.
+  return hadAuthenticatedSession && (status === 401 || status === 403);
+}
+
 function sleep(ms) {
   return new Promise((resolve) => globalThis.setTimeout(resolve, ms));
 }
@@ -252,6 +264,12 @@ export async function confirmTossPayment(config, confirmation) {
       clearPendingConfirmation(orderId, storage);
       return result;
     } catch (error) {
+      if (confirmationAuthRecoveryRequired(error, config)) {
+        throw requestError(
+          "로그인 세션이 만료되었습니다. 다시 로그인한 뒤 같은 주문에서 ‘결제 결과 다시 확인’을 눌러 주세요.",
+          { code: "PAYMENT_CONFIRM_AUTH_REQUIRED", status: Number(error?.status) || 401, payload: error?.payload || null }
+        );
+      }
       if (!confirmationRetryable(error)) {
         clearPendingConfirmation(orderId, storage);
         throw error;
