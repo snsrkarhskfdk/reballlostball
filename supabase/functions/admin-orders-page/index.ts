@@ -18,21 +18,12 @@ const ORDER_PII_ROLES = new Set<Role>(["cs_manager", "store_manager", "owner_adm
 const SHIPPING_ROLES = new Set<Role>(["cs_manager", "store_manager", "owner_admin"]);
 const PAYMENT_ROLES = new Set<Role>(["payments_manager", "owner_admin"]);
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+const EXACT_ORDER_PATTERN = /^[A-Z0-9_-]{6,64}$/;
 const SHIPPING_STATUSES = "in.(paid,shipping_ready,shipped,delivered)";
 const RETURN_STATUSES = "in.(paid,partially_canceled,shipping_ready,shipped,delivered)";
 const ORDER_STATUSES = new Set([
-  "payment_ready",
-  "payment_auth_started",
-  "waiting_for_deposit",
-  "paid",
-  "payment_failed",
-  "cancel_requested",
-  "partially_canceled",
-  "canceled",
-  "shipping_ready",
-  "shipped",
-  "delivered",
-  "refunded",
+  "payment_ready", "payment_auth_started", "waiting_for_deposit", "paid", "payment_failed", "cancel_requested",
+  "partially_canceled", "canceled", "shipping_ready", "shipped", "delivered", "refunded",
 ]);
 const SEARCH_SCAN_CHUNK = 500;
 const SEARCH_SCAN_MAX = 10000;
@@ -63,14 +54,7 @@ function normalizedSearch(value: string | null): string {
 }
 
 function orderSearchText(order: AnyRow, canOrderPii: boolean): string {
-  const safeParts = [
-    order.order_no,
-    order.status,
-    order.payment_status,
-    order.payment_method,
-    order.payment_provider,
-    order.total_krw,
-  ];
+  const safeParts = [order.order_no, order.status, order.payment_status, order.payment_method, order.payment_provider, order.total_krw];
   if (!canOrderPii) return safeParts.join(" ").toLocaleLowerCase("ko-KR");
   return [
     ...safeParts,
@@ -90,19 +74,24 @@ function applyScopeStatus(params: URLSearchParams, scope: OrderScope, requestedS
     params.set("status", RETURN_STATUSES);
     return;
   }
-  if (requestedStatus && ORDER_STATUSES.has(requestedStatus)) {
-    params.set("status", `eq.${requestedStatus}`);
-  }
+  if (requestedStatus && ORDER_STATUSES.has(requestedStatus)) params.set("status", `eq.${requestedStatus}`);
+}
+
+async function exactOrderSearch({ select, scope, requestedStatus, query }: {
+  select: string;
+  scope: OrderScope;
+  requestedStatus: string;
+  query: string;
+}): Promise<AnyRow[] | null> {
+  const candidate = query.toUpperCase();
+  if (!EXACT_ORDER_PATTERN.test(candidate)) return null;
+  const params = new URLSearchParams({ select, order: "created_at.desc", limit: "2", order_no: `eq.${candidate}` });
+  applyScopeStatus(params, scope, requestedStatus);
+  return serviceSelect<AnyRow[]>(`/rest/v1/orders?${params}`);
 }
 
 async function pagedOrders({
-  select,
-  scope,
-  requestedStatus,
-  query,
-  page,
-  pageSize,
-  canOrderPii,
+  select, scope, requestedStatus, query, page, pageSize, canOrderPii,
 }: {
   select: string;
   scope: OrderScope;
@@ -111,33 +100,26 @@ async function pagedOrders({
   page: number;
   pageSize: number;
   canOrderPii: boolean;
-}): Promise<{ orders: AnyRow[]; hasMore: boolean }> {
+}): Promise<{ orders: AnyRow[]; hasMore: boolean; searchTruncated?: boolean }> {
   const pageOffset = (page - 1) * pageSize;
   if (!query) {
-    const params = new URLSearchParams({
-      select,
-      order: "created_at.desc",
-      limit: String(pageSize + 1),
-      offset: String(pageOffset),
-    });
+    const params = new URLSearchParams({ select, order: "created_at.desc", limit: String(pageSize + 1), offset: String(pageOffset) });
     applyScopeStatus(params, scope, requestedStatus);
     const fetched = await serviceSelect<AnyRow[]>(`/rest/v1/orders?${params}`);
     return { orders: fetched.slice(0, pageSize), hasMore: fetched.length > pageSize };
   }
 
-  // Search must be applied before pagination. Scan the already status-scoped
-  // authority in descending order until this filtered page plus one lookahead
-  // match is known, rather than filtering a single arbitrary server page.
+  const exact = await exactOrderSearch({ select, scope, requestedStatus, query });
+  if (exact?.length) {
+    return { orders: page === 1 ? exact.slice(0, pageSize) : [], hasMore: false };
+  }
+
   const neededMatches = pageOffset + pageSize + 1;
   const matches: AnyRow[] = [];
   let scanned = 0;
+  let exhausted = false;
   while (scanned < SEARCH_SCAN_MAX && matches.length < neededMatches) {
-    const params = new URLSearchParams({
-      select,
-      order: "created_at.desc",
-      limit: String(SEARCH_SCAN_CHUNK),
-      offset: String(scanned),
-    });
+    const params = new URLSearchParams({ select, order: "created_at.desc", limit: String(SEARCH_SCAN_CHUNK), offset: String(scanned) });
     applyScopeStatus(params, scope, requestedStatus);
     const chunk = await serviceSelect<AnyRow[]>(`/rest/v1/orders?${params}`);
     for (const order of chunk) {
@@ -145,14 +127,20 @@ async function pagedOrders({
       if (matches.length >= neededMatches) break;
     }
     scanned += chunk.length;
-    if (chunk.length < SEARCH_SCAN_CHUNK) break;
+    if (chunk.length < SEARCH_SCAN_CHUNK) {
+      exhausted = true;
+      break;
+    }
   }
-  if (scanned >= SEARCH_SCAN_MAX && matches.length < neededMatches) {
-    throw new HttpError(413, "ORDER_SEARCH_TOO_BROAD", "검색 범위를 더 구체적으로 입력해 주세요.");
+
+  const requestedPage = matches.slice(pageOffset, pageOffset + pageSize);
+  if (!exhausted && scanned >= SEARCH_SCAN_MAX && requestedPage.length === 0) {
+    throw new HttpError(413, "ORDER_SEARCH_TOO_BROAD", "10,000건 이후의 일반 텍스트 검색은 주문번호를 정확히 입력해 주세요.");
   }
   return {
-    orders: matches.slice(pageOffset, pageOffset + pageSize),
+    orders: requestedPage,
     hasMore: matches.length > pageOffset + pageSize,
+    searchTruncated: !exhausted && scanned >= SEARCH_SCAN_MAX,
   };
 }
 
@@ -168,9 +156,7 @@ Deno.serve(async (req: Request) => {
     const user = await sessionUser(req);
     if (!user?.id) throw new HttpError(401, "ADMIN_SESSION_REQUIRED", "관리자 로그인이 필요합니다.");
     const roles = await rolesFor(user.id);
-    if (!hasAny(roles, ORDER_ROLES)) {
-      throw new HttpError(403, "ADMIN_ACCESS_DENIED", "주문 정보를 조회할 권한이 없습니다.");
-    }
+    if (!hasAny(roles, ORDER_ROLES)) throw new HttpError(403, "ADMIN_ACCESS_DENIED", "주문 정보를 조회할 권한이 없습니다.");
 
     const url = new URL(req.url);
     const scope = orderScope(url.searchParams.get("scope"));
@@ -188,15 +174,11 @@ Deno.serve(async (req: Request) => {
 
     const safeOrderSelect = "id,order_no,status,payment_status,payment_method,payment_provider,subtotal_krw,shipping_krw,discount_krw,refund_amount,total_krw,created_at,updated_at";
     const fullOrderSelect = `${safeOrderSelect},profile_id,address_snapshot,shipping_carrier,tracking_number,shipped_at,delivered_at,order_items(product_name,variant_name,unit_price_krw,qty,line_total_krw)`;
-    const { orders, hasMore } = await pagedOrders({
+    const pageResult = await pagedOrders({
       select: canOrderPii ? fullOrderSelect : safeOrderSelect,
-      scope,
-      requestedStatus,
-      query,
-      page,
-      pageSize,
-      canOrderPii,
+      scope, requestedStatus, query, page, pageSize, canOrderPii,
     });
+    const orders = pageResult.orders;
     const orderIds = orders.map((row) => cleanString(row.id, 36).toLowerCase()).filter((id) => UUID_PATTERN.test(id));
 
     let payments: AnyRow[] = [];
@@ -210,9 +192,7 @@ Deno.serve(async (req: Request) => {
       });
       [payments, noteEvents] = await Promise.all([
         serviceSelect<AnyRow[]>(`/rest/v1/payments?${paymentParams}`),
-        canOrderPii
-          ? rpc<AnyRow[]>("admin_order_notes_page_v1", { p_order_ids: orderIds, p_limit_per_order: 5 })
-          : Promise.resolve([]),
+        canOrderPii ? rpc<AnyRow[]>("admin_order_notes_page_v1", { p_order_ids: orderIds, p_limit_per_order: 5 }) : Promise.resolve([]),
       ]);
     }
 
@@ -238,13 +218,9 @@ Deno.serve(async (req: Request) => {
     const cancelableStatuses = new Set(["payment_auth_started", "waiting_for_deposit", "paid", "partially_canceled"]);
 
     return jsonResponse(req, {
-      roles,
-      canPayments,
-      canOrderPii,
-      scope,
-      page,
-      pageSize,
-      hasMore,
+      roles, canPayments, canOrderPii, scope, page, pageSize,
+      hasMore: pageResult.hasMore,
+      searchTruncated: pageResult.searchTruncated === true,
       query,
       status: requestedStatus,
       orders: orders.map((order) => ({
