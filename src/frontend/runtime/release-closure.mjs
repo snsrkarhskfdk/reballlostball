@@ -1,6 +1,7 @@
 import { defaultCoupons, noticeItems } from "../catalog/content.mjs";
 import { checkLoginIdAvailability } from "../auth/login-id-client.mjs";
 import { resetCaptchaControl } from "../auth/captcha-client.mjs";
+import { pendingTossConfirmation } from "../payments/toss-client.mjs";
 
 const RETIRED_PROMO_MESSAGE = "현재 운영 중인 신규회원 할인 쿠폰은 없습니다. 새 혜택은 공지사항에서 별도로 안내합니다.";
 const EDGE_TIMEOUT_MS = 15_000;
@@ -44,9 +45,7 @@ function retireExpiredWelcomePromotion() {
       noticeItems.splice(index, 1);
     }
   }
-  try {
-    localStorage.setItem("reball.coupons", "[]");
-  } catch {}
+  try { localStorage.setItem("reball.coupons", "[]"); } catch {}
 }
 
 function requestMethod(input, init) {
@@ -71,9 +70,6 @@ function installEdgeRequestTimeout() {
     const url = typeof input === "string" || input instanceof URL ? String(input) : String(input?.url || "");
     const method = requestMethod(input, init);
     const isPaymentConfirm = url.includes("/functions/v1/payment-confirm");
-    // Generic aborts are safe only for reads. Mutations may commit after the
-    // browser gives up, so POST/PATCH/DELETE operations own their recovery and
-    // idempotency instead of inheriting a blind global timeout.
     const shouldTimeout = url.includes("/functions/v1/") && method === "GET" && !isPaymentConfirm && !init?.signal;
     const controller = shouldTimeout ? new AbortController() : null;
     const timer = controller
@@ -86,9 +82,6 @@ function installEdgeRequestTimeout() {
       return await nativeFetch(input, controller ? { ...init, signal: controller.signal } : init);
     } finally {
       if (timer) globalThis.clearTimeout(timer);
-      // Turnstile tokens are single-use even when authentication fails. Reset
-      // after every server auth attempt so wrong passwords, duplicate signup,
-      // and recovery failures never strand the next retry with a stale token.
       if (consumesAuthCaptcha(url)) await resetRenderedAuthCaptchas();
     }
   };
@@ -108,6 +101,22 @@ function redirectLegacyAdmin() {
   return false;
 }
 
+function retrySavedPaymentConfirmation(event) {
+  const button = event.target instanceof Element ? event.target.closest("[data-payment-retry]") : null;
+  if (!button) return;
+  const orderId = String(button.dataset.paymentRetry || "").trim().toUpperCase();
+  const pending = pendingTossConfirmation(orderId, globalThis.sessionStorage);
+  if (!pending) return;
+  event.preventDefault();
+  event.stopImmediatePropagation();
+  const params = new URLSearchParams({
+    paymentKey: pending.paymentKey,
+    orderId: pending.orderId,
+    amount: String(pending.amount),
+  });
+  location.assign(`/payment/success?${params}`);
+}
+
 function setSignupCheckMessage(message, status = "idle") {
   const node = document.querySelector("[data-login-id-message]");
   if (!node) return;
@@ -118,23 +127,19 @@ function setSignupCheckMessage(message, status = "idle") {
 async function handleServerLoginIdCheck(event) {
   const button = event.target instanceof Element ? event.target.closest("[data-login-id-check]") : null;
   if (!button) return;
-
   const input = document.querySelector("[data-signup-login-id]");
   const loginId = String(input?.value || "").trim().toLowerCase();
   if (button.dataset.serverAuthorityPass === loginId) {
     delete button.dataset.serverAuthorityPass;
     return;
   }
-
   event.preventDefault();
   event.stopImmediatePropagation();
-
   if (!/^[a-z0-9][a-z0-9._-]{3,19}$/.test(loginId)) {
     setSignupCheckMessage("아이디는 영문 소문자 또는 숫자로 시작하고, 영문/숫자/./_/- 조합 4~20자로 입력하세요.", "error");
     input?.focus();
     return;
   }
-
   const form = button.closest("form");
   const captchaControl = form?.querySelector("[data-captcha-control]");
   const captchaToken = String(form?.querySelector("[data-captcha-token]")?.value || "").trim();
@@ -143,19 +148,14 @@ async function handleServerLoginIdCheck(event) {
     captchaControl?.scrollIntoView?.({ behavior: "smooth", block: "center" });
     return;
   }
-
   button.disabled = true;
   button.setAttribute("aria-busy", "true");
   setSignupCheckMessage("서버에서 아이디 사용 가능 여부를 확인하고 있습니다.", "checking");
-
   let result = null;
   let resetReady = false;
   try {
     result = await checkLoginIdAvailability(
-      {
-        baseUrl: metaContent("reball-supabase-url"),
-        anonKey: metaContent("reball-supabase-publishable-key"),
-      },
+      { baseUrl: metaContent("reball-supabase-url"), anonKey: metaContent("reball-supabase-publishable-key") },
       { loginId, captchaToken }
     );
   } catch (error) {
@@ -165,7 +165,6 @@ async function handleServerLoginIdCheck(event) {
     button.disabled = false;
     button.removeAttribute("aria-busy");
   }
-
   if (!result) return;
   if (!result.available) {
     setSignupCheckMessage("이미 사용 중인 아이디입니다. 다른 아이디를 입력하고 자동입력 방지를 다시 확인해 주세요.", "taken");
@@ -175,7 +174,6 @@ async function handleServerLoginIdCheck(event) {
     setSignupCheckMessage("아이디는 사용할 수 있지만 자동입력 방지 확인을 새로 발급하지 못했습니다. 다시 확인해 주세요.", "error");
     return;
   }
-
   button.dataset.serverAuthorityPass = loginId;
   button.click();
 }
@@ -184,23 +182,11 @@ function removeDeferredCustomerActions(root = document) {
   root.querySelectorAll("[data-my-tab]").forEach((node) => {
     if (DEFERRED_MY_TABS.has(node.dataset.myTab)) node.remove();
   });
-
   root.querySelectorAll([
-    "[data-social-signup]",
-    "[data-return-request]",
-    "[data-return-order]",
-    "[data-review-order]",
-    "[data-seller-question]",
-    "[data-post-delete]",
-    "[data-notification-toggle]",
-    "[data-print-receipt]",
-    "[data-coupon-form]",
-    ".signup-benefit-banner",
-    ".signup-coupon-note",
-    ".login-social-stack",
-    ".social-signup-row",
+    "[data-social-signup]", "[data-return-request]", "[data-return-order]", "[data-review-order]",
+    "[data-seller-question]", "[data-post-delete]", "[data-notification-toggle]", "[data-print-receipt]",
+    "[data-coupon-form]", ".signup-benefit-banner", ".signup-coupon-note", ".login-social-stack", ".social-signup-row",
   ].join(",")).forEach((node) => node.remove());
-
   root.querySelectorAll(".signup-choice-header").forEach((header) => {
     const title = header.querySelector("h1")?.textContent?.trim();
     if (title !== "회원가입") return;
@@ -211,7 +197,6 @@ function removeDeferredCustomerActions(root = document) {
     if (lead && lead.textContent !== leadCopy) lead.textContent = leadCopy;
     if (sub && sub.textContent !== subCopy) sub.textContent = subCopy;
   });
-
   root.querySelectorAll(".signup-divider").forEach((divider) => {
     const parent = divider.parentElement;
     if (!parent?.querySelector("[data-social-signup]") && !parent?.querySelector(".login-social-stack")) divider.remove();
@@ -257,6 +242,7 @@ retireExpiredWelcomePromotion();
 installEdgeRequestTimeout();
 redirectLegacyAdmin();
 
+document.addEventListener("click", retrySavedPaymentConfirmation, true);
 document.addEventListener("click", handleServerLoginIdCheck, true);
 window.addEventListener("hashchange", redirectLegacyAdmin);
 
