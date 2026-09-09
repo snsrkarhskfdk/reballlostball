@@ -148,6 +148,32 @@ test("회원 세션 만료 401은 승인정보를 삭제하지 않고 재로그�
   });
 });
 
+test("회원 주문 소유권 403은 세션 만료로 오인하지 않고 승인정보를 폐기한다", async () => {
+  const values = new Map();
+  const storage = {
+    getItem: (key) => values.has(key) ? values.get(key) : null,
+    setItem: (key, value) => values.set(key, String(value)),
+    removeItem: (key) => values.delete(key),
+  };
+  await assert.rejects(
+    confirmTossPayment(
+      {
+        baseUrl: "https://example.supabase.co",
+        anonKey: "anon",
+        accessToken: "valid-but-wrong-member-token",
+        storage,
+        fetchImpl: async () => new Response(JSON.stringify({ code: "PAYMENT_ACCESS_DENIED", message: "not your order" }), {
+          status: 403,
+          headers: { "Content-Type": "application/json" },
+        }),
+      },
+      { paymentKey: "payment-key", orderId: "ORDER_DENY01", amount: 18000 }
+    ),
+    (error) => error?.status === 403 && error?.code === "PAYMENT_ACCESS_DENIED"
+  );
+  assert.equal(pendingTossConfirmation("ORDER_DENY01", storage), null);
+});
+
 test("서버 주문의 결제·배송·상품 스냅샷을 UI 모델로 보존한다", () => {
   const order = normalizeServerOrder({
     orderNo: "RB-ORDER-123456",
