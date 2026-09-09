@@ -94,8 +94,13 @@ function installEdgeRequestTimeout() {
   };
 }
 
+function normalizedHashRoute(hash = location.hash) {
+  const raw = String(hash || "").replace(/^#/, "");
+  return raw.split("?", 1)[0].split("#", 1)[0];
+}
+
 function redirectLegacyAdmin() {
-  const route = String(location.hash || "").replace(/^#/, "");
+  const route = normalizedHashRoute();
   if (route === "/admin" || route.startsWith("/admin/")) {
     location.replace("/store-manager");
     return true;
