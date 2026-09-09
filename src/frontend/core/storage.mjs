@@ -53,16 +53,14 @@ export function saveCartSession(storage, cart) {
     (Array.isArray(cart) ? cart : []).map((item) => ({ variantId: item?.variantId ?? item?.variant?.id, quantity: item?.quantity }))
   );
   try {
-    if (entries.length) {
-      storage.setItem(CART_SESSION_KEY, JSON.stringify(entries));
-    } else {
-      // A successful create-order flow clears the cart only after the server
-      // response has been accepted by the app. Clear the persisted idempotency
-      // attempt at the same authority boundary, not merely when fetch returns,
-      // so a timeout/reload keeps reusing the original key.
-      storage.removeItem(CART_SESSION_KEY);
-      storage.removeItem(PENDING_ORDER_ATTEMPT_SESSION_KEY);
-    }
+    if (entries.length) storage.setItem(CART_SESSION_KEY, JSON.stringify(entries));
+    else storage.removeItem(CART_SESSION_KEY);
+    // Do not infer create-order resolution from an empty cart. A timeout can
+    // cause live stock to shrink before reload, which may make hydration drop
+    // or clamp cart lines even though the original create-order is still
+    // unresolved. The release recovery runtime owns the pending attempt and
+    // clears it only after a definitive server rejection or an accepted order
+    // has actually routed to its authoritative order screen.
   } catch {}
 }
 
