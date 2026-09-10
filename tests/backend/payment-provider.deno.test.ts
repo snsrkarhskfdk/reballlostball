@@ -1062,3 +1062,71 @@ Deno.test("auth endpoints throttle caller IP before CAPTCHA and protect subjects
     });
   }
 });
+
+Deno.test("transient database failures surface as retryable 5xx, not a definitive 4xx", async () => {
+  // A confirmation tuple is only discarded by the browser when the failure looks
+  // definitive (toss-client treats >=500 as retryable). Mapping a transient
+  // Postgres condition to 422 destroyed the customer's recovery path after the
+  // provider had already approved the payment.
+  const transient = [
+    { code: "55P03", label: "lock_not_available" },
+    { code: "40001", label: "serialization_failure" },
+    { code: "40P01", label: "deadlock_detected" },
+    { code: "57014", label: "query_canceled" },
+    { code: "08006", label: "connection_failure" },
+    { code: "53300", label: "too_many_connections" },
+  ];
+  for (const { code, label } of transient) {
+    const status = await withEnvironment(EDGE_ENV, () =>
+      withFetchMock(
+        () => new Response(JSON.stringify({ code, message: label }), { status: 400 }),
+        async () => {
+          try {
+            await rpc("finalize_payment_confirmation_v1", {});
+            return 0;
+          } catch (error) {
+            return Number((error as { status?: number }).status) || 0;
+          }
+        },
+      ));
+    assert(status >= 500, `${label} (${code}) must surface as 5xx so the confirmation tuple survives, got ${status}.`);
+  }
+
+  // A PostgREST server error carries no Postgres code at all.
+  const upstream5xx = await withEnvironment(EDGE_ENV, () =>
+    withFetchMock(
+      () => new Response("", { status: 503 }),
+      async () => {
+        try {
+          await rpc("finalize_payment_confirmation_v1", {});
+          return 0;
+        } catch (error) {
+          return Number((error as { status?: number }).status) || 0;
+        }
+      },
+    ));
+  assert(upstream5xx >= 500, `An upstream PostgREST 5xx must stay retryable, got ${upstream5xx}.`);
+
+  // Genuine client errors must stay definitive, or a real rejection would retry forever.
+  const definitive: Array<[string, number]> = [
+    ["42501", 403],
+    ["23505", 409],
+    ["22023", 400],
+    ["23514", 422],
+  ];
+  for (const [code, expected] of definitive) {
+    const status = await withEnvironment(EDGE_ENV, () =>
+      withFetchMock(
+        () => new Response(JSON.stringify({ code, message: code }), { status: 400 }),
+        async () => {
+          try {
+            await rpc("finalize_payment_confirmation_v1", {});
+            return 0;
+          } catch (error) {
+            return Number((error as { status?: number }).status) || 0;
+          }
+        },
+      ));
+    assertEqual(status, expected, `Definitive condition ${code} must keep its status.`);
+  }
+});
