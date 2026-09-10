@@ -61,3 +61,14 @@ test("an ownership denial stays definitive and does not masquerade as session re
   assert.equal(denied.pending, null, "A 403 ownership denial must clear the confirmation tuple.");
   assert.notEqual(denied.error?.code, "PAYMENT_CONFIRM_AUTH_REQUIRED");
 });
+
+test("a pending administrative cancellation keeps the confirmation recoverable", async () => {
+  // The cancellation may still fail and leave the order payable. A guest carrying only
+  // a time-limited return capability has nothing else to recover with, so discarding
+  // the tuple here strands them on an order that may already be paid.
+  const pendingCancel = await confirmAndCapture({ status: 409, code: "ORDER_CANCELLATION_PENDING" });
+  assert.ok(
+    pendingCancel.pending,
+    "ORDER_CANCELLATION_PENDING is not definitive and must preserve the confirmation tuple.",
+  );
+});

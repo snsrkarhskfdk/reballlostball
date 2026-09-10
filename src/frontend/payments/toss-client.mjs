@@ -12,6 +12,10 @@ const RECOVERABLE_CONFIRM_CODES = new Set([
   "PAYMENT_RESPONSE_MISMATCH",
   "PAYMENT_RECONCILIATION_PENDING",
   "CLIENT_TIMEOUT",
+  // An administrator's cancellation may still fail and leave the order payable, so
+  // discarding the confirmation tuple here would strand a guest who has no lookup
+  // token and only a time-limited return capability.
+  "ORDER_CANCELLATION_PENDING",
 ]);
 // Codes that leave the order permanently unpayable: the provider declined, the
 // final status was not DONE, or the order was already canceled/refunded. In each
@@ -21,7 +25,41 @@ const TERMINAL_CONFIRM_CODES = new Set([
   "PAYMENT_REJECTED",
   "PAYMENT_NOT_COMPLETED",
   "ORDER_PAYMENT_TERMINATED",
+  // Both leave an order prepare-payment will refuse with ORDER_NOT_PAYMENT_READY.
+  "ORDER_EXPIRED",
+  "PAYMENT_RETRY_REQUIRES_NEW_ORDER",
 ]);
+
+const TERMINAL_FAILURE_STORAGE_PREFIX = "reball.paymentTerminal.";
+
+function terminalFailureStorageKey(orderId) {
+  const safeId = safeOrderId(orderId);
+  return safeId ? `${TERMINAL_FAILURE_STORAGE_PREFIX}${safeId}` : "";
+}
+
+// The route branch that renders after a reload has no error code to classify from,
+// so an in-memory flag was lost and the dead-end retry control came back. Persist the
+// verdict next to the other order-scoped payment state.
+export function rememberTerminalPaymentFailure(orderId, storage = globalThis.sessionStorage) {
+  const key = terminalFailureStorageKey(orderId);
+  if (!key || !storage?.setItem) return false;
+  try {
+    storage.setItem(key, "1");
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+export function terminalPaymentFailureRecorded(orderId, storage = globalThis.sessionStorage) {
+  const key = terminalFailureStorageKey(orderId);
+  if (!key || !storage?.getItem) return false;
+  try {
+    return storage.getItem(key) === "1";
+  } catch {
+    return false;
+  }
+}
 
 export function terminalConfirmationFailure(error) {
   return TERMINAL_CONFIRM_CODES.has(String(error?.code || "").toUpperCase());

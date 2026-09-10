@@ -37,7 +37,7 @@ import {
   requireAdminTab,
 } from "./src/frontend/auth/admin-permissions.mjs";
 import { captchaTokenFromForm, mountCaptchaWidgets } from "./src/frontend/auth/captcha-client.mjs";
-import { confirmTossPayment, pendingTossConfirmation, prepareTossPayment, requestTossPayment, terminalConfirmationFailure } from "./src/frontend/payments/toss-client.mjs";
+import { confirmTossPayment, pendingTossConfirmation, prepareTossPayment, rememberTerminalPaymentFailure, requestTossPayment, terminalConfirmationFailure, terminalPaymentFailureRecorded } from "./src/frontend/payments/toss-client.mjs";
 import { normalizeCatalogSlug, sanitizeAssetReference } from "./src/frontend/core/url-safety.mjs";
 import { parseRoute, paymentReturnKind, paymentReturnParams, replacePaymentReturnUrl } from "./src/frontend/core/router.mjs";
 import { createAppState } from "./src/frontend/core/state.mjs";
@@ -738,6 +738,7 @@ async function ensureProfileRecord(user, profileOverrides = null) {
 async function loadAccountData(user, options = {}) {
   const { silent = false } = options;
   state.accountLoading = true;
+  const orderEpochAtQueryStart = state.orderEpoch || 0;
   if (!silent && parseRoute() === "/mypage") renderMypage();
 
   try {
@@ -770,11 +771,23 @@ async function loadAccountData(user, options = {}) {
 
     state.viewer = buildViewer(user, profile);
     state.addresses = (addressesResult.data ?? []).map(mapAddressRecord);
-    state.orders = (ordersResult.data ?? []).map((order) => mapOrderRecord(order, itemsByOrderId.get(order.id) ?? []));
+    // An authoritative single-order write landed while this query was in flight, so
+    // this snapshot predates it. Applying it would revert a confirmed payment.
+    if ((state.orderEpoch || 0) === orderEpochAtQueryStart) {
+      state.orders = (ordersResult.data ?? []).map((order) => mapOrderRecord(order, itemsByOrderId.get(order.id) ?? []));
+    }
     state.paymentMethods = [];
   } finally {
     state.accountLoading = false;
   }
+}
+
+// A server response that authoritatively describes one order. Bump the epoch so a
+// bulk account refresh whose query started earlier cannot land afterwards and
+// overwrite it with pre-confirmation data -- which showed a paid order as unpaid.
+function commitServerOrder(order) {
+  state.orders = [order, ...state.orders.filter((item) => item.id !== order.id)];
+  state.orderEpoch = (state.orderEpoch || 0) + 1;
 }
 
 async function syncSessionState(session, options = {}) {
@@ -3428,7 +3441,7 @@ async function createOrder(formData) {
     const order = normalizeServerOrder(result);
     if (!order) throw new Error("서버 주문 응답에 주문번호가 없습니다.");
     order.customer = { ...order.customer, name: order.customer?.name || customer.receiverName };
-    state.orders = [order, ...state.orders.filter((item) => item.id !== order.id)];
+    commitServerOrder(order);
     if (result.lookupToken) {
       saveGuestLookupSession(globalThis.sessionStorage, { orderId: order.id, lookupToken: result.lookupToken });
     }
@@ -3548,7 +3561,7 @@ async function handlePaymentReturn() {
     );
     const order = normalizeServerOrder(result);
     if (!order) throw new Error("결제 완료 주문을 확인하지 못했습니다.");
-    state.orders = [order, ...state.orders.filter((item) => item.id !== order.id)];
+    commitServerOrder(order);
     state.paymentRequestState = result.paid ? "paid" : "waiting_for_deposit";
     replacePaymentReturnUrl(`/order/${encodeURIComponent(order.id)}`);
     renderRoute();
@@ -3566,8 +3579,9 @@ async function handlePaymentReturn() {
       message: error?.message || "결제 승인 결과를 확인하지 못했습니다. 같은 주문으로 다시 확인해 주세요.",
       retryable: !terminal,
     });
-    // Survive a re-render: the route branch has no error code to classify from.
+    // Survive a re-render and a reload: the route branch has no error code.
     state.paymentReturnRetryable = !terminal;
+    if (terminal) rememberTerminalPaymentFailure(orderId, globalThis.sessionStorage);
   }
   return true;
 }
@@ -7652,7 +7666,7 @@ function bindPageEvents() {
       );
       const matchedOrder = normalizeServerOrder(result);
       if (!matchedOrder) throw new Error("주문 정보를 찾을 수 없습니다.");
-      state.orders = [matchedOrder, ...state.orders.filter((order) => order.id !== matchedOrder.id)];
+      commitServerOrder(matchedOrder);
       routeTo(`/order/${matchedOrder.id}`);
     } catch (error) {
       showToast(error.message || "주문 정보를 찾을 수 없습니다.");
@@ -8224,7 +8238,8 @@ function renderRoute() {
       kind: a === "recovery" ? "recovery" : "fail",
       orderId: /^[A-Z0-9_-]{6,64}$/.test(orderId) ? orderId : "",
       message: a === "recovery" ? "" : "결제를 완료하지 못했습니다. 결제 정보를 확인한 뒤 다시 시도해 주세요.",
-      retryable: state.paymentReturnRetryable !== false,
+      retryable: state.paymentReturnRetryable !== false
+        && !terminalPaymentFailureRecorded(orderId, globalThis.sessionStorage),
     });
   }
   if (base === "mypage") return renderMypage();

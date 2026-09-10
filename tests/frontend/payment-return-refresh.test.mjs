@@ -3,22 +3,27 @@ import test from "node:test";
 import { readFileSync } from "node:fs";
 import { createContext, runInContext } from "node:vm";
 import { parseRoute, paymentReturnKind, paymentReturnParams, replacePaymentReturnUrl } from "../../src/frontend/core/router.mjs";
-import { pendingTossConfirmation, terminalConfirmationFailure } from "../../src/frontend/payments/toss-client.mjs";
+import {
+  pendingTossConfirmation,
+  rememberTerminalPaymentFailure,
+  terminalConfirmationFailure,
+  terminalPaymentFailureRecorded,
+} from "../../src/frontend/payments/toss-client.mjs";
 import { escapeHtml } from "../../src/frontend/ui/components.mjs";
 
 // Execute the production return controller, renderer and route branch with only
 // network/UI boundaries stubbed, so classifying an error alone cannot pass.
-function paymentReturnHarness(code) {
+function paymentReturnHarness(code, sharedValues = null, initialUrl = null) {
   const app = readFileSync(new URL("../../app.js", import.meta.url), "utf8");
   const orderId = "RB-MOBILE-RETURN-001";
   const pending = { orderId, paymentKey: "pay_secret", amount: 17000 };
-  const values = new Map([[`reball.paymentConfirm.${orderId}`, JSON.stringify(pending)]]);
+  const values = sharedValues || new Map([[`reball.paymentConfirm.${orderId}`, JSON.stringify(pending)]]);
   const storage = {
     getItem: (key) => values.get(key) ?? null,
     setItem: (key, value) => values.set(key, String(value)),
     removeItem: (key) => values.delete(key),
   };
-  let location = new URL(`https://shop.example/?paymentKey=pay_secret&orderId=${orderId}&amount=17000#/payment/success`);
+  let location = new URL(initialUrl || `https://shop.example/?paymentKey=pay_secret&orderId=${orderId}&amount=17000#/payment/success`);
   let html = "";
   let confirmCalls = 0;
   let signOutScope = "";
@@ -35,6 +40,7 @@ function paymentReturnHarness(code) {
     }),
     SUPABASE_URL: "https://example.supabase.co", SUPABASE_KEY: "public",
     sessionStorage: storage, loadGuestLookupSession: () => null, pendingTossConfirmation, terminalConfirmationFailure,
+    rememberTerminalPaymentFailure, terminalPaymentFailureRecorded,
     confirmTossPayment: async () => { confirmCalls += 1; throw Object.assign(new Error("provider result"), { code }); },
     supabase: { auth: { signOut: async (options) => { signOutScope = options?.scope; } } },
     showToast: () => {},
@@ -49,7 +55,7 @@ function paymentReturnHarness(code) {
   const emptyAuthSource = app.slice(app.indexOf("function emptyAuthData("), app.indexOf("\nfunction buildViewer("));
   const loggedInSource = app.slice(app.indexOf("function isLoggedIn("), app.indexOf("\nfunction isWished("));
   runInContext(`${returnSource}\n${routeSource}\n${logoutSource}\n${emptyAuthSource}\n${loggedInSource}`, context);
-  return { context, orderId, get html() { return html; }, get location() { return location; }, get confirmCalls() { return confirmCalls; }, get signOutScope() { return signOutScope; } };
+  return { context, orderId, values, get html() { return html; }, get location() { return location; }, get confirmCalls() { return confirmCalls; }, get signOutScope() { return signOutScope; } };
 }
 
 test("failed and unresolved payment returns preserve safe refresh context and distinct recovery actions", async () => {
@@ -137,7 +143,7 @@ test("a definitively declined order never advertises a payment retry it cannot h
   // PAYMENT_REJECTED / PAYMENT_NOT_COMPLETED / ORDER_PAYMENT_TERMINATED leave the
   // order unpayable, so prepare-payment answers 409 ORDER_NOT_PAYMENT_READY. A
   // "결제 다시 시도" control there is a dead end the customer cannot escape.
-  for (const code of ["PAYMENT_REJECTED", "PAYMENT_NOT_COMPLETED", "ORDER_PAYMENT_TERMINATED"]) {
+  for (const code of ["PAYMENT_REJECTED", "PAYMENT_NOT_COMPLETED", "ORDER_PAYMENT_TERMINATED", "ORDER_EXPIRED", "PAYMENT_RETRY_REQUIRES_NEW_ORDER"]) {
     const harness = paymentReturnHarness(code);
     assert.equal(await harness.context.handlePaymentReturn(), true);
     assert.match(harness.html, /결제를 완료하지 못했습니다/);
@@ -180,4 +186,27 @@ test("a terminal decline stays terminal when the screen is re-rendered", async (
   assert.equal(await retryable.context.handlePaymentReturn(), true);
   retryable.context.renderRoute();
   assert.match(retryable.html, /data-payment-retry/);
+});
+
+test("a terminal decline survives a full page reload", async () => {
+  // A reload discards every in-memory flag. Only sessionStorage crosses that
+  // boundary, so without persistence the dead-end retry control came back.
+  const first = paymentReturnHarness("PAYMENT_REJECTED");
+  assert.equal(await first.context.handlePaymentReturn(), true);
+  assert.doesNotMatch(first.html, /data-payment-retry/);
+
+  // A fresh page: new context, new state object, same browser sessionStorage.
+  const reloaded = paymentReturnHarness(
+    "PAYMENT_REJECTED",
+    first.values,
+    `https://shop.example/#/payment/fail?orderId=${first.orderId}`,
+  );
+  assert.equal(reloaded.context.parseRoute(), "/payment/fail", "The reload must land on the failure route.");
+  assert.equal(reloaded.context.state.paymentReturnRetryable, undefined, "The reload must start with no in-memory verdict.");
+  reloaded.context.renderRoute();
+  assert.doesNotMatch(
+    reloaded.html,
+    /data-payment-retry/,
+    "A reload must not resurrect a retry control for a terminally declined order.",
+  );
 });
