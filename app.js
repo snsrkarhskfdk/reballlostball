@@ -37,7 +37,7 @@ import {
   requireAdminTab,
 } from "./src/frontend/auth/admin-permissions.mjs";
 import { captchaTokenFromForm, mountCaptchaWidgets } from "./src/frontend/auth/captcha-client.mjs";
-import { confirmTossPayment, pendingTossConfirmation, prepareTossPayment, requestTossPayment } from "./src/frontend/payments/toss-client.mjs";
+import { confirmTossPayment, pendingTossConfirmation, prepareTossPayment, requestTossPayment, terminalConfirmationFailure } from "./src/frontend/payments/toss-client.mjs";
 import { normalizeCatalogSlug, sanitizeAssetReference } from "./src/frontend/core/url-safety.mjs";
 import { parseRoute, paymentReturnKind, paymentReturnParams, replacePaymentReturnUrl } from "./src/frontend/core/router.mjs";
 import { createAppState } from "./src/frontend/core/state.mjs";
@@ -3473,7 +3473,7 @@ async function requestTossPaymentForOrder(orderId) {
   });
 }
 
-function renderPaymentReturnStatus({ kind = "processing", orderId = "", message = "" } = {}) {
+function renderPaymentReturnStatus({ kind = "processing", orderId = "", message = "", retryable = true } = {}) {
   const isProcessing = kind === "processing";
   const isRecovery = kind === "recovery";
   const pending = isRecovery && pendingTossConfirmation(orderId, globalThis.sessionStorage);
@@ -3493,7 +3493,8 @@ function renderPaymentReturnStatus({ kind = "processing", orderId = "", message 
         ${isRecovery && pending ? `<button class="primary-btn" type="button" data-payment-confirm-recovery="${escapeHtml(orderId)}">결제 결과 다시 확인</button>` : ""}
         ${isRecovery && orderId ? `<button class="${pending ? "secondary-btn" : "primary-btn"}" type="button" data-route="/order/${escapeHtml(orderId)}">기존 주문 확인</button>` : ""}
         ${isRecovery && orderId ? `<button class="secondary-btn" type="button" data-payment-reauth="${escapeHtml(orderId)}">다시 로그인</button>` : ""}
-        ${!isProcessing && !isRecovery && orderId ? `<button class="primary-btn" type="button" data-payment-retry="${escapeHtml(orderId)}">결제 다시 시도</button>` : ""}
+        ${!isProcessing && !isRecovery && orderId && retryable ? `<button class="primary-btn" type="button" data-payment-retry="${escapeHtml(orderId)}">결제 다시 시도</button>` : ""}
+        ${!isProcessing && !isRecovery && orderId && !retryable ? `<button class="primary-btn" type="button" data-route="/order/${escapeHtml(orderId)}">주문 내역 확인</button>` : ""}
         ${!isProcessing && !isRecovery ? '<button class="secondary-btn" type="button" data-route="/">홈으로 이동</button>' : ""}
       </div>
     </section>
@@ -3549,12 +3550,16 @@ async function handlePaymentReturn() {
     showToast(result.paid ? "결제가 완료되었습니다." : "가상계좌 입금 안내를 확인해 주세요.");
   } catch (error) {
     const needsRecovery = ["PAYMENT_CONFIRM_RECOVERY_REQUIRED", "PAYMENT_CONFIRM_AUTH_REQUIRED"].includes(error?.code);
+    // A definitive decline leaves the order payment_failed, so prepare-payment will
+    // refuse it. Advertising "결제 다시 시도" there is a control that cannot succeed.
+    const terminal = terminalConfirmationFailure(error);
     state.paymentRequestState = needsRecovery ? "recovery_required" : "error";
     replacePaymentReturnUrl(needsRecovery ? "/payment/recovery" : "/payment/fail");
     renderPaymentReturnStatus({
       kind: needsRecovery ? "recovery" : "fail",
       orderId: /^[A-Z0-9_-]{6,64}$/.test(orderId) ? orderId : "",
       message: error?.message || "결제 승인 결과를 확인하지 못했습니다. 같은 주문으로 다시 확인해 주세요.",
+      retryable: !terminal,
     });
   }
   return true;

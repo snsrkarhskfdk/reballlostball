@@ -3,7 +3,7 @@ import test from "node:test";
 import { readFileSync } from "node:fs";
 import { createContext, runInContext } from "node:vm";
 import { parseRoute, paymentReturnKind, paymentReturnParams, replacePaymentReturnUrl } from "../../src/frontend/core/router.mjs";
-import { pendingTossConfirmation } from "../../src/frontend/payments/toss-client.mjs";
+import { pendingTossConfirmation, terminalConfirmationFailure } from "../../src/frontend/payments/toss-client.mjs";
 import { escapeHtml } from "../../src/frontend/ui/components.mjs";
 
 // Execute the production return controller, renderer and route branch with only
@@ -34,7 +34,7 @@ function paymentReturnHarness(code) {
       historyRef: { replaceState: (_state, _title, url) => { location = new URL(url, location); } },
     }),
     SUPABASE_URL: "https://example.supabase.co", SUPABASE_KEY: "public",
-    sessionStorage: storage, loadGuestLookupSession: () => null, pendingTossConfirmation,
+    sessionStorage: storage, loadGuestLookupSession: () => null, pendingTossConfirmation, terminalConfirmationFailure,
     confirmTossPayment: async () => { confirmCalls += 1; throw Object.assign(new Error("provider result"), { code }); },
     supabase: { auth: { signOut: async (options) => { signOutScope = options?.scope; } } },
     showToast: () => {},
@@ -131,4 +131,30 @@ test("failed and unresolved payment URLs do not retain malformed order identifie
 
     assert.equal(replaced, `/#${route}`);
   }
+});
+
+test("a definitively declined order never advertises a payment retry it cannot honour", async () => {
+  // PAYMENT_REJECTED / PAYMENT_NOT_COMPLETED / ORDER_PAYMENT_TERMINATED leave the
+  // order unpayable, so prepare-payment answers 409 ORDER_NOT_PAYMENT_READY. A
+  // "결제 다시 시도" control there is a dead end the customer cannot escape.
+  for (const code of ["PAYMENT_REJECTED", "PAYMENT_NOT_COMPLETED", "ORDER_PAYMENT_TERMINATED"]) {
+    const harness = paymentReturnHarness(code);
+    assert.equal(await harness.context.handlePaymentReturn(), true);
+    assert.match(harness.html, /결제를 완료하지 못했습니다/);
+    assert.doesNotMatch(
+      harness.html,
+      /data-payment-retry/,
+      `${code} is terminal and must not render a retry control.`,
+    );
+    assert.match(
+      harness.html,
+      new RegExp(`data-route="/order/${harness.orderId}"`),
+      `${code} must still let the customer reach the order.`,
+    );
+  }
+
+  // A non-terminal decline keeps the retry affordance, which still works.
+  const retryable = paymentReturnHarness("MOCK_CARD_DECLINED");
+  assert.equal(await retryable.context.handlePaymentReturn(), true);
+  assert.match(retryable.html, /data-payment-retry/);
 });

@@ -13,6 +13,20 @@ const RECOVERABLE_CONFIRM_CODES = new Set([
   "PAYMENT_RECONCILIATION_PENDING",
   "CLIENT_TIMEOUT",
 ]);
+// Codes that leave the order permanently unpayable: the provider declined, the
+// final status was not DONE, or the order was already canceled/refunded. In each
+// case prepare-payment answers 409 ORDER_NOT_PAYMENT_READY, so offering the
+// customer a "retry payment" control is a dead end.
+const TERMINAL_CONFIRM_CODES = new Set([
+  "PAYMENT_REJECTED",
+  "PAYMENT_NOT_COMPLETED",
+  "ORDER_PAYMENT_TERMINATED",
+]);
+
+export function terminalConfirmationFailure(error) {
+  return TERMINAL_CONFIRM_CODES.has(String(error?.code || "").toUpperCase());
+}
+
 let tossSdkPromise = null;
 
 function requestError(message, { code = "", status = 0, payload = null } = {}) {
