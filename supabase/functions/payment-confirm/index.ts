@@ -28,6 +28,17 @@ import { rpc, sessionUser } from "../_shared/supabase.ts";
 
 const TOSS_CONFIRM_ENDPOINT = "https://api.tosspayments.com/v1/payments/confirm";
 
+// Order states in which the customer legitimately still owns a settled order and
+// therefore must receive a rotated guest lookup token. canceled / partially_canceled
+// / refunded are rejected earlier with ORDER_PAYMENT_TERMINATED and never reach here.
+const SETTLED_ORDER_STATUSES = new Set([
+  "waiting_for_deposit",
+  "paid",
+  "shipping_ready",
+  "shipped",
+  "delivered",
+]);
+
 function guestTokenSecret(): string {
   const secret = Deno.env.get("GUEST_ORDER_TOKEN_SECRET") || "";
   if (secret.length < 32) {
@@ -112,7 +123,12 @@ Deno.serve(async (req: Request) => {
     const rotateGuestLookupToken = async (orderLike: Record<string, unknown>): Promise<string | null> => {
       if (!replacementGuestLookupToken || !replacementGuestLookupTokenHash) return null;
       const status = String(orderLike.status || "");
-      if (!new Set(["paid", "waiting_for_deposit"]).has(status)) return null;
+      // Every state at or after settlement, not just the two the confirmation
+      // itself can produce. If the original confirmation response was lost and an
+      // administrator has since advanced fulfilment, a retry inside the capability
+      // window still settles successfully — but omitting the rotated token here made
+      // the browser drop its last credential and the order reload 404.
+      if (!SETTLED_ORDER_STATUSES.has(status)) return null;
       const rotated = await rpc<boolean>("rotate_guest_lookup_token_after_payment_v2", {
         p_order_no: orderNo,
         p_new_guest_token_hash: replacementGuestLookupTokenHash,

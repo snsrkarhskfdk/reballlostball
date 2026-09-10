@@ -47,7 +47,12 @@ test("payment-confirm reissues a canonical guest lookup token only after a settl
   assert.match(confirmSource, /guest-order-recovery-v2:/);
   assert.match(confirmSource, /payment_return_guest_hash_v2/);
   assert.match(confirmSource, /rotate_guest_lookup_token_after_payment_v2/);
-  assert.match(confirmSource, /new Set\(\["paid", "waiting_for_deposit"\]\)/);
+  // A settled order must rotate the guest token in every state the customer can still
+  // reach, or a confirmation replay after fulfilment advanced strands them.
+  for (const status of ["waiting_for_deposit", "paid", "shipping_ready", "shipped", "delivered"]) {
+    assert.ok(confirmSource.includes(`"${status}",`), `SETTLED_ORDER_STATUSES must contain ${status}.`);
+  }
+  assert.ok(confirmSource.includes("SETTLED_ORDER_STATUSES.has(status)"), "Token rotation must be gated on the settled-status set.");
   assert.match(confirmSource, /guestLookupToken: refreshedLookupToken/);
   assert.match(confirmSource, /claim_payment_confirmation_v1/);
   // The unauthenticated branch must still reject, but it now separates a caller we
