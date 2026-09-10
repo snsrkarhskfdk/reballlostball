@@ -399,3 +399,28 @@ test("the payment return page boots from a path redirect and reads the settled p
   assert.match(hardening, /=== "paid" && String\(order\?\.paymentStatus \|\| ""\) === "done"/);
   assert.doesNotMatch(hardening, /paymentStatus \|\| ""\) === "paid"/);
 });
+
+const rateLimitRepair = readFileSync(
+  new URL("../../supabase/migrations/20260911000000_edge_rate_limit_insert_race.sql", import.meta.url),
+  "utf8",
+);
+
+test("creating a rate-limit bucket survives a concurrent first request", () => {
+  // `select ... for update` cannot lock a row that does not exist yet, so two
+  // simultaneous first requests for one bucket both reach the insert. Without
+  // conflict handling the loser raises 23505, which the Edge layer maps to HTTP 409
+  // and the caller is rejected before CAPTCHA despite the bucket having quota.
+  assert.match(rateLimitRepair, /create or replace function public\.consume_edge_rate_limit_v1/i);
+  assert.match(rateLimitRepair, /on conflict \(scope, key_hash\) do update/i);
+  assert.match(rateLimitRepair, /set hit_count = r\.hit_count \+ 1/i);
+
+  // Losing the race must still count the hit and still be able to block, otherwise
+  // the race would silently hand out a free request.
+  assert.match(rateLimitRepair, /when r\.hit_count \+ 1 > p_limit then v_now \+ make_interval/i);
+  assert.match(rateLimitRepair, /if v_row\.hit_count > p_limit then[\s\S]{0,200}v_allowed := false/i);
+
+  // The original argument validation must survive the replacement.
+  assert.match(rateLimitRepair, /errcode = '22023'/);
+  assert.match(rateLimitRepair, /security definer/i);
+  assert.match(rateLimitRepair, /set search_path = ''/);
+});
