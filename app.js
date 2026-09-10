@@ -37,7 +37,7 @@ import {
   requireAdminTab,
 } from "./src/frontend/auth/admin-permissions.mjs";
 import { captchaTokenFromForm, mountCaptchaWidgets } from "./src/frontend/auth/captcha-client.mjs";
-import { confirmTossPayment, prepareTossPayment, requestTossPayment } from "./src/frontend/payments/toss-client.mjs";
+import { confirmTossPayment, pendingTossConfirmation, prepareTossPayment, requestTossPayment } from "./src/frontend/payments/toss-client.mjs";
 import { normalizeCatalogSlug, sanitizeAssetReference } from "./src/frontend/core/url-safety.mjs";
 import { parseRoute, paymentReturnKind, paymentReturnParams, replacePaymentReturnUrl } from "./src/frontend/core/router.mjs";
 import { createAppState } from "./src/frontend/core/state.mjs";
@@ -1053,9 +1053,9 @@ async function handlePasswordResetFormSubmit(form) {
   }
 }
 
-async function handleLogout(redirect = "/") {
+async function handleLogout(redirect = "/", options = {}) {
   try {
-    await supabase.auth.signOut();
+    await supabase.auth.signOut(options);
     emptyAuthData();
     showToast("로그아웃되었습니다.");
     routeTo(redirect);
@@ -3469,18 +3469,37 @@ async function requestTossPaymentForOrder(orderId) {
 
 function renderPaymentReturnStatus({ kind = "processing", orderId = "", message = "" } = {}) {
   const isProcessing = kind === "processing";
+  const isRecovery = kind === "recovery";
+  const pending = isRecovery && pendingTossConfirmation(orderId, globalThis.sessionStorage);
+  const title = isProcessing ? "결제 승인 결과를 확인하고 있습니다."
+    : isRecovery ? "결제 승인 결과가 아직 확정되지 않았습니다." : "결제를 완료하지 못했습니다.";
+  const description = isProcessing ? "창을 닫거나 뒤로 이동하지 말고 잠시만 기다려 주세요."
+    : message || (isRecovery ? "같은 주문의 결제 결과를 다시 확인해 주세요. 로그인이 필요한 경우 다시 로그인한 뒤 확인해 주세요."
+      : "결제 정보를 확인한 뒤 다시 시도해 주세요.");
   layout(`
     <section class="complete-page payment-return-page" aria-live="polite">
-      <div class="complete-icon">${isProcessing ? icons.lock : icons.close}</div>
-      <h1>${isProcessing ? "결제 승인 결과를 확인하고 있습니다." : "결제를 완료하지 못했습니다."}</h1>
-      <p>${escapeHtml(isProcessing ? "창을 닫거나 뒤로 이동하지 말고 잠시만 기다려 주세요." : message || "결제 정보를 확인한 뒤 다시 시도해 주세요.")}</p>
+      <div class="complete-icon">${isProcessing || isRecovery ? icons.lock : icons.close}</div>
+      <h1>${title}</h1>
+      <p>${escapeHtml(description)}</p>
+      ${isRecovery ? "<p>이미 승인되었을 수 있으니 새 주문이나 재결제 전에 기존 주문의 결제 결과를 확인해 주세요.</p>" : ""}
       ${orderId ? `<dl><div><dt>주문번호</dt><dd>${escapeHtml(orderId)}</dd></div></dl>` : ""}
       <div class="complete-actions">
-        ${!isProcessing && orderId ? `<button class="primary-btn" type="button" data-payment-retry="${escapeHtml(orderId)}">결제 다시 시도</button>` : ""}
-        ${!isProcessing ? '<button class="secondary-btn" type="button" data-route="/">홈으로 이동</button>' : ""}
+        ${isRecovery && pending ? `<button class="primary-btn" type="button" data-payment-confirm-recovery="${escapeHtml(orderId)}">결제 결과 다시 확인</button>` : ""}
+        ${isRecovery && orderId ? `<button class="${pending ? "secondary-btn" : "primary-btn"}" type="button" data-route="/order/${escapeHtml(orderId)}">기존 주문 확인</button>` : ""}
+        ${isRecovery && orderId ? `<button class="secondary-btn" type="button" data-payment-reauth="${escapeHtml(orderId)}">다시 로그인</button>` : ""}
+        ${!isProcessing && !isRecovery && orderId ? `<button class="primary-btn" type="button" data-payment-retry="${escapeHtml(orderId)}">결제 다시 시도</button>` : ""}
+        ${!isProcessing && !isRecovery ? '<button class="secondary-btn" type="button" data-route="/">홈으로 이동</button>' : ""}
       </div>
     </section>
   `);
+}
+
+async function handlePaymentReauthentication(orderId) {
+  if (!/^[A-Z0-9_-]{6,64}$/.test(orderId)) return;
+  // Clear a stale local login through the existing logout flow without removing
+  // the saved confirmation tuple; login returns to this same order's recovery.
+  setAuthRedirect(`/payment/recovery?orderId=${encodeURIComponent(orderId)}`);
+  await handleLogout("/login", { scope: "local" });
 }
 
 async function handlePaymentReturn() {
@@ -3489,12 +3508,12 @@ async function handlePaymentReturn() {
   const params = paymentReturnParams();
   const orderId = String(params.get("orderId") || "").trim().toUpperCase();
 
-  if (kind === "fail") {
-    replacePaymentReturnUrl("/payment/fail");
+  if (kind === "fail" || kind === "recovery") {
+    replacePaymentReturnUrl(`/payment/${kind}`);
     renderPaymentReturnStatus({
-      kind: "fail",
+      kind,
       orderId: /^[A-Z0-9_-]{6,64}$/.test(orderId) ? orderId : "",
-      message: "결제가 취소되었거나 승인되지 않았습니다. 결제수단을 확인하고 다시 시도해 주세요.",
+      message: kind === "fail" ? "결제가 취소되었거나 승인되지 않았습니다. 결제수단을 확인하고 다시 시도해 주세요." : "",
     });
     return true;
   }
@@ -3523,10 +3542,11 @@ async function handlePaymentReturn() {
     renderRoute();
     showToast(result.paid ? "결제가 완료되었습니다." : "가상계좌 입금 안내를 확인해 주세요.");
   } catch (error) {
-    state.paymentRequestState = "error";
-    replacePaymentReturnUrl("/payment/fail");
+    const needsRecovery = ["PAYMENT_CONFIRM_RECOVERY_REQUIRED", "PAYMENT_CONFIRM_AUTH_REQUIRED"].includes(error?.code);
+    state.paymentRequestState = needsRecovery ? "recovery_required" : "error";
+    replacePaymentReturnUrl(needsRecovery ? "/payment/recovery" : "/payment/fail");
     renderPaymentReturnStatus({
-      kind: "fail",
+      kind: needsRecovery ? "recovery" : "fail",
       orderId: /^[A-Z0-9_-]{6,64}$/.test(orderId) ? orderId : "",
       message: error?.message || "결제 승인 결과를 확인하지 못했습니다. 같은 주문으로 다시 확인해 주세요.",
     });
@@ -7634,6 +7654,11 @@ function bindPageEvents() {
       await handleLogout("/");
     });
   });
+  document.querySelectorAll("[data-payment-reauth]").forEach((node) => {
+    node.addEventListener("click", async () => {
+      await handlePaymentReauthentication(node.dataset.paymentReauth);
+    });
+  });
   document.querySelectorAll("[data-buy-now]").forEach((node) =>
     node.addEventListener("click", () => {
       if (addToCart(node.dataset.buyNow)) routeTo("/checkout");
@@ -8178,9 +8203,9 @@ function renderRoute() {
     const orderId = String(paymentReturnParams().get("orderId") || "").trim().toUpperCase();
     if (a === "success") return renderPaymentReturnStatus({ kind: "processing", orderId });
     return renderPaymentReturnStatus({
-      kind: "fail",
+      kind: a === "recovery" ? "recovery" : "fail",
       orderId: /^[A-Z0-9_-]{6,64}$/.test(orderId) ? orderId : "",
-      message: "결제를 완료하지 못했습니다. 결제 정보를 확인한 뒤 다시 시도해 주세요.",
+      message: a === "recovery" ? "" : "결제를 완료하지 못했습니다. 결제 정보를 확인한 뒤 다시 시도해 주세요.",
     });
   }
   if (base === "mypage") return renderMypage();

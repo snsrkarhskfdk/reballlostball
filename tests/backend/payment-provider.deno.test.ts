@@ -1,6 +1,7 @@
 import {
   decryptSensitiveJson,
   encryptSensitiveJson,
+  hmacSha256Hex,
   ProviderError,
   sanitizeProviderPayload,
   sha256Hex,
@@ -914,11 +915,15 @@ Deno.test("admin members HTTP boundary denies customer/inventory/payments and pe
   );
 });
 
-Deno.test("signup, login, and account-assist HTTP endpoints surface DB rate limits before auth work", async () => {
+Deno.test("auth endpoints throttle caller IP before CAPTCHA and protect subjects only after verification", async () => {
   const cases = [
     {
       edge: "signup-with-login-id",
       scope: "auth_signup",
+      subject: "rate.user:rate@example.test",
+      limit: 5,
+      window: 3600,
+      block: 3600,
       body: {
         loginId: "rate.user",
         email: "rate@example.test",
@@ -930,6 +935,10 @@ Deno.test("signup, login, and account-assist HTTP endpoints surface DB rate limi
     {
       edge: "login-with-identifier",
       scope: "auth_login_request",
+      subject: "rate@example.test",
+      limit: 30,
+      window: 900,
+      block: 900,
       body: {
         identifier: "rate@example.test",
         password: "not-a-real-password",
@@ -939,6 +948,10 @@ Deno.test("signup, login, and account-assist HTTP endpoints surface DB rate limi
     {
       edge: "auth-assist",
       scope: "auth_assist",
+      subject: "find-id:rate@example.test:01012345678",
+      limit: 5,
+      window: 3600,
+      block: 3600,
       body: {
         mode: "find-id",
         name: "테스트",
@@ -947,41 +960,105 @@ Deno.test("signup, login, and account-assist HTTP endpoints surface DB rate limi
         captchaToken: "captcha-token-not-evaluated",
       },
     },
+    {
+      edge: "auth-assist",
+      scope: "auth_assist",
+      subject: "password-reset:rate@example.test:01012345678",
+      limit: 5,
+      window: 3600,
+      block: 3600,
+      body: {
+        mode: "password-reset",
+        name: "테스트",
+        phone: "01012345678",
+        identifier: "rate@example.test",
+        captchaToken: "captcha-token-not-evaluated",
+      },
+    },
   ] as const;
 
   for (const scenario of cases) {
-    const scopes: string[] = [];
+    const preScope = `${scenario.scope}_pre`;
+    const callerIp = "203.0.113.10";
+    const expectedPreKeys = await Promise.all(["ip", "subject"].map((kind) =>
+      hmacSha256Hex(EDGE_ENV.AUTH_RATE_LIMIT_PEPPER, `${preScope}:${kind}:${callerIp}`)
+    ));
+    const expectedSubjectKeys = await Promise.all([
+      hmacSha256Hex(EDGE_ENV.AUTH_RATE_LIMIT_PEPPER, `${scenario.scope}:ip:${callerIp}`),
+      hmacSha256Hex(EDGE_ENV.AUTH_RATE_LIMIT_PEPPER, `${scenario.scope}:subject:${scenario.subject}`),
+    ]);
+    const events: string[] = [];
+    let blockPreLimit = true;
     const responder = rpcOnlyResponder(async (name, body) => {
       if (name !== "consume_edge_rate_limit_v1") {
         throw new Error(`Auth work continued to RPC ${name}`);
       }
-      scopes.push(String(body.p_scope));
-      return { allowed: false, retryAfter: 37, remaining: 0 };
-    }, async (request) => {
-      throw new Error(
-        `Auth work continued to HTTP ${request.method} ${request.url}`,
+      assertEqual(
+        [body.p_limit, body.p_window_seconds, body.p_block_seconds],
+        [scenario.limit, scenario.window, scenario.block],
+        `${scenario.edge} weakened its existing rate limit`,
       );
+      const scope = String(body.p_scope);
+      events.push(`${scope}:${body.p_key_hash}`);
+      return {
+        allowed: scope === preScope && !blockPreLimit,
+        retryAfter: 37,
+        remaining: 0,
+      };
+    }, async (request) => {
+      assertEqual(
+        request.url,
+        "https://challenges.cloudflare.com/turnstile/v0/siteverify",
+        `${scenario.edge} continued to auth HTTP work`,
+      );
+      const form = await request.formData();
+      assertEqual(form.get("remoteip"), callerIp, "CAPTCHA lost caller IP");
+      events.push("captcha");
+      return jsonResult({ success: form.get("response") === "verified-captcha-token" });
     });
     const handler = await edgeHandler(scenario.edge);
     await withEdgeMocks(responder, async () => {
-      const result = await invokeJson(handler, scenario.edge, scenario.body);
-      assert(
-        result.response.status === 429,
-        `${scenario.edge} returned ${result.response.status}`,
+      const preEvents = expectedPreKeys.map((key) => `${preScope}:${key}`);
+      const postEvents = expectedSubjectKeys.map((key) => `${scenario.scope}:${key}`);
+      const assertRateLimited = (result: Awaited<ReturnType<typeof invokeJson>>) => {
+        assertEqual(result.response.status, 429, `${scenario.edge} lost rate limiting`);
+        assertEqual(result.response.headers.get("retry-after"), "37", `${scenario.edge} lost Retry-After`);
+        assertEqual(result.payload.code, "RATE_LIMITED", `${scenario.edge} changed its rate error code`);
+        assertEqual(result.payload.message, "요청이 너무 많습니다. 잠시 후 다시 시도해 주세요.", `${scenario.edge} changed its rate error message`);
+      };
+
+      assertRateLimited(await invokeJson(handler, scenario.edge, scenario.body));
+      assertEqual(events, preEvents, `${scenario.edge} did not block only caller IP before CAPTCHA`);
+      blockPreLimit = false;
+
+      // A full victim quota of invalid solves must never consume the victim's bucket.
+      for (let attempt = 0; attempt < scenario.limit; attempt += 1) {
+        const start = events.length;
+        const result = await invokeJson(handler, scenario.edge, scenario.body);
+        assertEqual(result.response.status, 403, `${scenario.edge} did not reject invalid CAPTCHA`);
+        assertEqual(result.payload.code, "CAPTCHA_FAILED", `${scenario.edge} changed its CAPTCHA error`);
+        assertEqual(
+          events.slice(start),
+          [...preEvents, "captcha"],
+          `${scenario.edge} consumed a victim bucket before CAPTCHA succeeded`,
+        );
+      }
+
+      const start = events.length;
+      assertRateLimited(await invokeJson(handler, scenario.edge, {
+        ...scenario.body,
+        captchaToken: "verified-captcha-token",
+      }));
+      assertEqual(
+        events.slice(start),
+        [...preEvents, "captcha", ...postEvents],
+        `${scenario.edge} did not enforce its existing subject limit after CAPTCHA`,
       );
-      assert(
-        result.response.headers.get("retry-after") === "37",
-        `${scenario.edge} lost Retry-After`,
-      );
-      assert(
-        result.payload.code === "RATE_LIMITED",
-        `${scenario.edge} exposed the wrong rate error`,
-      );
+    }, {
+      AUTH_CAPTCHA_MODE: "enforced",
+      AUTH_CAPTCHA_PROVIDER: "turnstile",
+      AUTH_CAPTCHA_SECRET_KEY: "test-captcha-secret",
+      AUTH_CAPTCHA_EXPECTED_HOSTNAMES: "",
     });
-    assertEqual(
-      scopes,
-      [scenario.scope, scenario.scope],
-      `${scenario.edge} did not guard IP and subject`,
-    );
   }
 });

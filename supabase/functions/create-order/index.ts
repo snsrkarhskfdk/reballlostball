@@ -66,7 +66,7 @@ async function recoverExistingOrder(idempotencyKey: string, user: SessionUser): 
     const fingerprint = cleanString(existing.request_fingerprint, 64).toLowerCase();
     const storedHash = cleanString(existing.guest_lookup_token_hash, 64).toLowerCase();
     const secret = Deno.env.get("GUEST_ORDER_TOKEN_SECRET") || "";
-    if (!/^[0-9a-f]{64}$/.test(fingerprint) || !/^[0-9a-f]{64}$/.test(storedHash) || secret.length < 16) {
+    if (!/^[0-9a-f]{64}$/.test(fingerprint) || !/^[0-9a-f]{64}$/.test(storedHash) || secret.length < 32) {
       throw new HttpError(503, "ORDER_RECOVERY_UNAVAILABLE", "기존 주문을 안전하게 복구할 수 없습니다.");
     }
     guestLookupToken = await hmacSha256Base64Url(secret, `guest-order:${idempotencyKey}:${fingerprint}`);
