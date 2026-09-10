@@ -456,3 +456,44 @@ test("the guest token rotation gate agrees across the Edge Function and the RPC"
     assert.ok(!sqlStatuses.includes(terminal), `${terminal} must not be rotatable.`);
   }
 });
+
+test("cancellation authorization cannot evaluate to NULL for a guest order", () => {
+  // PL/pgSQL `if not NULL then` does not take its branch, so an authorization
+  // expression that yields NULL fails open. A guest order has profile_id NULL, which
+  // is exactly how `v_order.profile_id = p_actor_user_id` produced NULL for an
+  // unrelated signed-in member and let them cancel someone else's order.
+  //
+  // Limitation: this reads SQL text. Without a live PostgreSQL the three-valued
+  // evaluation itself is not executed here; a concurrent/DB-level test is still owed.
+  const cancelRepair = readFileSync(
+    new URL("../../supabase/migrations/20260911002000_payment_cancel_null_authorization.sql", import.meta.url),
+    "utf8",
+  );
+
+  assert.match(cancelRepair, /create or replace function public\.claim_payment_cancellation_v1/i);
+
+  const assignment = cancelRepair.match(/v_allowed := ([\s\S]*?);\s*\n\s*if not/);
+  assert.ok(assignment, "The authorization assignment must be present.");
+  const expression = assignment[1];
+
+  // The member branch must not compare a possibly-NULL profile_id bare.
+  assert.match(
+    expression,
+    /v_order\.profile_id is not null\s*\n?\s*and v_order\.profile_id = p_actor_user_id/i,
+    "The member branch must establish profile_id is not null before comparing it.",
+  );
+  // And the whole expression must collapse to a definite boolean.
+  assert.match(expression, /^\s*coalesce\(/i, "The authorization expression must be wrapped in coalesce.");
+  assert.match(expression, /,\s*false\)\s*$/i, "The coalesce fallback must be false, never true.");
+
+  // The test itself must be definite too.
+  assert.match(cancelRepair, /if not coalesce\(v_allowed, false\) then/i);
+  assert.match(cancelRepair, /errcode = '42501'/, "The deny path must still raise 42501.");
+
+  // The exact vulnerable shape must not reappear.
+  assert.doesNotMatch(
+    cancelRepair,
+    /v_allowed := \(\s*\n\s*p_actor_user_id is not null and v_order\.profile_id = p_actor_user_id/i,
+    "The original NULL-producing assignment must not return.",
+  );
+});
