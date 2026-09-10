@@ -804,11 +804,13 @@ async function initializeAuth() {
     showToast(normalizeAuthError(error, "로그인 상태를 확인하지 못했습니다."));
   } finally {
     state.authReady = true;
-    if (await handleAuthCallbackHash()) return;
-    if (await handlePaymentReturn()) return;
-    renderRoute();
   }
 
+  // Register the auth listener BEFORE the routing calls below. A `return` inside
+  // `finally` exits this function, so registering afterwards meant a payment-return
+  // load never got a listener at all. Nothing else assigns state.authSession /
+  // state.authUser, so an in-SPA re-login from the payment recovery screen left the
+  // customer logged out until a full page reload.
   supabase.auth.onAuthStateChange((event, session) => {
     Promise.resolve()
       .then(async () => {
@@ -849,6 +851,10 @@ async function initializeAuth() {
       })
       .catch((error) => showToast(normalizeAuthError(error)));
   });
+
+  if (await handleAuthCallbackHash()) return;
+  if (await handlePaymentReturn()) return;
+  renderRoute();
 }
 
 async function handleAuthFormSubmit(form) {
