@@ -87,7 +87,18 @@ Deno.serve(async (req: Request) => {
       }
     }
 
-    if (!user && !guestTokenHash) throw new HttpError(403, "ORDER_ACCESS_DENIED", "주문을 확인할 수 없습니다.");
+    if (!user && !guestTokenHash) {
+      // Separate "we could not authenticate this caller at all" from "this caller is
+      // authenticated but does not own the order". Only the second is definitive.
+      // A member whose session did not survive the provider round trip must get a
+      // recoverable 401 so the browser keeps the confirmation tuple and can offer
+      // re-authentication, instead of a 403 that makes it discard the tuple.
+      const suppliedCredential = req.headers.has("authorization")
+        || Boolean(guestToken)
+        || Boolean(suppliedReturnToken);
+      if (!suppliedCredential) throw new HttpError(401, "AUTH_REQUIRED", "로그인 상태를 확인해 주세요.");
+      throw new HttpError(403, "ORDER_ACCESS_DENIED", "주문을 확인할 수 없습니다.");
+    }
     await enforceRateLimit(req, "payment_confirm", `${user?.id || guestTokenHash}:${orderNo}`, 12, 900, 900);
 
     const paymentKeyHash = await sha256Hex(paymentKey);

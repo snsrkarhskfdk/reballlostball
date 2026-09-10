@@ -170,15 +170,16 @@ function confirmationRetryable(error) {
   return !code && status === 0;
 }
 
-function confirmationAuthRecoveryRequired(error, config) {
+function confirmationAuthRecoveryRequired(error) {
   const status = Number(error?.status) || 0;
   const code = String(error?.code || "").toUpperCase();
-  const hadAuthenticatedSession = Boolean(String(config?.accessToken || "").trim());
-  // payment-confirm returns 401 AUTH_REQUIRED when an Authorization header is
-  // present but no valid member session can be resolved. Preserve the tuple so
-  // the customer can re-authenticate and retry the same confirmation. A 403 is
-  // an access/ownership denial, not session expiry, and must remain definitive.
-  return hadAuthenticatedSession && status === 401 && (!code || code === "AUTH_REQUIRED");
+  // payment-confirm answers 401 AUTH_REQUIRED whenever it cannot authenticate the
+  // caller — an expired member session, or no surviving credential at all after the
+  // provider round trip resumed in a fresh browser context. Neither case may discard
+  // the confirmation tuple, so this must not additionally require that the browser
+  // still holds an access token: when the session is gone, it does not.
+  // A 403 remains an ownership denial and stays definitive.
+  return status === 401 && (!code || code === "AUTH_REQUIRED");
 }
 
 function sleep(ms) {
@@ -263,7 +264,7 @@ export async function confirmTossPayment(config, confirmation) {
       clearPendingConfirmation(orderId, storage);
       return result;
     } catch (error) {
-      if (confirmationAuthRecoveryRequired(error, config)) {
+      if (confirmationAuthRecoveryRequired(error)) {
         throw requestError(
           "로그인 세션이 만료되었습니다. 다시 로그인한 뒤 같은 주문에서 ‘결제 결과 다시 확인’을 눌러 주세요.",
           { code: "PAYMENT_CONFIRM_AUTH_REQUIRED", status: Number(error?.status) || 401, payload: error?.payload || null }
