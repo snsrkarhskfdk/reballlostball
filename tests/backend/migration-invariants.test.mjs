@@ -497,3 +497,32 @@ test("cancellation authorization cannot evaluate to NULL for a guest order", () 
     "The original NULL-producing assignment must not return.",
   );
 });
+
+test("a confirmation finalizing after fulfilment advanced reports success, not failure", () => {
+  // The payment is already authoritative at that point. Targeting 'paid' from
+  // shipping_ready is a backwards transition, which raised P0001 -> 422 and made the
+  // browser discard the confirmation tuple for a payment that had succeeded.
+  const finalizeRepair = readFileSync(
+    new URL("../../supabase/migrations/20260911003000_finalize_confirmation_after_fulfilment.sql", import.meta.url),
+    "utf8",
+  );
+
+  assert.match(finalizeRepair, /create or replace function public\.finalize_payment_confirmation_v1/i);
+
+  const guard = finalizeRepair.match(
+    /if v_payment\.status = 'done' and upper\(p_provider_status\) = 'DONE'[\s\S]{0,320}?end if;/i,
+  );
+  assert.ok(guard, "The already-done DONE guard must be present.");
+  assert.match(guard[0], /v_order\.status in \('shipping_ready', 'shipped', 'delivered'\)/i);
+  assert.match(guard[0], /not v_blocking_cancel/i, "An unresolved cancellation must still win.");
+  assert.match(guard[0], /v_target_order := v_order\.status;/i, "Fulfilment state must be preserved, not rewritten.");
+
+  // The duplicate short-circuit is what turns the preserved state into a success
+  // response, so it must still be reachable.
+  assert.match(finalizeRepair, /if v_order\.status = v_target_order and v_payment\.status = v_target_payment then/i);
+  assert.match(finalizeRepair, /'duplicate', true/);
+
+  // The pre-existing stale-WAITING_FOR_DEPOSIT protection must survive the replacement.
+  assert.match(finalizeRepair, /if v_payment\.status = 'done' and upper\(p_provider_status\) = 'WAITING_FOR_DEPOSIT' then/i);
+  assert.match(finalizeRepair, /errcode = 'P0001'/, "Genuinely invalid transitions must still raise.");
+});
