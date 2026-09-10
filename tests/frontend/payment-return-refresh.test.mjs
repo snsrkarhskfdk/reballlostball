@@ -158,3 +158,26 @@ test("a definitively declined order never advertises a payment retry it cannot h
   assert.equal(await retryable.context.handlePaymentReturn(), true);
   assert.match(retryable.html, /data-payment-retry/);
 });
+
+test("a terminal decline stays terminal when the screen is re-rendered", async () => {
+  // supabase-js hands INITIAL_SESSION to every new onAuthStateChange subscriber, so a
+  // logged-in member's payment return can be repainted through the generic route
+  // branch moments after the controller drew it. That branch has no error code to
+  // classify from, so without carried state the dead-end retry control came back.
+  const harness = paymentReturnHarness("PAYMENT_REJECTED");
+  assert.equal(await harness.context.handlePaymentReturn(), true);
+  assert.doesNotMatch(harness.html, /data-payment-retry/);
+
+  harness.context.renderRoute();
+  assert.doesNotMatch(
+    harness.html,
+    /data-payment-retry/,
+    "A re-render must not resurrect a retry control for a terminally declined order.",
+  );
+
+  // A recoverable failure must still keep its retry control across a re-render.
+  const retryable = paymentReturnHarness("MOCK_CARD_DECLINED");
+  assert.equal(await retryable.context.handlePaymentReturn(), true);
+  retryable.context.renderRoute();
+  assert.match(retryable.html, /data-payment-retry/);
+});

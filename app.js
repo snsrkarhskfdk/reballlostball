@@ -846,6 +846,11 @@ async function initializeAuth() {
           if (parseRoute().startsWith("/admin")) {
             state.adminMembersLoaded = false;
           }
+          // The payment return controller owns this screen and holds context the
+          // generic route branch does not have. supabase-js delivers INITIAL_SESSION
+          // to every new subscriber, so without this guard a logged-in member's
+          // payment return could be repainted mid-flow with a generic surface.
+          if (paymentReturnKind()) return;
           renderRoute();
         }
       })
@@ -3561,6 +3566,8 @@ async function handlePaymentReturn() {
       message: error?.message || "결제 승인 결과를 확인하지 못했습니다. 같은 주문으로 다시 확인해 주세요.",
       retryable: !terminal,
     });
+    // Survive a re-render: the route branch has no error code to classify from.
+    state.paymentReturnRetryable = !terminal;
   }
   return true;
 }
@@ -8217,6 +8224,7 @@ function renderRoute() {
       kind: a === "recovery" ? "recovery" : "fail",
       orderId: /^[A-Z0-9_-]{6,64}$/.test(orderId) ? orderId : "",
       message: a === "recovery" ? "" : "결제를 완료하지 못했습니다. 결제 정보를 확인한 뒤 다시 시도해 주세요.",
+      retryable: state.paymentReturnRetryable !== false,
     });
   }
   if (base === "mypage") return renderMypage();

@@ -424,3 +424,35 @@ test("creating a rate-limit bucket survives a concurrent first request", () => {
   assert.match(rateLimitRepair, /security definer/i);
   assert.match(rateLimitRepair, /set search_path = ''/);
 });
+
+test("the guest token rotation gate agrees across the Edge Function and the RPC", () => {
+  // The Edge gate is advisory; rotate_guest_lookup_token_after_payment_v2 is the
+  // authority. Widening only the TypeScript side is a silent no-op, which is exactly
+  // how the first attempt at this fix shipped. Compare the two lists directly.
+  const edgeSource = readFileSync(
+    new URL("../../supabase/functions/payment-confirm/index.ts", import.meta.url),
+    "utf8",
+  );
+  const rotationSql = readFileSync(
+    new URL("../../supabase/migrations/20260911001000_guest_token_rotation_settled_states.sql", import.meta.url),
+    "utf8",
+  );
+
+  const edgeBlock = edgeSource.match(/const SETTLED_ORDER_STATUSES = new Set\(\[([\s\S]*?)\]\)/);
+  assert.ok(edgeBlock, "payment-confirm must declare SETTLED_ORDER_STATUSES.");
+  const edgeStatuses = [...edgeBlock[1].matchAll(/"([a-z_]+)"/g)].map((match) => match[1]).sort();
+
+  const sqlBlock = rotationSql.match(/v_order\.status not in \(([^)]*)\)/);
+  assert.ok(sqlBlock, "The rotation RPC must gate on an order status list.");
+  const sqlStatuses = [...sqlBlock[1].matchAll(/'([a-z_]+)'/g)].map((match) => match[1]).sort();
+
+  assert.deepEqual(
+    sqlStatuses,
+    edgeStatuses,
+    "The RPC status list and SETTLED_ORDER_STATUSES must match, or one layer silently overrides the other.",
+  );
+  assert.ok(edgeStatuses.includes("shipped"), "Fulfilment states must be rotatable.");
+  for (const terminal of ["canceled", "partially_canceled", "refunded"]) {
+    assert.ok(!sqlStatuses.includes(terminal), `${terminal} must not be rotatable.`);
+  }
+});
