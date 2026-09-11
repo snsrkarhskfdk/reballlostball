@@ -738,11 +738,20 @@ async function ensureProfileRecord(user, profileOverrides = null) {
 async function loadAccountData(user, options = {}) {
   const { silent = false } = options;
   state.accountLoading = true;
-  const orderEpochAtQueryStart = state.orderEpoch || 0;
+  // Only the newest load may publish. Anything older is a snapshot of a state the
+  // customer has already left -- a previous account, or a moment before a payment
+  // was confirmed -- and applying it shows them someone else's data or reverts
+  // their own. emptyAuthData() bumps this too, so a sign-out cancels a load in flight.
+  state.accountLoadSeq = (state.accountLoadSeq || 0) + 1;
+  const accountLoadTicket = state.accountLoadSeq;
   if (!silent && parseRoute() === "/mypage") renderMypage();
 
   try {
     const profile = await ensureProfileRecord(user);
+    // Captured where the queries are actually dispatched. Capturing it before the
+    // profile await meant a confirmation during that await discarded a snapshot the
+    // order queries had not even started yet.
+    const orderEpochAtQueryStart = state.orderEpoch || 0;
     const [addressesResult, ordersResult, orderItemsResult] = await Promise.all([
       supabase
         .from("addresses")
@@ -769,6 +778,12 @@ async function loadAccountData(user, options = {}) {
       itemsByOrderId.set(item.order_id, group);
     }
 
+    // A newer load started, or the session was cleared, while this one was in flight.
+    if (accountLoadTicket !== state.accountLoadSeq) return;
+    // Defence in depth: never publish one customer's account data under another's session.
+    const currentUserId = state.authUser?.id;
+    if (currentUserId && currentUserId !== user.id) return;
+
     state.viewer = buildViewer(user, profile);
     state.addresses = (addressesResult.data ?? []).map(mapAddressRecord);
     // An authoritative single-order write landed while this query was in flight, so
@@ -789,6 +804,14 @@ function commitServerOrder(order) {
   state.orders = [order, ...state.orders.filter((item) => item.id !== order.id)];
   state.orderEpoch = (state.orderEpoch || 0) + 1;
 }
+
+// Runtime modules (cancellation, recovery) act on the server directly and cannot
+// reach this module's state. Registered once, at module scope, so re-renders do not
+// stack duplicate listeners.
+document.addEventListener("reball:order-updated", (event) => {
+  const order = normalizeServerOrder(event.detail?.order);
+  if (order) commitServerOrder(order);
+});
 
 async function syncSessionState(session, options = {}) {
   const { silent = false } = options;
@@ -1362,6 +1385,8 @@ function normalizeAuthError(error, fallback = "요청을 처리하지 못했습�
 }
 
 function emptyAuthData() {
+  // Invalidate any account load in flight so it cannot repopulate after sign-out.
+  state.accountLoadSeq = (state.accountLoadSeq || 0) + 1;
   state.viewer = null;
   state.authSession = null;
   state.authUser = null;
@@ -3494,6 +3519,10 @@ async function requestTossPaymentForOrder(orderId) {
 function renderPaymentReturnStatus({ kind = "processing", orderId = "", message = "", retryable = true } = {}) {
   const isProcessing = kind === "processing";
   const isRecovery = kind === "recovery";
+  // Callers may omit `retryable` -- the startup payment-return controller and the
+  // generic route branch both do -- so consult the persisted verdict here rather than
+  // at each call site. A reload has no error code to classify from.
+  const canRetry = retryable && !terminalPaymentFailureRecorded(orderId, globalThis.sessionStorage);
   const pending = isRecovery && pendingTossConfirmation(orderId, globalThis.sessionStorage);
   const title = isProcessing ? "결제 승인 결과를 확인하고 있습니다."
     : isRecovery ? "결제 승인 결과가 아직 확정되지 않았습니다." : "결제를 완료하지 못했습니다.";
@@ -3511,8 +3540,8 @@ function renderPaymentReturnStatus({ kind = "processing", orderId = "", message 
         ${isRecovery && pending ? `<button class="primary-btn" type="button" data-payment-confirm-recovery="${escapeHtml(orderId)}">결제 결과 다시 확인</button>` : ""}
         ${isRecovery && orderId ? `<button class="${pending ? "secondary-btn" : "primary-btn"}" type="button" data-route="/order/${escapeHtml(orderId)}">기존 주문 확인</button>` : ""}
         ${isRecovery && orderId ? `<button class="secondary-btn" type="button" data-payment-reauth="${escapeHtml(orderId)}">다시 로그인</button>` : ""}
-        ${!isProcessing && !isRecovery && orderId && retryable ? `<button class="primary-btn" type="button" data-payment-retry="${escapeHtml(orderId)}">결제 다시 시도</button>` : ""}
-        ${!isProcessing && !isRecovery && orderId && !retryable ? `<button class="primary-btn" type="button" data-route="/order/${escapeHtml(orderId)}">주문 내역 확인</button>` : ""}
+        ${!isProcessing && !isRecovery && orderId && canRetry ? `<button class="primary-btn" type="button" data-payment-retry="${escapeHtml(orderId)}">결제 다시 시도</button>` : ""}
+        ${!isProcessing && !isRecovery && orderId && !canRetry ? `<button class="primary-btn" type="button" data-route="/order/${escapeHtml(orderId)}">주문 내역 확인</button>` : ""}
         ${!isProcessing && !isRecovery ? '<button class="secondary-btn" type="button" data-route="/">홈으로 이동</button>' : ""}
       </div>
     </section>
@@ -7666,6 +7695,10 @@ function bindPageEvents() {
       );
       const matchedOrder = normalizeServerOrder(result);
       if (!matchedOrder) throw new Error("주문 정보를 찾을 수 없습니다.");
+      // The lookup just proved this token. Persist it, or payment preparation and any
+      // reload afterwards read empty storage and the customer loses access to the
+      // order they just opened.
+      saveGuestLookupSession(globalThis.sessionStorage, { orderId: matchedOrder.id, lookupToken });
       commitServerOrder(matchedOrder);
       routeTo(`/order/${matchedOrder.id}`);
     } catch (error) {
@@ -8238,8 +8271,7 @@ function renderRoute() {
       kind: a === "recovery" ? "recovery" : "fail",
       orderId: /^[A-Z0-9_-]{6,64}$/.test(orderId) ? orderId : "",
       message: a === "recovery" ? "" : "결제를 완료하지 못했습니다. 결제 정보를 확인한 뒤 다시 시도해 주세요.",
-      retryable: state.paymentReturnRetryable !== false
-        && !terminalPaymentFailureRecorded(orderId, globalThis.sessionStorage),
+      retryable: state.paymentReturnRetryable !== false,
     });
   }
   if (base === "mypage") return renderMypage();

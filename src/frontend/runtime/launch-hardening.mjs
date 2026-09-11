@@ -389,7 +389,13 @@ async function cancelPayment(orderId, button) {
       { accessToken: accessTokenFromStorage(), idempotencyKey }
     );
     const order = result?.order;
-    if (order && typeof order === "object") orderSnapshots.set(safeOrderId, order);
+    if (order && typeof order === "object") {
+      orderSnapshots.set(safeOrderId, order);
+      // The SPA renders orders from its own state, so a DOM-only update is discarded
+      // on the next navigation and the cancelled order reappears as paid. Hand the
+      // authoritative server order back rather than keeping it in this module.
+      document.dispatchEvent(new CustomEvent("reball:order-updated", { detail: { order } }));
+    }
     const root = button.closest(".complete-page") || document;
     updateDefinitionField(root, "주문상태", "주문 취소");
     updateDefinitionField(root, "결제상태", "환불 완료");

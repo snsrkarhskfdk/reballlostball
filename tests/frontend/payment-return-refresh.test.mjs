@@ -209,4 +209,14 @@ test("a terminal decline survives a full page reload", async () => {
     /data-payment-retry/,
     "A reload must not resurrect a retry control for a terminally declined order.",
   );
+
+  // The real reload also runs the startup controller after the first paint, and that
+  // path passes no retryable value at all. Checking only renderRoute missed it.
+  assert.equal(await reloaded.context.handlePaymentReturn(), true);
+  assert.doesNotMatch(
+    reloaded.html,
+    /data-payment-retry/,
+    "The startup payment-return controller must also honour the stored terminal verdict.",
+  );
+  assert.match(reloaded.html, new RegExp(`data-route="/order/${reloaded.orderId}"`));
 });

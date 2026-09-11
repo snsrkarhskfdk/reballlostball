@@ -11,6 +11,10 @@
 --
 -- This mirrors the guard immediately below it, which already protects the DONE state
 -- from a stale WAITING_FOR_DEPOSIT response. Only the function body changes.
+--
+-- Also covers a partially cancelled order that was shipped before the confirmation
+-- landed, where rewriting the payment ledger back to 'done' would erase the partial
+-- cancellation.
 create or replace function public.finalize_payment_confirmation_v1(
   p_order_no text,
   p_idempotency_key text,
@@ -110,10 +114,14 @@ begin
   -- actually succeeded as a definitive failure and discarded its confirmation tuple.
   -- The payment is already authoritative here, so keep the order where it is and let
   -- the duplicate short-circuit below report success.
-  if v_payment.status = 'done' and upper(p_provider_status) = 'DONE'
+  -- 'partial_canceled' belongs here too: an administrator may partially cancel and
+  -- then ship before the original confirmation lands. Rewriting the ledger back to
+  -- 'done' would erase the partial cancellation, so preserve both sides.
+  if v_payment.status in ('done', 'partial_canceled') and upper(p_provider_status) = 'DONE'
      and v_order.status in ('shipping_ready', 'shipped', 'delivered')
      and not v_blocking_cancel then
     v_target_order := v_order.status;
+    v_target_payment := v_payment.status;
   end if;
 
   -- A virtual-account deposit can complete between the provider confirmation

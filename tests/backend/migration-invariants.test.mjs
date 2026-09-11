@@ -510,7 +510,7 @@ test("a confirmation finalizing after fulfilment advanced reports success, not f
   assert.match(finalizeRepair, /create or replace function public\.finalize_payment_confirmation_v1/i);
 
   const guard = finalizeRepair.match(
-    /if v_payment\.status = 'done' and upper\(p_provider_status\) = 'DONE'[\s\S]{0,320}?end if;/i,
+    /if v_payment\.status in \('done', 'partial_canceled'\) and upper\(p_provider_status\) = 'DONE'[\s\S]{0,420}?end if;/i,
   );
   assert.ok(guard, "The already-done DONE guard must be present.");
   assert.match(guard[0], /v_order\.status in \('shipping_ready', 'shipped', 'delivered'\)/i);
@@ -525,4 +525,20 @@ test("a confirmation finalizing after fulfilment advanced reports success, not f
   // The pre-existing stale-WAITING_FOR_DEPOSIT protection must survive the replacement.
   assert.match(finalizeRepair, /if v_payment\.status = 'done' and upper\(p_provider_status\) = 'WAITING_FOR_DEPOSIT' then/i);
   assert.match(finalizeRepair, /errcode = 'P0001'/, "Genuinely invalid transitions must still raise.");
+});
+
+test("a partially cancelled order shipped before confirmation keeps its ledger", () => {
+  // An administrator can partially cancel and then ship between the provider's DONE
+  // and this finalizer. Rewriting payments.status back to 'done' would erase the
+  // partial cancellation, and targeting 'paid' would raise P0001 as before.
+  const finalizeRepair = readFileSync(
+    new URL("../../supabase/migrations/20260911003000_finalize_confirmation_after_fulfilment.sql", import.meta.url),
+    "utf8",
+  );
+  const guard = finalizeRepair.match(
+    /if v_payment\.status in \('done', 'partial_canceled'\)[\s\S]{0,420}?end if;/i,
+  );
+  assert.ok(guard, "The already-settled guard must accept a partially cancelled ledger.");
+  assert.match(guard[0], /v_target_payment := v_payment\.status;/i, "The existing ledger must be preserved, not rewritten.");
+  assert.match(guard[0], /not v_blocking_cancel/i);
 });
