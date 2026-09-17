@@ -10,6 +10,7 @@ const AUTH_STORAGE_KEY = "reballlostball.auth";
 const MAX_DELIVERY_COPY = "배송은 결제일로부터 최대 7일 이내 완료를 기준으로 운영합니다.";
 const preparedPayments = new Map();
 const preparingPayments = new Map();
+const retryButtonBindings = new WeakMap();
 const orderSnapshots = new Map();
 const loadingOrders = new Map();
 let hardenQueued = false;
@@ -101,11 +102,20 @@ function setInlineStatus(anchor, message, tone = "info") {
   node.textContent = message;
 }
 
+function preparedPaymentFor(orderId) {
+  const cached = preparedPayments.get(orderId);
+  return cached && ownsOrderPublication(cached.owner) ? cached.prepared : null;
+}
+
 async function primePayment(orderId) {
   const safeOrderId = String(orderId || "").trim().toUpperCase();
   if (!/^[A-Z0-9_-]{6,64}$/.test(safeOrderId)) throw new Error("주문번호를 확인해 주세요.");
-  if (preparedPayments.has(safeOrderId)) return preparedPayments.get(safeOrderId);
-  if (preparingPayments.has(safeOrderId)) return preparingPayments.get(safeOrderId);
+  const owner = captureOrderOwner();
+  if (!owner) return null;
+  const cached = preparedPaymentFor(safeOrderId);
+  if (cached) return cached;
+  const loading = preparingPayments.get(safeOrderId);
+  if (loading && ownsOrderPublication(loading.owner)) return loading.promise;
 
   const lookup = guestLookupFor(safeOrderId);
   const promise = Promise.all([
@@ -120,20 +130,23 @@ async function primePayment(orderId) {
     ),
     loadTossSdk(),
   ]).then(([prepared]) => {
+    if (!ownsOrderPublication(owner)) return null;
     if (!prepared?.payment || !prepared?.clientKey || !prepared?.customerKey) {
       throw new Error("결제 준비 정보를 확인할 수 없습니다.");
     }
-    preparedPayments.set(safeOrderId, prepared);
+    preparedPayments.set(safeOrderId, { owner, prepared });
     return prepared;
-  }).finally(() => preparingPayments.delete(safeOrderId));
+  }).finally(() => {
+    if (preparingPayments.get(safeOrderId)?.promise === promise) preparingPayments.delete(safeOrderId);
+  });
 
-  preparingPayments.set(safeOrderId, promise);
+  preparingPayments.set(safeOrderId, { owner, promise });
   return promise;
 }
 
 function requestPreparedPayment(orderId) {
   const safeOrderId = String(orderId || "").trim().toUpperCase();
-  const prepared = preparedPayments.get(safeOrderId);
+  const prepared = preparedPaymentFor(safeOrderId);
   if (!prepared) throw new Error("결제 준비가 아직 끝나지 않았습니다.");
   if (typeof globalThis.TossPayments !== "function") throw new Error("토스페이먼츠 결제 모듈을 불러오지 못했습니다.");
   const client = globalThis.TossPayments(prepared.clientKey);
@@ -145,8 +158,13 @@ function requestPreparedPayment(orderId) {
 
 function decoratePaymentRetry(button) {
   if (!(button instanceof HTMLButtonElement)) return;
+  const owner = captureOrderOwner();
+  if (!owner) return;
   const orderId = String(button.dataset.paymentRetry || "").trim().toUpperCase();
-  if (!orderId || button.dataset.launchPaymentBound === "true") return;
+  const previous = retryButtonBindings.get(button);
+  if (!orderId || (previous?.orderId === orderId && ownsOrderPublication(previous.owner))) return;
+  const binding = { owner, orderId };
+  retryButtonBindings.set(button, binding);
   button.dataset.launchPaymentBound = "true";
   button.disabled = true;
   button.setAttribute("aria-busy", "true");
@@ -154,14 +172,14 @@ function decoratePaymentRetry(button) {
   loadTossSdk().catch(() => undefined);
   primePayment(orderId)
     .then(() => {
-      if (!button.isConnected) return;
+      if (retryButtonBindings.get(button) !== binding || !ownsOrderPublication(owner) || !button.isConnected) return;
       button.disabled = false;
       button.removeAttribute("aria-busy");
       button.textContent = "토스 결제하기";
       setInlineStatus(button, "결제 준비가 완료되었습니다. 아래 버튼을 눌러 토스 결제창을 여세요.");
     })
     .catch((error) => {
-      if (!button.isConnected) return;
+      if (retryButtonBindings.get(button) !== binding || !ownsOrderPublication(owner) || !button.isConnected) return;
       button.disabled = true;
       button.removeAttribute("aria-busy");
       button.textContent = "현재 결제할 수 없습니다";
@@ -462,17 +480,23 @@ document.addEventListener("click", (event) => {
   if (paymentButton) {
     event.preventDefault();
     event.stopImmediatePropagation();
+    const owner = captureOrderOwner();
+    if (!owner) return;
     const orderId = String(paymentButton.dataset.paymentRetry || "").trim().toUpperCase();
-    if (!preparedPayments.has(orderId)) {
+    if (!preparedPaymentFor(orderId)) {
       paymentButton.disabled = true;
       paymentButton.textContent = "토스 결제 준비 중…";
       primePayment(orderId)
         .then(() => {
+          if (!ownsOrderPublication(owner) || !paymentButton.isConnected) return;
           paymentButton.disabled = false;
           paymentButton.textContent = "토스 결제하기";
           setInlineStatus(paymentButton, "준비가 완료되었습니다. 결제 버튼을 한 번 더 눌러주세요.");
         })
-        .catch((error) => setInlineStatus(paymentButton, error?.message || "결제 준비에 실패했습니다.", "error"));
+        .catch((error) => {
+          if (!ownsOrderPublication(owner) || !paymentButton.isConnected) return;
+          setInlineStatus(paymentButton, error?.message || "결제 준비에 실패했습니다.", "error");
+        });
       return;
     }
     try {
@@ -481,13 +505,14 @@ document.addEventListener("click", (event) => {
       paymentButton.textContent = "토스 결제창 여는 중…";
       const request = requestPreparedPayment(orderId);
       Promise.resolve(request).catch((error) => {
-        if (!paymentButton.isConnected) return;
+        if (!ownsOrderPublication(owner) || !paymentButton.isConnected) return;
         paymentButton.disabled = false;
         paymentButton.removeAttribute("aria-busy");
         paymentButton.textContent = "토스 결제하기";
         setInlineStatus(paymentButton, error?.message || "토스 결제창을 열지 못했습니다.", "error");
       });
     } catch (error) {
+      if (!ownsOrderPublication(owner) || !paymentButton.isConnected) return;
       paymentButton.disabled = false;
       paymentButton.removeAttribute("aria-busy");
       paymentButton.textContent = "토스 결제하기";
@@ -531,6 +556,7 @@ document.addEventListener("click", (event) => {
   }
 }, true);
 
+document.addEventListener("reball:order-owner-changed", queueHardenDom);
 new MutationObserver(queueHardenDom).observe(document.documentElement, { childList: true, subtree: true });
 window.addEventListener("hashchange", queueHardenDom);
 window.addEventListener("pageshow", queueHardenDom);

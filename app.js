@@ -835,6 +835,9 @@ async function syncSessionState(session, options = {}) {
   if (state.authUser?.id !== session.user.id) emptyAuthData();
   state.authSession = session;
   state.authUser = session.user;
+  // Payment-return routes may retain their DOM while account data loads.
+  // Notify runtime controls only after both pieces of the new identity are bound.
+  globalThis.document?.dispatchEvent?.(new CustomEvent("reball:order-owner-changed"));
   await loadAccountData(session.user, { silent });
   await loadCurrentAuthRoles({ force: true });
 }
@@ -876,6 +879,7 @@ async function initializeAuth() {
           if (state.authUser?.id !== session.user.id) emptyAuthData();
           state.authSession = session;
           state.authUser = session.user;
+          globalThis.document?.dispatchEvent?.(new CustomEvent("reball:order-owner-changed"));
           if (event !== "TOKEN_REFRESHED") await loadAccountData(session.user, { silent: true });
           else if (!state.viewer) state.viewer = buildViewer(session.user);
           if (event !== "TOKEN_REFRESHED" || !state.authRolesLoaded) {

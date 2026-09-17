@@ -117,3 +117,43 @@ for (const flow of ["confirm", "cancel"]) {
     }
   }
 }
+
+test("retry preparation rebinds the connected payment-return button after sign-in", async ({ page }) => {
+  await browserHarness(page, null);
+  const pending = [];
+  await page.route("https://js.tosspayments.com/v2/standard", route => route.fulfill({
+    contentType: "application/javascript",
+    body: `window.__retrySdkRequests = []; window.TossPayments = () => ({
+      payment: ({ customerKey }) => ({ requestPayment: payment => {
+        window.__retrySdkRequests.push({ customerKey, payment });
+        return Promise.resolve();
+      } })
+    });`,
+  }));
+  await page.route("**/functions/v1/prepare-payment", route => { pending.push(route); });
+  await page.goto(`/?payment=fail&orderId=${orderId}#/payment/fail`);
+  await expect.poll(() => pending.length).toBe(1);
+  const button = page.locator(`[data-payment-retry="${orderId}"]`);
+  await expect(button).toBeDisabled();
+  await button.evaluate(element => { window.__originalRetryButton = element; });
+  await page.evaluate(() => window.__authEmit("SIGNED_IN", "A"));
+  await expect.poll(() => page.evaluate(() => window.__owner().userId)).toBe("A");
+  await expect(page).toHaveURL(/#\/payment\/fail(?:\?|$)/);
+  await expect.poll(() => pending.length).toBe(2);
+  expect(await button.evaluate(element => element === window.__originalRetryButton)).toBe(true);
+
+  const prepared = customerKey => ({ clientKey: "synthetic-client-key", customerKey,
+    payment: { orderId, method: "CARD", amount: { currency: "KRW", value: 17000 },
+      successUrl: "https://synthetic.invalid/payment/success", failUrl: "https://synthetic.invalid/payment/fail" } });
+  const staleResponse = page.waitForResponse(response => response.url().endsWith("/prepare-payment"));
+  await pending[0].fulfill({ json: prepared("stale-guest") });
+  await staleResponse;
+  await page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))));
+  await expect(button).toBeDisabled();
+  expect(await page.evaluate(() => window.__retrySdkRequests)).toEqual([]);
+  await pending[1].fulfill({ json: prepared("current-member-A") });
+  await expect(button).toBeEnabled();
+  await button.click();
+  await expect.poll(() => page.evaluate(() => window.__retrySdkRequests.map(request => request.customerKey)))
+    .toEqual(["current-member-A"]);
+});

@@ -30,7 +30,7 @@ function harness(user = "A") {
     },
   };
   const context = createContext({ state, document, console, URLSearchParams,
-    CustomEvent: class { constructor(type, options) { this.type = type; this.detail = options.detail; } },
+    CustomEvent: class { constructor(type, options = {}) { this.type = type; this.detail = options.detail; } },
     SUPABASE_URL: "synthetic", SUPABASE_KEY: "synthetic", paymentProfile: { methods: [] }, shippingPolicy: {},
     confirm: () => true, createIdempotencyKey: () => "order_synthetic", localStorage: { getItem: () => null }, sessionStorage: storage,
     loadGuestLookupSession: () => ({ orderId: "RB-SYNTHETIC-A", lookupToken: "synthetic-lookup" }),
@@ -250,4 +250,327 @@ test("N05: an unavailable SPA owner fails closed before request dispatch", async
   const lookup = h.context.fetchOrderSnapshot("RB-SYNTHETIC-A");
   assert.equal(h.requests.length, 0);
   assert.equal(await lookup, null);
+});
+
+function preparationHarness(user = "A") {
+  const h = harness(user);
+  h.context.loadTossSdk = () => Promise.resolve();
+  h.context.prepareTossPayment = (config, orderId) => new Promise((resolve, reject) => {
+    h.requests.push({ config, orderId, resolve, reject });
+  });
+  class RetryButton {
+    constructor() {
+      this.dataset = { paymentRetry: "RB-SYNTHETIC-A" };
+      this.disabled = false;
+      this.isConnected = true;
+      this.textContent = "Retry";
+      this.attrs = {};
+    }
+    setAttribute(name, value) { this.attrs[name] = value; }
+    removeAttribute(name) { delete this.attrs[name]; }
+    closest(selector) { return selector === "[data-payment-retry]" ? this : null; }
+  }
+  h.context.Element = RetryButton;
+  h.context.HTMLButtonElement = RetryButton;
+  h.button = new RetryButton();
+  h.sdkRequests = [];
+  h.context.TossPayments = () => ({ payment: ({ customerKey }) => ({
+    requestPayment: payment => new Promise((resolve, reject) => {
+      h.sdkRequests.push({ customerKey, payment, resolve, reject });
+    }),
+  }) });
+  h.click = () => h.document.dispatchEvent({ type: "click", target: h.button,
+    preventDefault() {}, stopImmediatePropagation() {} });
+  return h;
+}
+
+const preparedFor = (customerKey = "A") => ({
+  clientKey: "synthetic-client-key", customerKey,
+  payment: { orderId: "RB-SYNTHETIC-A", successUrl: "https://synthetic.invalid/return" },
+});
+const flushPreparation = () => new Promise(resolve => setImmediate(resolve));
+
+for (const mode of ["B", "direct-B", "logout", "logout-A", "guest-member"]) {
+  test(`prepare: ${mode} neither reuses completed capability nor launches prior owner's SDK`, async () => {
+    const h = preparationHarness(mode === "guest-member" ? null : "A");
+    const initial = h.context.primePayment("RB-SYNTHETIC-A");
+    h.requests[0].resolve(preparedFor());
+    await initial;
+    switchIdentity(h, mode);
+    assert.throws(() => h.context.requestPreparedPayment("RB-SYNTHETIC-A"));
+    assert.equal(h.sdkRequests.length, 0);
+    h.click();
+    assert.equal(h.sdkRequests.length, 0, "stale cache must trigger fresh preparation on click");
+    const current = h.context.primePayment("RB-SYNTHETIC-A");
+    assert.equal(h.requests.length, 2, "current owner must obtain fresh server authority");
+    h.requests[1].resolve(preparedFor("current"));
+    assert.equal((await current).customerKey, "current");
+  });
+
+  test(`prepare: ${mode} stale completion cannot publish or clear newer request`, async () => {
+    const h = preparationHarness(mode === "guest-member" ? null : "A");
+    const old = h.context.primePayment("RB-SYNTHETIC-A");
+    switchIdentity(h, mode);
+    const current = h.context.primePayment("RB-SYNTHETIC-A");
+    assert.equal(h.requests.length, 2);
+    h.requests[0].resolve(preparedFor());
+    await old;
+    assert.equal(runInContext("preparedPayments.size", h.context), 0);
+    assert.equal(runInContext("preparingPayments.size", h.context), 1);
+    const joined = h.context.primePayment("RB-SYNTHETIC-A");
+    assert.equal(h.requests.length, 2, "old cleanup must not discard the current request");
+    h.requests[1].resolve(preparedFor("current"));
+    assert.equal((await current).customerKey, "current");
+    assert.equal((await joined).customerKey, "current");
+  });
+
+  for (const flow of ["decorate", "click"]) {
+    for (const failure of [false, true]) {
+      test(`prepare ${flow}: ${mode} stale ${failure ? "error" : "success"} cannot update retry DOM`, async () => {
+        const h = preparationHarness(mode === "guest-member" ? null : "A");
+        if (flow === "decorate") h.context.decoratePaymentRetry(h.button);
+        else h.click();
+        assert.equal(h.requests.length, 1);
+        switchIdentity(h, mode);
+        const before = JSON.stringify({ button: h.button, inline: h.effects.inline });
+        if (failure) h.requests[0].reject(new Error("stale synthetic preparation failure"));
+        else h.requests[0].resolve(preparedFor());
+        await flushPreparation();
+        assert.equal(JSON.stringify({ button: h.button, inline: h.effects.inline }), before);
+        assert.equal(runInContext("preparedPayments.size", h.context), 0);
+      });
+    }
+  }
+
+  for (const failure of [false, true]) {
+  test(`payment SDK: ${mode} stale ${failure ? "error" : "success"} cannot update retry DOM`, async () => {
+    const h = preparationHarness(mode === "guest-member" ? null : "A");
+    const pending = h.context.primePayment("RB-SYNTHETIC-A");
+    h.requests[0].resolve(preparedFor());
+    await pending;
+    h.click();
+    assert.equal(h.sdkRequests.length, 1);
+    switchIdentity(h, mode);
+    const before = JSON.stringify({ button: h.button, inline: h.effects.inline });
+    if (failure) h.sdkRequests[0].reject(new Error("stale synthetic SDK failure"));
+    else h.sdkRequests[0].resolve();
+    await flushPreparation();
+    assert.equal(JSON.stringify({ button: h.button, inline: h.effects.inline }), before);
+  });
+  }
+}
+
+for (const user of ["A", null]) {
+  test(`prepare: same ${user || "guest"} owner coalesces and survives token refresh`, async () => {
+    const h = preparationHarness(user);
+    const first = h.context.primePayment("RB-SYNTHETIC-A");
+    if (user) h.state.authSession = { access_token: "synthetic-refreshed-token" };
+    const second = h.context.primePayment("RB-SYNTHETIC-A");
+    assert.equal(h.requests.length, 1);
+    const customerKey = user || "guest";
+    h.requests[0].resolve(preparedFor(customerKey));
+    assert.equal((await first).customerKey, customerKey);
+    assert.equal((await second).customerKey, customerKey);
+    assert.equal((await h.context.primePayment("RB-SYNTHETIC-A")).customerKey, customerKey);
+    h.click();
+    assert.equal(h.sdkRequests.length, 1);
+    h.sdkRequests[0].reject(new Error("current SDK failure"));
+    await flushPreparation();
+    assert.equal(h.button.disabled, false);
+    assert.equal(h.effects.inline.at(-1).text, "current SDK failure");
+  });
+}
+
+for (const flow of ["decorate", "click"]) {
+  for (const failure of [false, true]) {
+    test(`prepare ${flow}: current ${failure ? "error" : "success"} remains visible`, async () => {
+      const h = preparationHarness();
+      if (flow === "decorate") h.context.decoratePaymentRetry(h.button);
+      else h.click();
+      if (failure) h.requests[0].reject(new Error("current preparation failure"));
+      else h.requests[0].resolve(preparedFor());
+      await flushPreparation();
+      assert.equal(h.effects.inline.length, 1);
+      if (failure) assert.equal(h.effects.inline[0].text, "current preparation failure");
+      else assert.equal(h.button.disabled, false);
+    });
+
+    test(`prepare ${flow}: detached button ignores ${failure ? "error" : "success"}`, async () => {
+      const h = preparationHarness();
+      if (flow === "decorate") h.context.decoratePaymentRetry(h.button);
+      else h.click();
+      h.button.isConnected = false;
+      const before = JSON.stringify({ button: h.button, inline: h.effects.inline });
+      if (failure) h.requests[0].reject(new Error("detached preparation failure"));
+      else h.requests[0].resolve(preparedFor());
+      await flushPreparation();
+      assert.equal(JSON.stringify({ button: h.button, inline: h.effects.inline }), before);
+    });
+  }
+}
+
+test("prepare: unavailable owner fails closed before fetch or SDK", async () => {
+  const h = preparationHarness();
+  h.document.dispatchEvent = () => true;
+  const pending = h.context.primePayment("RB-SYNTHETIC-A");
+  assert.equal(h.requests.length, 0);
+  assert.equal(await pending, null);
+  assert.throws(() => h.context.requestPreparedPayment("RB-SYNTHETIC-A"));
+  assert.equal(h.sdkRequests.length, 0);
+});
+
+for (const stale of [false, true]) {
+  test(`payment SDK: synchronous ${stale ? "stale" : "current"} failure respects ownership`, async () => {
+    const h = preparationHarness();
+    const pending = h.context.primePayment("RB-SYNTHETIC-A");
+    h.requests[0].resolve(preparedFor());
+    await pending;
+    let before;
+    h.context.TossPayments = () => {
+      if (stale) switchIdentity(h, "B");
+      before = JSON.stringify({ button: h.button, inline: h.effects.inline });
+      throw new Error("synchronous SDK failure");
+    };
+    h.click();
+    if (stale) assert.equal(JSON.stringify({ button: h.button, inline: h.effects.inline }), before);
+    else {
+      assert.equal(h.button.disabled, false);
+      assert.equal(h.effects.inline.at(-1).text, "synchronous SDK failure");
+    }
+  });
+}
+
+test("prepare UI: unavailable owner cannot bind, dispatch, or change a retry button", () => {
+  const h = preparationHarness();
+  h.context.captureOrderOwner = () => null;
+  const before = JSON.stringify(h.button);
+  h.context.decoratePaymentRetry(h.button);
+  h.click();
+  assert.equal(JSON.stringify(h.button), before);
+  assert.equal(h.requests.length, 0);
+  assert.equal(h.sdkRequests.length, 0);
+});
+
+test("prepare: invalid provider result never becomes a usable capability", async () => {
+  const h = preparationHarness();
+  h.context.decoratePaymentRetry(h.button);
+  h.requests[0].resolve({ payment: {}, clientKey: "synthetic" });
+  await flushPreparation();
+  assert.equal(runInContext("preparedPayments.size", h.context), 0);
+  assert.equal(h.button.disabled, true);
+  assert.equal(h.effects.inline.length, 1);
+  assert.throws(() => h.context.requestPreparedPayment("RB-SYNTHETIC-A"));
+});
+
+test("prepare UI: SDK load failure stays visible for the current owner", async () => {
+  const h = preparationHarness();
+  h.context.loadTossSdk = () => Promise.reject(new Error("synthetic SDK load failure"));
+  h.context.decoratePaymentRetry(h.button);
+  h.requests[0].resolve(preparedFor());
+  await flushPreparation();
+  assert.equal(h.button.disabled, true);
+  assert.equal(h.effects.inline.at(-1).text, "synthetic SDK load failure");
+  assert.equal(runInContext("preparedPayments.size", h.context), 0);
+});
+
+for (const mode of ["B", "logout-A", "guest-member"]) {
+  test(`prepare UI: ${mode} can rebind the same connected retry button`, async () => {
+    const h = preparationHarness(mode === "guest-member" ? null : "A");
+    h.context.decoratePaymentRetry(h.button);
+    switchIdentity(h, mode);
+    h.context.decoratePaymentRetry(h.button);
+    assert.equal(h.requests.length, 2, "fresh owner must not inherit the permanent bound marker");
+    h.context.decoratePaymentRetry(h.button);
+    assert.equal(h.requests.length, 2, "same owner hardening must remain idempotent");
+    h.requests[0].resolve(preparedFor("old"));
+    await flushPreparation();
+    assert.equal(h.button.disabled, true, "stale completion cannot enable current pending preparation");
+    h.requests[1].resolve(preparedFor("current"));
+    await flushPreparation();
+    assert.equal(h.button.disabled, false);
+    h.click();
+    assert.equal(h.sdkRequests.length, 1);
+    assert.equal(h.sdkRequests[0].customerKey, "current");
+    h.sdkRequests[0].resolve();
+  });
+}
+
+function authPreparationHarness() {
+  const h = preparationHarness(null);
+  h.context.queueMicrotask = queueMicrotask;
+  h.document.querySelectorAll = selector => selector === "[data-payment-retry]" ? [h.button] : [];
+  h.context.loadAccountData = () => new Promise(resolve => { h.completeAccount = resolve; });
+  h.context.loadCurrentAuthRoles = async () => {};
+  h.context.parseRoute = () => "/payment/fail";
+  h.context.handleAuthCallbackHash = async () => false;
+  h.context.handlePaymentReturn = async () => true;
+  h.context.paymentReturnKind = () => "fail";
+  h.context.normalizeAuthError = error => error.message;
+  h.context.buildViewer = () => ({});
+  h.context.supabase = { auth: {
+    getSession: async () => ({ data: { session: null }, error: null }),
+    onAuthStateChange: callback => { h.emitAuth = callback; },
+  } };
+  h.notices = [];
+  h.document.addEventListener("reball:order-owner-changed", () => h.notices.push({
+    owner: h.context.captureOrderOwner(), token: h.state.authSession?.access_token,
+  }));
+  runInContext(production(app, "async function syncSessionState(", "async function handleAuthFormSubmit("), h.context);
+  return h;
+}
+
+for (const path of ["syncSessionState", "auth-listener"]) {
+  test(`prepare UI: actual ${path} publishes stable auth owner and retries without route render`, async () => {
+    const h = authPreparationHarness();
+    if (path === "auth-listener") await h.context.initializeAuth();
+    h.context.decoratePaymentRetry(h.button);
+    const epoch = h.state.authEpoch || 0;
+    const session = { user: { id: "A" }, access_token: "synthetic-member-token" };
+    const pending = path === "syncSessionState"
+      ? h.context.syncSessionState(session)
+      : h.emitAuth("SIGNED_IN", session);
+    await flushPreparation();
+    assert.equal(typeof h.completeAccount, "function", "account load is still pending");
+    assert.equal(h.notices.length, 1, "actual auth assignment must announce the stable owner");
+    assert.equal(h.notices[0].owner.userId, "A");
+    assert.ok(h.notices[0].owner.epoch > epoch);
+    assert.equal(h.notices[0].token, session.access_token);
+    assert.equal(h.effects.renders.length, 0);
+    assert.equal(h.requests.length, 2, "notification must rebind the existing button before account await");
+    h.requests[0].resolve(preparedFor("guest"));
+    await flushPreparation();
+    assert.equal(h.button.disabled, true);
+    h.requests[1].resolve(preparedFor("A"));
+    await flushPreparation();
+    assert.equal(h.button.disabled, false);
+    h.completeAccount();
+    await pending;
+    await flushPreparation();
+    assert.equal(h.effects.renders.length, 0, "payment-return route deliberately keeps the connected DOM");
+    h.click();
+    assert.equal(h.sdkRequests.length, 1);
+    assert.equal(h.sdkRequests[0].customerKey, "A");
+    h.sdkRequests[0].resolve();
+  });
+}
+
+test("prepare UI: actual TOKEN_REFRESHED notice keeps same-owner binding and in-flight request", async () => {
+  const h = authPreparationHarness();
+  await h.context.initializeAuth();
+  h.state.authUser = { id: "A" };
+  h.state.authSession = { user: h.state.authUser, access_token: "synthetic-before" };
+  h.state.viewer = {};
+  h.state.authRolesLoaded = true;
+  h.context.decoratePaymentRetry(h.button);
+  const epoch = h.state.authEpoch;
+  h.emitAuth("TOKEN_REFRESHED", { user: { id: "A" }, access_token: "synthetic-refreshed" });
+  await flushPreparation();
+  assert.equal(h.notices.length, 1);
+  assert.equal(h.notices[0].owner.epoch, epoch);
+  assert.equal(h.notices[0].token, "synthetic-refreshed");
+  assert.equal(h.requests.length, 1);
+  h.requests[0].resolve(preparedFor("A"));
+  await flushPreparation();
+  assert.equal(h.button.disabled, false);
+  assert.equal(h.effects.renders.length, 0);
 });
