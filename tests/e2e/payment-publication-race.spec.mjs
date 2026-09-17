@@ -131,7 +131,11 @@ test("retry preparation rebinds the connected payment-return button after sign-i
     });`,
   }));
   await page.route("**/functions/v1/prepare-payment", route => { pending.push(route); });
-  await page.goto(`/?payment=fail&orderId=${orderId}#/payment/fail`);
+  // Finish initial guest auth before introducing a payment-return surface; its
+  // initial epoch invalidation is distinct from the sign-in transition below.
+  await page.goto("/#/");
+  await expect.poll(() => page.evaluate(() => window.__owner()?.epoch || 0)).toBeGreaterThan(0);
+  await page.evaluate(id => { location.hash = `/payment/fail?orderId=${id}`; }, orderId);
   await expect.poll(() => pending.length).toBe(1);
   const button = page.locator(`[data-payment-retry="${orderId}"]`);
   await expect(button).toBeDisabled();
