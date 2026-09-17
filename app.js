@@ -808,7 +808,18 @@ function commitServerOrder(order) {
 // Runtime modules (cancellation, recovery) act on the server directly and cannot
 // reach this module's state. Registered once, at module scope, so re-renders do not
 // stack duplicate listeners.
+document.addEventListener("reball:order-owner", (event) => {
+  if (typeof event.detail?.capture !== "function") return;
+  event.detail.capture(Object.freeze({
+    userId: state.authUser?.id ?? null,
+    epoch: state.authEpoch || 0,
+  }));
+});
+
 document.addEventListener("reball:order-updated", (event) => {
+  const owner = event.detail?.owner;
+  if (!owner || owner.userId !== (state.authUser?.id ?? null)
+    || owner.epoch !== (state.authEpoch || 0)) return;
   const order = normalizeServerOrder(event.detail?.order);
   if (order) commitServerOrder(order);
 });
@@ -821,6 +832,7 @@ async function syncSessionState(session, options = {}) {
     return;
   }
 
+  if (state.authUser?.id !== session.user.id) emptyAuthData();
   state.authSession = session;
   state.authUser = session.user;
   await loadAccountData(session.user, { silent });
@@ -861,6 +873,7 @@ async function initializeAuth() {
         }
 
         if (session?.user) {
+          if (state.authUser?.id !== session.user.id) emptyAuthData();
           state.authSession = session;
           state.authUser = session.user;
           if (event !== "TOKEN_REFRESHED") await loadAccountData(session.user, { silent: true });
@@ -1113,14 +1126,18 @@ async function handleLogout(redirect = "/", options = {}) {
 
 async function loadCurrentAuthRoles(options = {}) {
   const { force = false } = options;
-  if (!state.authUser?.id) {
+  const actingUserId = state.authUser?.id;
+  if (!actingUserId) {
     state.authRoles = [];
     state.authRolesLoaded = true;
     return [];
   }
   if (state.authRolesLoaded && !force) return state.authRoles;
 
-  const { data, error } = await supabase.from("user_roles").select("role").eq("user_id", state.authUser.id);
+  state.authRolesLoadSeq = (state.authRolesLoadSeq || 0) + 1;
+  const rolesLoadTicket = state.authRolesLoadSeq;
+  const { data, error } = await supabase.from("user_roles").select("role").eq("user_id", actingUserId);
+  if (rolesLoadTicket !== state.authRolesLoadSeq || state.authUser?.id !== actingUserId) return [];
   if (error) throw error;
 
   state.authRoles = [...new Set((data || []).map((row) => stringOrEmpty(row.role).trim()).filter(Boolean))];
@@ -1205,7 +1222,8 @@ async function loadAdminMembers(options = {}) {
 }
 
 async function handleProfileSave(form) {
-  if (!state.authUser) {
+  const actingUser = state.authUser;
+  if (!actingUser) {
     showToast("로그인 상태를 다시 확인해 주세요.");
     routeTo("/login");
     return;
@@ -1216,7 +1234,7 @@ async function handleProfileSave(form) {
     name: stringOrEmpty(formData.get("name")).trim(),
     phone: stringOrEmpty(formData.get("phone")).trim(),
     telephone: stringOrEmpty(formData.get("telephone")).trim(),
-    email: stringOrEmpty(formData.get("email")).trim() || stringOrEmpty(state.authUser.email),
+    email: stringOrEmpty(formData.get("email")).trim() || stringOrEmpty(actingUser.email),
     marketing_sms: boolFromYesNo(formData.get("smsOptIn")),
     marketing_email: boolFromYesNo(formData.get("emailOptIn")),
     birth_date: stringOrEmpty(formData.get("birthday")).trim(),
@@ -1226,11 +1244,13 @@ async function handleProfileSave(form) {
   };
 
   try {
-    const profile = await ensureProfileRecord(state.authUser, payload);
-    state.viewer = buildViewer(state.authUser, profile);
+    const profile = await ensureProfileRecord(actingUser, payload);
+    if (state.authUser?.id !== actingUser.id) return;
+    state.viewer = buildViewer(actingUser, profile);
     showToast("회원 정보가 수정되었습니다.");
     renderMypage();
   } catch (error) {
+    if (state.authUser?.id !== actingUser.id) return;
     showToast(normalizeAuthError(error, "회원 정보를 저장하지 못했습니다."));
   }
 }
@@ -1385,8 +1405,14 @@ function normalizeAuthError(error, fallback = "요청을 처리하지 못했습�
 }
 
 function emptyAuthData() {
+  state.authEpoch = (state.authEpoch || 0) + 1;
   // Invalidate any account load in flight so it cannot repopulate after sign-out.
   state.accountLoadSeq = (state.accountLoadSeq || 0) + 1;
+  state.authRolesLoadSeq = (state.authRolesLoadSeq || 0) + 1;
+  state.orderCreateSeq = (state.orderCreateSeq || 0) + 1;
+  state.checkoutBusy = false;
+  state.checkoutIdempotencyKey = "";
+  state.paymentRequestState = "idle";
   state.viewer = null;
   state.authSession = null;
   state.authUser = null;
@@ -3433,6 +3459,12 @@ function renderCheckout() {
 
 async function createOrder(formData) {
   if (state.checkoutBusy) return;
+  const actingUserId = state.authUser?.id ?? null;
+  state.orderCreateSeq = (state.orderCreateSeq || 0) + 1;
+  const orderCreateTicket = state.orderCreateSeq;
+  // Session invalidation also advances this ticket, including sign-out/sign-in as the same user.
+  const ownsCheckout = () => orderCreateTicket === state.orderCreateSeq
+    && (state.authUser?.id ?? null) === actingUserId;
   const customer = checkoutCustomerFromForm(formData);
   if (!isCheckoutCustomerValid(customer)) {
     showToast("받는 사람, 휴대폰 번호, 5자리 우편번호와 기본주소를 확인해 주세요.");
@@ -3463,6 +3495,7 @@ async function createOrder(formData) {
         paymentMethod: String(formData.get("payment") || "card"),
       }
     );
+    if (!ownsCheckout()) return;
     const order = normalizeServerOrder(result);
     if (!order) throw new Error("서버 주문 응답에 주문번호가 없습니다.");
     order.customer = { ...order.customer, name: order.customer?.name || customer.receiverName };
@@ -3476,11 +3509,14 @@ async function createOrder(formData) {
     routeTo(`/order/${order.id}`);
     await maybeRequestTossPayment(order, result);
   } catch (error) {
+    if (!ownsCheckout()) return;
     state.paymentRequestState = "error";
     showToast(normalizeAuthError(error, "주문을 생성하지 못했습니다. 장바구니는 유지됩니다."));
   } finally {
-    state.checkoutBusy = false;
-    if (parseRoute() === "/checkout") renderCheckout();
+    if (ownsCheckout()) {
+      state.checkoutBusy = false;
+      if (parseRoute() === "/checkout") renderCheckout();
+    }
   }
 }
 
@@ -3572,6 +3608,21 @@ async function handlePaymentReturn() {
     return true;
   }
 
+  const actingUserId = state.authUser?.id ?? null;
+  const authEpoch = state.authEpoch || 0;
+  state.paymentConfirmSeq = (state.paymentConfirmSeq || 0) + 1;
+  const confirmationTicket = state.paymentConfirmSeq;
+  const ownsConfirmation = () => confirmationTicket === state.paymentConfirmSeq
+    && authEpoch === (state.authEpoch || 0)
+    && actingUserId === (state.authUser?.id ?? null);
+  const paymentStorage = globalThis.sessionStorage;
+  // The payment client also publishes guest credentials and clears recovery data.
+  // Bind those deferred storage effects to the same owner as the visible result.
+  const ownedStorage = {
+    getItem: (key) => ownsConfirmation() ? paymentStorage?.getItem(key) ?? null : null,
+    setItem: (key, value) => { if (ownsConfirmation()) paymentStorage?.setItem(key, value); },
+    removeItem: (key) => { if (ownsConfirmation()) paymentStorage?.removeItem(key); },
+  };
   renderPaymentReturnStatus({ kind: "processing", orderId });
   try {
     const guestLookup = loadGuestLookupSession(globalThis.sessionStorage);
@@ -3580,6 +3631,7 @@ async function handlePaymentReturn() {
         baseUrl: SUPABASE_URL,
         anonKey: SUPABASE_KEY,
         accessToken: state.authSession?.access_token || "",
+        storage: ownedStorage,
       },
       {
         paymentKey: params.get("paymentKey"),
@@ -3588,6 +3640,7 @@ async function handlePaymentReturn() {
         guestLookupToken: guestLookup?.orderId === orderId ? guestLookup.lookupToken : "",
       }
     );
+    if (!ownsConfirmation()) return true;
     const order = normalizeServerOrder(result);
     if (!order) throw new Error("결제 완료 주문을 확인하지 못했습니다.");
     commitServerOrder(order);
@@ -3596,6 +3649,7 @@ async function handlePaymentReturn() {
     renderRoute();
     showToast(result.paid ? "결제가 완료되었습니다." : "가상계좌 입금 안내를 확인해 주세요.");
   } catch (error) {
+    if (!ownsConfirmation()) return true;
     const needsRecovery = ["PAYMENT_CONFIRM_RECOVERY_REQUIRED", "PAYMENT_CONFIRM_AUTH_REQUIRED"].includes(error?.code);
     // A definitive decline leaves the order payment_failed, so prepare-payment will
     // refuse it. Advertising "결제 다시 시도" there is a control that cannot succeed.

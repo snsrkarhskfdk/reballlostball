@@ -19,6 +19,21 @@ paymentProfile.methods.splice(0, paymentProfile.methods.length, "카드", "계�
 paymentProfile.transferLabel = "토스페이먼츠 결제 안내";
 shippingPolicy.maxLeadTime = "결제일로부터 최대 7일";
 
+// The SPA owns identity and increments its epoch on every session invalidation.
+// Capture synchronously so tokens and order responses never become ownership proof.
+function captureOrderOwner() {
+  let owner = null;
+  document.dispatchEvent(new CustomEvent("reball:order-owner", {
+    detail: { capture: (current) => { owner = current; } },
+  }));
+  return owner;
+}
+
+function ownsOrderPublication(owner) {
+  const current = captureOrderOwner();
+  return Boolean(owner && current && owner.userId === current.userId && owner.epoch === current.epoch);
+}
+
 function accessTokenFromStorage() {
   try {
     const raw = localStorage.getItem(AUTH_STORAGE_KEY);
@@ -156,20 +171,27 @@ function decoratePaymentRetry(button) {
 
 async function fetchOrderSnapshot(orderId, { force = false } = {}) {
   const safeOrderId = String(orderId || "").trim().toUpperCase();
-  if (!force && orderSnapshots.has(safeOrderId)) return orderSnapshots.get(safeOrderId);
-  if (!force && loadingOrders.has(safeOrderId)) return loadingOrders.get(safeOrderId);
+  const owner = captureOrderOwner();
+  if (!owner) return null;
+  const cached = orderSnapshots.get(safeOrderId);
+  const loading = loadingOrders.get(safeOrderId);
+  if (!force && cached && ownsOrderPublication(cached.owner)) return cached.order;
+  if (!force && loading && ownsOrderPublication(loading.owner)) return loading.promise;
   const lookup = guestLookupFor(safeOrderId);
   const promise = postFunction(
     "get-order",
     { orderNo: safeOrderId, ...(lookup?.lookupToken ? { guestLookupToken: lookup.lookupToken } : {}) },
     { accessToken: accessTokenFromStorage() }
   ).then((payload) => {
+    if (!ownsOrderPublication(owner)) return null;
     const order = payload?.order;
     if (!order || typeof order !== "object") throw new Error("주문 정보를 확인할 수 없습니다.");
-    orderSnapshots.set(safeOrderId, order);
+    orderSnapshots.set(safeOrderId, { owner, order });
     return order;
-  }).finally(() => loadingOrders.delete(safeOrderId));
-  loadingOrders.set(safeOrderId, promise);
+  }).finally(() => {
+    if (loadingOrders.get(safeOrderId)?.promise === promise) loadingOrders.delete(safeOrderId);
+  });
+  loadingOrders.set(safeOrderId, { owner, promise });
   return promise;
 }
 
@@ -230,6 +252,8 @@ function installCancelAction(root, orderId, order) {
 }
 
 async function hydrateOrderPage(root) {
+  const owner = captureOrderOwner();
+  if (!owner) return;
   const orderId = [...root.querySelectorAll("dt")]
     .find((node) => node.textContent.trim() === "주문번호")
     ?.nextElementSibling?.textContent?.trim().toUpperCase();
@@ -238,7 +262,7 @@ async function hydrateOrderPage(root) {
   maskGuestToken(root, orderId);
   try {
     const order = await fetchOrderSnapshot(orderId);
-    if (!root.isConnected) return;
+    if (!ownsOrderPublication(owner) || !root.isConnected || !order) return;
     updateDefinitionField(root, "배송상태", valueForOrderField(order, "배송상태"));
     updateDefinitionField(root, "택배사", valueForOrderField(order, "택배사"));
     updateDefinitionField(root, "송장번호", valueForOrderField(order, "송장번호"));
@@ -306,9 +330,10 @@ function configureAdminShippingForm(form) {
     primary.textContent = "배송정보 확인 중…";
   }
 
+  const owner = captureOrderOwner();
   fetchOrderSnapshot(orderNo, { force: true })
     .then((order) => {
-      if (!form.isConnected) return;
+      if (!ownsOrderPublication(owner) || !form.isConnected || !order) return;
       form.dataset.orderDbId = String(order.id || "");
       form.dataset.currentShippingStatus = String(order.status || "");
       const carrier = form.querySelector('[name="trackingCompany"]');
@@ -331,6 +356,7 @@ function configureAdminShippingForm(form) {
       }
     })
     .catch((error) => {
+      if (!ownsOrderPublication(owner) || !form.isConnected) return;
       if (primary) {
         primary.disabled = true;
         primary.removeAttribute("aria-busy");
@@ -370,6 +396,8 @@ async function saveAdminShipping(form, button) {
 }
 
 async function cancelPayment(orderId, button) {
+  const owner = captureOrderOwner();
+  if (!owner) return;
   const safeOrderId = String(orderId || "").trim().toUpperCase();
   if (!confirm("이 주문의 결제를 전액 취소할까요?")) return;
   const lookup = guestLookupFor(safeOrderId);
@@ -388,20 +416,23 @@ async function cancelPayment(orderId, button) {
       },
       { accessToken: accessTokenFromStorage(), idempotencyKey }
     );
+    if (!ownsOrderPublication(owner)) return;
     const order = result?.order;
     if (order && typeof order === "object") {
-      orderSnapshots.set(safeOrderId, order);
+      orderSnapshots.set(safeOrderId, { owner, order });
       // The SPA renders orders from its own state, so a DOM-only update is discarded
       // on the next navigation and the cancelled order reappears as paid. Hand the
       // authoritative server order back rather than keeping it in this module.
-      document.dispatchEvent(new CustomEvent("reball:order-updated", { detail: { order } }));
+      document.dispatchEvent(new CustomEvent("reball:order-updated", { detail: { order, owner } }));
     }
+    if (!ownsOrderPublication(owner) || !button.isConnected) return;
     const root = button.closest(".complete-page") || document;
     updateDefinitionField(root, "주문상태", "주문 취소");
     updateDefinitionField(root, "결제상태", "환불 완료");
     button.remove();
     setInlineStatus(root.querySelector(".action-row") || root, "결제가 취소되었습니다. 결제 및 재고 상태도 서버에서 함께 반영되었습니다.", "success");
   } catch (error) {
+    if (!ownsOrderPublication(owner) || !button.isConnected) return;
     setInlineStatus(button, error?.message || "결제 취소를 처리하지 못했습니다.", "error");
     button.disabled = false;
     button.removeAttribute("aria-busy");
