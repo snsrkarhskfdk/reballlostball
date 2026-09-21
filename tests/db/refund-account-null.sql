@@ -21,7 +21,7 @@ create function pg_temp.refund_case(
   label text, method text, payment_status text, ciphertext text, expected text
 ) returns void language plpgsql as $$
 declare
-  order_id uuid;
+  v_order_id uuid;
   order_number text := 'R42-NULL-' || label;
   token_hash text := md5(label) || md5('token-' || label);
   request_hash text := md5('request-' || label) || md5(label);
@@ -39,12 +39,12 @@ begin
     (case when payment_status = 'ready' then 'payment_ready' else 'paid' end)::public.order_status,
     payment_status::public.payment_status, 'toss_payments', method::public.payment_method,
     10000, 0, 0, 10000, '{}', token_hash, now() + interval '1 day'
-  ) returning id into order_id;
+  ) returning id into v_order_id;
   insert into public.payments (
     order_id, provider, status, requested_amount, approved_amount,
     canceled_amount, raw_response_json, toss_payment_key
   ) values (
-    order_id, 'toss_payments', payment_status::public.payment_status, 10000, 10000, 0, '{}',
+    v_order_id, 'toss_payments', payment_status::public.payment_status, 10000, 10000, 0, '{}',
     case when payment_status = 'ready' then null else 'synthetic-key-' || label end
   );
   begin
@@ -61,9 +61,9 @@ begin
   end;
   insert into refund_case_results
   select label, expected, observed_state, observed_message,
-    (select count(*) from public.payment_attempts a where a.order_id = refund_case.order_id),
-    (select a.sensitive_request_ciphertext from public.payment_attempts a where a.order_id = refund_case.order_id limit 1),
-    (select o.status from public.orders o where o.id = refund_case.order_id),
+    (select count(*) from public.payment_attempts a where a.order_id = v_order_id),
+    (select a.sensitive_request_ciphertext from public.payment_attempts a where a.order_id = v_order_id limit 1),
+    (select o.status from public.orders o where o.id = v_order_id),
     (result ->> 'refundAccountRequired')::boolean,
     coalesce((replay ->> 'duplicate')::boolean, false);
 end $$;
