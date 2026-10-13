@@ -98,7 +98,11 @@ class TossPaymentsProvider implements PaymentProvider {
 
   constructor() {
     this.baseUrl = (Deno.env.get("TOSS_PAYMENTS_API_URL") || "https://api.tosspayments.com").replace(/\/$/, "");
-    this.authorization = tossAuthorizationHeader(Deno.env.get("TOSS_SECRET_KEY") || Deno.env.get("TOSS_PAYMENTS_SECRET_KEY") || "");
+    const secretKey = Deno.env.get("TOSS_SECRET_KEY") || Deno.env.get("TOSS_PAYMENTS_SECRET_KEY") || "";
+    if (!isExplicitNonProductionRuntime() && !/^live_(?:g?sk)_/.test(secretKey)) {
+      throw new HttpError(503, "PAYMENT_CONFIG_MISSING", "운영 결제에는 Toss LIVE secret key가 필요합니다.");
+    }
+    this.authorization = tossAuthorizationHeader(secretKey);
   }
 
   private headers(idempotencyKey?: string): Headers {

@@ -35,3 +35,18 @@ test("짝이 맞지 않는 공개 설정은 빌드 전에 거부한다", () => {
   assert.throws(() => injectPublicConfig(template, { SUPABASE_URL: "https://example.supabase.co" }), /함께 설정/);
   assert.throws(() => injectPublicConfig(template, { CAPTCHA_PROVIDER: "turnstile" }), /함께 설정/);
 });
+
+const production = {
+  VERCEL_ENV: "production", AUTH_CAPTCHA_PROVIDER: "turnstile",
+  AUTH_CAPTCHA_SITE_KEY: "actual-site-fixture", TOSS_CLIENT_KEY: "live_ck_fixture",
+};
+test("production refuses empty/sandbox payment keys and Cloudflare dummy sitekeys", () => {
+  for (const key of ["", "test_ck_fixture", "test_gck_fixture"]) {
+    assert.throws(() => injectPublicConfig(template, { ...production, TOSS_CLIENT_KEY: key }), /LIVE/);
+  }
+  for (const sitekey of ["1x00000000000000000000AA", "2x00000000000000000000AB", "1x00000000000000000000BB", "2x00000000000000000000BB", "3x00000000000000000000FF"]) {
+    assert.throws(() => injectPublicConfig(template, { ...production, AUTH_CAPTCHA_SITE_KEY: sitekey }), /test site key/);
+  }
+  assert.match(injectPublicConfig(template, production), /live_ck_fixture/);
+  assert.match(injectPublicConfig(template, { ...production, VERCEL_ENV: "preview", TOSS_CLIENT_KEY: "test_ck_fixture", AUTH_CAPTCHA_SITE_KEY: "1x00000000000000000000AA" }), /test_ck_fixture/);
+});

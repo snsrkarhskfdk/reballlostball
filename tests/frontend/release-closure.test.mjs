@@ -59,6 +59,7 @@ test("production build refuses missing Turnstile public config", () => {
     SUPABASE_PUBLISHABLE_KEY: "public",
     AUTH_CAPTCHA_PROVIDER: "turnstile",
     AUTH_CAPTCHA_SITE_KEY: "site-key",
+    TOSS_CLIENT_KEY: "live_ck_release-fixture",
   });
   assert.match(output, /name="reball-captcha-provider" content="turnstile"/);
   assert.match(output, /name="reball-captcha-site-key" content="site-key"/);
@@ -179,6 +180,6 @@ test("Codex review blockers stay closed across auth, payment, order recovery and
   assert.match(build, /injectAdminConsoleAssets/);
   assert.match(devServer, /injectAdminConsoleAssets/);
 
-  assert.match(envExample, /AUTH_CAPTCHA_PROVIDER=\n/);
-  assert.match(envExample, /AUTH_CAPTCHA_SITE_KEY=\n/);
+  assert.match(envExample, /AUTH_CAPTCHA_PROVIDER=\r?\n/);
+  assert.match(envExample, /AUTH_CAPTCHA_SITE_KEY=\r?\n/);
 });

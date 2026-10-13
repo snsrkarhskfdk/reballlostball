@@ -12,6 +12,30 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  windows-portability:
+    runs-on: windows-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - name: Build and release contract on Windows
+        run: |
+          npm run lint
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          npm run build
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          npm run test:release
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          node --test tests/frontend/release-closure.test.mjs tests/frontend/public-config.test.mjs tests/frontend/admin-shipping-publication.test.mjs
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          npm run test:contracts
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          npm run check:edge
+          exit $LASTEXITCODE
   qa:
     runs-on: ubuntu-latest
     timeout-minutes: 30

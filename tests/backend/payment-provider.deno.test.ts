@@ -23,6 +23,7 @@ import {
   withFetchMock,
 } from "./edge-handler-harness.ts";
 import { rpc } from "../../supabase/functions/_shared/supabase.ts";
+import { verifyCaptcha } from "../../supabase/functions/_shared/security.ts";
 import { handler as adminMembersHandler } from "./edge-handlers/admin-members.ts";
 import { handler as authAssistHandler } from "./edge-handlers/auth-assist.ts";
 import { handler as getOrderHandler } from "./edge-handlers/get-order.ts";
@@ -1129,4 +1130,31 @@ Deno.test("transient database failures surface as retryable 5xx, not a definitiv
       ));
     assertEqual(status, expected, `Definitive condition ${code} must keep its status.`);
   }
+});
+
+Deno.test("production cannot use sandbox Toss secrets or Cloudflare dummy secrets", async () => {
+  for (const environment of ["", "production"]) {
+    for (const key of ["", "test_sk_fixture", "test_gsk_fixture"]) {
+      await withEnvironment({ DENO_ENV: environment, PAYMENT_PROVIDER: "toss_payments", TOSS_SECRET_KEY: key, TOSS_PAYMENTS_SECRET_KEY: "" }, () => {
+        let rejected = false;
+        try { paymentProvider(); } catch (error) { rejected = (error as { code?: string }).code === "PAYMENT_CONFIG_MISSING"; }
+        assert(rejected, "production must reject empty/sandbox secrets before payment traffic");
+        return Promise.resolve();
+      });
+    }
+    for (const secret of ["1x0000000000000000000000000000000AA", "2x0000000000000000000000000000000AA", "3x0000000000000000000000000000000AA"]) {
+      await withEnvironment({ DENO_ENV: environment, AUTH_CAPTCHA_PROVIDER: "turnstile", AUTH_CAPTCHA_SECRET_KEY: secret }, async () => {
+        let rejected = false;
+        await withFetchMock(() => { throw new Error("dummy credential reached network"); }, async () => {
+          try { await verifyCaptcha(new Request("https://reballlostball.com"), "XXXX.DUMMY.TOKEN.XXXX"); }
+          catch (error) { rejected = (error as { code?: string }).code === "CAPTCHA_NOT_CONFIGURED"; }
+        });
+        assert(rejected, "production must reject Cloudflare dummy secrets before verification traffic");
+      });
+    }
+  }
+  await withEnvironment({ DENO_ENV: "test", PAYMENT_PROVIDER: "toss_payments", TOSS_SECRET_KEY: "test_sk_fixture" }, () => {
+    assert(paymentProvider().name === "toss_payments", "sandbox adapter remains available in isolated test runtime");
+    return Promise.resolve();
+  });
 });

@@ -21,7 +21,7 @@ function escapeAttribute(value) {
   return String(value).replaceAll("&", "&amp;").replaceAll('"', "&quot;");
 }
 
-function validate(values, requireComplete) {
+function validate(values, requireComplete, isProductionBuild) {
   const url = values["reball-supabase-url"];
   const key = values["reball-supabase-publishable-key"];
   if (Boolean(url) !== Boolean(key)) throw new Error("SUPABASE_URL과 publishable key는 함께 설정해야 합니다.");
@@ -41,6 +41,15 @@ function validate(values, requireComplete) {
   if (requireComplete && (!url || !key || provider !== "turnstile" || !siteKey)) {
     throw new Error("운영 빌드에 필요한 공개 Supabase/Turnstile 설정이 없습니다.");
   }
+  if (isProductionBuild) {
+    // A production storefront must never silently ship a disabled or sandbox checkout.
+    if (!/^live_(?:g?ck)_/.test(tossKey)) {
+      throw new Error("운영 빌드에는 Toss LIVE client key가 필요합니다.");
+    }
+    if (/^[123]x0{20}[A-Z]{2}$/.test(siteKey)) {
+      throw new Error("운영 빌드에서는 Turnstile test site key를 사용할 수 없습니다.");
+    }
+  }
 }
 
 export function injectPublicConfig(html, env = process.env) {
@@ -53,7 +62,7 @@ export function injectPublicConfig(html, env = process.env) {
   );
   const isProductionBuild = String(env.VERCEL_ENV || "").toLowerCase() === "production";
   const requireComplete = isProductionBuild || String(env.PUBLIC_CONFIG_REQUIRED || "").toLowerCase() === "true";
-  validate(values, requireComplete);
+  validate(values, requireComplete, isProductionBuild);
   let output = String(html);
   for (const [name, value] of Object.entries(values)) {
     const pattern = new RegExp(`(<meta\\s+name=["']${name}["']\\s+content=["'])[^"']*(["']\\s*\\/?>)`, "i");
