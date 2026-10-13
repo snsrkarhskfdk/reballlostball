@@ -14,6 +14,9 @@
 - 관리자 배송창의 계정 전환/창 닫기 후 지연 응답 및 오류를 억제하는 테스트를 추가한다.
   성공·실패·snapshot cache의 세 소유권 guard 삭제가 모두 테스트에 탐지된다.
 - 쓰이지 않는 `CAPTCHA_SECRET_KEY`, `CAPTCHA_REQUIRED` 예시를 제거한다.
+- 비회원 주문 복구 중 route가 다시 그려져 loading card가 교체되는 실제 경합을 수정한다.
+  같은 주문/같은 capability에 한해 현재 card로 응답을 전달하고 route/token이 바뀌면 버린다.
+  재현 unit test의 수정 전 RED/수정 후 GREEN과 브라우저에서 강제 card 교체를 검증한다.
 
 ## 기존 증빙 재사용
 
