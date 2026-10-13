@@ -33,6 +33,7 @@ export function createClient(){
 const order = {id:"cccccccc-cccc-4ccc-8ccc-cccccccccccc",order_no:"RB-TEST",status:"paid",payment_status:"done",payment_method:"card",total_krw:26000,refund_amount:0,created_at:new Date().toISOString(),address_snapshot:{receiverName:"테스터",receiverPhone:"01012345678",roadAddress:"부천시 소사구 경인로10번길 34"},order_items:[{product_name:"테스트 로스트볼",variant_name:"A 10구",qty:1,line_total_krw:22500}],payment:{method:"card",status:"done",approved_amount:26000,canceled_amount:0},notes:[],canCancel:true};
 
 async function installMocks(page, role = "owner") {
+  const requestedPages = [];
   const rawHtml = await readFile(htmlPath, "utf8");
   const html = injectAdminConsoleAssets(rawHtml
     .replace('meta name="reball-supabase-url" content=""', 'meta name="reball-supabase-url" content="https://fake.supabase.test"')
@@ -44,7 +45,21 @@ async function installMocks(page, role = "owner") {
     const url = new URL(route.request().url());
     const view = url.searchParams.get("view");
     let body = {};
-    if (url.pathname.endsWith("/admin-console") && route.request().method() === "GET") {
+    if (url.pathname.endsWith("/admin-orders-page") && route.request().method() === "GET") {
+      const scope = url.searchParams.get("scope") || "orders";
+      const pageNumber = Number(url.searchParams.get("page") || 1);
+      const pageSize = Number(url.searchParams.get("pageSize") || 50);
+      requestedPages.push({ scope, page: pageNumber });
+      body = {
+        scope,
+        page: pageNumber,
+        pageSize,
+        hasMore: scope === "shipping" && pageNumber === 1,
+        canPayments: role !== "store",
+        canOrderPii: true,
+        orders: [{ ...order, canCancel: role !== "store" }],
+      };
+    } else if (url.pathname.endsWith("/admin-console") && route.request().method() === "GET") {
       if (view === "dashboard") body = { metrics:{paidTodayCount:2,grossTodayKrw:52000,refundsTodayKrw:0,netTodayKrw:52000,pendingShipping:1,lowStock:1,outOfStock:0,paymentAlerts:0}, recentOrders:[{order_no:"RB-TEST",status:"paid",total_krw:26000}] };
       else if (view === "orders") body = { canPayments:role !== "store", orders:[{...order,canCancel:role !== "store"}] };
       else if (view === "audit") body = { audit:[], orderEvents:[], people:{} };
@@ -67,6 +82,7 @@ async function installMocks(page, role = "owner") {
   });
   await page.goto(`/store-manager.html?role=${role}`);
   await expect(page.locator("[data-app-panel]")).toBeVisible();
+  return requestedPages;
 }
 
 test("owner admin sees and loads the complete operations console", async ({ page }) => {
@@ -87,6 +103,21 @@ test("owner admin sees and loads the complete operations console", async ({ page
   await expect(page.locator("[data-extra-settlement-metrics]")).toContainText("₩52,000");
   await page.locator('[data-tab="settings"]').click();
   await expect(page.locator('[name="addressRoad"]')).toHaveValue("부천시 소사구 경인로10번길 34");
+});
+
+test("orders and shipping use independent server pagination", async ({ page }) => {
+  const requestedPages = await installMocks(page, "owner");
+  await page.locator('[data-tab="orders"]').click();
+  await expect(page.locator("[data-all-order-list]")).toContainText("RB-TEST");
+  await expect.poll(() => requestedPages.some((entry) => entry.scope === "orders" && entry.page === 1)).toBe(true);
+
+  await page.locator('[data-tab="shipping"]').click();
+  await expect(page.locator("[data-shipping-list]")).toContainText("RB-TEST");
+  await expect.poll(() => requestedPages.some((entry) => entry.scope === "shipping" && entry.page === 1)).toBe(true);
+  await expect(page.locator("[data-shipping-page-next]")).toBeEnabled();
+  await page.locator("[data-shipping-page-next]").click();
+  await expect.poll(() => requestedPages.some((entry) => entry.scope === "shipping" && entry.page === 2)).toBe(true);
+  await expect(page.locator("[data-shipping-page-label]")).toContainText("2 페이지");
 });
 
 test("store manager gets daily operations without owner, review, promo or settlement controls", async ({ page }) => {

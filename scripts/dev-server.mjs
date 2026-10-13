@@ -34,9 +34,15 @@ function resolveRequestPath(url) {
   try {
     const pathname = decodeURIComponent(new URL(url, "http://localhost").pathname);
     const cleanPath = normalize(pathname).replace(/^(\.\.[/\\])+/, "");
+    const routeAliases = new Map([
+      ["/store-manager", "store-manager.html"],
+      ["/store-manager/", "store-manager.html"],
+      ["/payment/success", "index.html"],
+      ["/payment/fail", "index.html"],
+    ]);
     const target = resolve(
       root,
-      pathname === "/" ? "index.html" : cleanPath.slice(1)
+      routeAliases.get(pathname) || (pathname === "/" ? "index.html" : cleanPath.slice(1))
     );
     const rootRelative = relative(root, target);
 

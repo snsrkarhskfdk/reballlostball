@@ -61,3 +61,35 @@ test("guest order route survives a full reload by reloading the server order", a
   await expect.poll(() => lookupCount).toBeGreaterThanOrEqual(2);
   await expectRecoveredCanceledOrder(page);
 });
+
+test("guest recovery survives a route redraw while the server response is pending", async ({ page }) => {
+  await page.route("https://cdn.jsdelivr.net/**", route => route.abort());
+  await page.addInitScript(({ orderId, lookupToken }) => {
+    sessionStorage.setItem("reball.guestLookup.session.v1", JSON.stringify({ orderId, lookupToken }));
+  }, { orderId: ORDER_ID, lookupToken: LOOKUP_TOKEN });
+  let release;
+  const pending = new Promise(resolve => { release = resolve; });
+  let reached = 0;
+  await page.route("**/functions/v1/guest-order-lookup", async route => {
+    reached += 1;
+    await pending;
+    await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ order: {
+      id: "54e2f208-d0c6-4a02-a6e1-3eae2f9d4c71", orderNo: ORDER_ID,
+      status: "canceled", paymentStatus: "canceled", paymentMethod: "card", totalKrw: 36500,
+      createdAt: "2026-08-29T12:11:13.539217+00:00", deliveryStatus: "배송 준비 전", items: [],
+    } }) });
+  });
+  await page.goto(`/#/order/${ORDER_ID}`);
+  await expect.poll(() => reached).toBe(1);
+  await expect(page.locator("#app .empty-card")).toBeVisible();
+  await page.evaluate(() => {
+    const old = document.querySelector("#app .empty-card");
+    const replacement = old.cloneNode(true);
+    delete replacement.dataset.guestOrderRecovery;
+    replacement.querySelector("h1").textContent = "주문을 찾을 수 없습니다.";
+    old.replaceWith(replacement);
+  });
+  release();
+  await expectRecoveredCanceledOrder(page);
+  expect(reached).toBe(1);
+});

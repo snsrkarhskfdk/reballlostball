@@ -14,7 +14,7 @@ import {
   readJson,
   safeLog,
 } from "../_shared/http.ts";
-import { enforceRateLimit, verifyCaptcha } from "../_shared/security.ts";
+import { clientIp, enforceRateLimit, verifyCaptcha } from "../_shared/security.ts";
 import { authPublic, rpc } from "../_shared/supabase.ts";
 
 const GENERIC_RESPONSE = {
@@ -47,8 +47,10 @@ Deno.serve(async (req: Request) => {
     const name = cleanString(body.name, 80);
     const phone = normalizePhone(body.phone);
     const rateSubject = `${mode}:${normalizeEmail(body.identifier || body.email)}:${phone}`;
-    await enforceRateLimit(req, "auth_assist", rateSubject, 5, 3600, 3600);
+    // Unverified CAPTCHA requests must only consume the caller's network quota.
+    await enforceRateLimit(req, "auth_assist_pre", clientIp(req), 5, 3600, 3600);
     await verifyCaptcha(req, body.captchaToken);
+    await enforceRateLimit(req, "auth_assist", rateSubject, 5, 3600, 3600);
 
     if (!name || !/^[0-9]{9,11}$/.test(phone)) {
       throw new HttpError(400, "INVALID_ACCOUNT_ASSIST", "입력 정보를 확인해 주세요.");
