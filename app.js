@@ -3668,7 +3668,7 @@ async function handlePaymentReturn() {
     });
     // Survive a re-render and a reload: the route branch has no error code.
     state.paymentReturnRetryable = !terminal;
-    if (terminal) rememberTerminalPaymentFailure(orderId, globalThis.sessionStorage);
+    if (terminal) rememberTerminalPaymentFailure(orderId, globalThis.sessionStorage, error);
   }
   return true;
 }

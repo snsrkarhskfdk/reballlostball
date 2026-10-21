@@ -17,11 +17,12 @@ const RECOVERABLE_CONFIRM_CODES = new Set([
   // token and only a time-limited return capability.
   "ORDER_CANCELLATION_PENDING",
 ]);
-// Codes that leave the order permanently unpayable: the provider declined, the
+// Codes that make retry invalid for the current caller: ownership denied, provider declined,
 // final status was not DONE, or the order was already canceled/refunded. In each
 // case prepare-payment answers 409 ORDER_NOT_PAYMENT_READY, so offering the
 // customer a "retry payment" control is a dead end.
 const TERMINAL_CONFIRM_CODES = new Set([
+  "ORDER_ACCESS_DENIED",
   "PAYMENT_REJECTED",
   "PAYMENT_NOT_COMPLETED",
   "ORDER_PAYMENT_TERMINATED",
@@ -40,7 +41,10 @@ function terminalFailureStorageKey(orderId) {
 // The route branch that renders after a reload has no error code to classify from,
 // so an in-memory flag was lost and the dead-end retry control came back. Persist the
 // verdict next to the other order-scoped payment state.
-export function rememberTerminalPaymentFailure(orderId, storage = globalThis.sessionStorage) {
+export function rememberTerminalPaymentFailure(orderId, storage = globalThis.sessionStorage, error = null) {
+  // An ownership failure applies to the current account, not the order itself.
+  // Do not poison the rightful owner's recovery after an account switch.
+  if (String(error?.code || "").toUpperCase() === "ORDER_ACCESS_DENIED") return false;
   const key = terminalFailureStorageKey(orderId);
   if (!key || !storage?.setItem) return false;
   try {

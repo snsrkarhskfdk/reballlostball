@@ -34,11 +34,12 @@ function validate(values, requireComplete, isProductionBuild) {
   const provider = values["reball-captcha-provider"].toLowerCase();
   const siteKey = values["reball-captcha-site-key"];
   if (Boolean(provider) !== Boolean(siteKey)) throw new Error("CAPTCHA provider와 site key는 함께 설정해야 합니다.");
-  if (provider && provider !== "turnstile") throw new Error("운영 CAPTCHA는 Cloudflare Turnstile로 통일합니다.");
+  if (provider && !["turnstile", "hcaptcha"].includes(provider)) throw new Error("지원하지 않는 CAPTCHA provider입니다.");
+  if (isProductionBuild && provider && provider !== "turnstile") throw new Error("운영 CAPTCHA는 Cloudflare Turnstile로 통일합니다.");
   values["reball-captcha-provider"] = provider;
   const tossKey = values["reball-toss-client-key"];
   if (tossKey && !/^(test|live)_(?:g?ck)_/.test(tossKey)) throw new Error("Toss client key 형식이 올바르지 않습니다.");
-  if (requireComplete && (!url || !key || provider !== "turnstile" || !siteKey)) {
+  if (requireComplete && (!url || !key || !provider || !siteKey)) {
     throw new Error("운영 빌드에 필요한 공개 Supabase/Turnstile 설정이 없습니다.");
   }
   if (isProductionBuild) {

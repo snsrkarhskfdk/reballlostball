@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { confirmTossPayment, pendingTossConfirmation } from "../../src/frontend/payments/toss-client.mjs";
+import { confirmTossPayment, pendingTossConfirmation, terminalConfirmationFailure, rememberTerminalPaymentFailure, terminalPaymentFailureRecorded } from "../../src/frontend/payments/toss-client.mjs";
 
 const ORDER_ID = "RB-CONFIRM-RECOVER-001";
 
@@ -71,4 +71,13 @@ test("a pending administrative cancellation keeps the confirmation recoverable",
     pendingCancel.pending,
     "ORDER_CANCELLATION_PENDING is not definitive and must preserve the confirmation tuple.",
   );
+});
+
+
+test("ownership denial suppresses retry without persisting an order-wide terminal verdict", async () => {
+  const denied = await confirmAndCapture({ status: 403, code: "ORDER_ACCESS_DENIED", accessToken: "other-member" });
+  assert.equal(terminalConfirmationFailure(denied.error), true);
+  const { storage } = harness({ status: 403, code: "ORDER_ACCESS_DENIED" });
+  assert.equal(rememberTerminalPaymentFailure(ORDER_ID, storage, denied.error), false);
+  assert.equal(terminalPaymentFailureRecorded(ORDER_ID, storage), false);
 });
