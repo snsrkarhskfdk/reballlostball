@@ -11,6 +11,7 @@ import {
   normalizeRefundReceiveAccount,
   paymentConfirmationDisposition,
   paymentProvider,
+  tossClientKey,
   providerFailureIsDefinitive,
 } from "../../supabase/functions/_shared/payments.ts";
 import {
@@ -1155,6 +1156,28 @@ Deno.test("production cannot use sandbox Toss secrets or Cloudflare dummy secret
   }
   await withEnvironment({ DENO_ENV: "test", PAYMENT_PROVIDER: "toss_payments", TOSS_SECRET_KEY: "test_sk_fixture" }, () => {
     assert(paymentProvider().name === "toss_payments", "sandbox adapter remains available in isolated test runtime");
+    return Promise.resolve();
+  });
+});
+
+
+Deno.test("Edge-returned Toss client key enforces production LIVE boundary", async () => {
+  for (const environment of ["", "production"]) {
+    for (const key of ["", "test_ck_fixture", "test_gck_fixture"]) {
+      await withEnvironment({ DENO_ENV: environment, TOSS_PAYMENTS_CLIENT_KEY: key }, () => {
+        let code = "";
+        try { tossClientKey(); } catch (error) { code = (error as {code:string}).code; }
+        assertEqual(code, "PAYMENT_CONFIG_MISSING", "production must reject a returned TEST key");
+        return Promise.resolve();
+      });
+    }
+    await withEnvironment({ DENO_ENV: environment, TOSS_PAYMENTS_CLIENT_KEY: "live_ck_fixture" }, () => {
+      assertEqual(tossClientKey(), "live_ck_fixture", "LIVE key accepted");
+      return Promise.resolve();
+    });
+  }
+  await withEnvironment({ DENO_ENV: "test", TOSS_PAYMENTS_CLIENT_KEY: "test_ck_fixture" }, () => {
+    assertEqual(tossClientKey(), "test_ck_fixture", "isolated sandbox key remains accepted");
     return Promise.resolve();
   });
 });

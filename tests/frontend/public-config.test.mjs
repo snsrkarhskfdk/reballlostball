@@ -50,3 +50,12 @@ test("production refuses empty/sandbox payment keys and Cloudflare dummy sitekey
   assert.match(injectPublicConfig(template, production), /live_ck_fixture/);
   assert.match(injectPublicConfig(template, { ...production, VERCEL_ENV: "preview", TOSS_CLIENT_KEY: "test_ck_fixture", AUTH_CAPTCHA_SITE_KEY: "1x00000000000000000000AA" }), /test_ck_fixture/);
 });
+
+
+test("hCaptcha remains available in local/preview while production stays Turnstile only", () => {
+  for (const VERCEL_ENV of ["", "preview"]) {
+    assert.match(injectPublicConfig(template, { ...production, VERCEL_ENV, SUPABASE_URL: "https://staging.supabase.test", SUPABASE_PUBLISHABLE_KEY: "sb_publishable_fixture", AUTH_CAPTCHA_PROVIDER: "hcaptcha", PUBLIC_CONFIG_REQUIRED: "true" }), /content="hcaptcha"/);
+  }
+  assert.throws(() => injectPublicConfig(template, { ...production, AUTH_CAPTCHA_PROVIDER: "hcaptcha" }), /Turnstile/);
+  assert.throws(() => injectPublicConfig(template, { ...production, VERCEL_ENV: "preview", AUTH_CAPTCHA_PROVIDER: "unknown" }), /provider/);
+});

@@ -143,7 +143,7 @@ test("a definitively declined order never advertises a payment retry it cannot h
   // PAYMENT_REJECTED / PAYMENT_NOT_COMPLETED / ORDER_PAYMENT_TERMINATED leave the
   // order unpayable, so prepare-payment answers 409 ORDER_NOT_PAYMENT_READY. A
   // "결제 다시 시도" control there is a dead end the customer cannot escape.
-  for (const code of ["PAYMENT_REJECTED", "PAYMENT_NOT_COMPLETED", "ORDER_PAYMENT_TERMINATED", "ORDER_EXPIRED", "PAYMENT_RETRY_REQUIRES_NEW_ORDER"]) {
+  for (const code of ["ORDER_ACCESS_DENIED", "PAYMENT_REJECTED", "PAYMENT_NOT_COMPLETED", "ORDER_PAYMENT_TERMINATED", "ORDER_EXPIRED", "PAYMENT_RETRY_REQUIRES_NEW_ORDER"]) {
     const harness = paymentReturnHarness(code);
     assert.equal(await harness.context.handlePaymentReturn(), true);
     assert.match(harness.html, /결제를 완료하지 못했습니다/);
