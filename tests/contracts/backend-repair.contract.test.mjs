@@ -1,5 +1,7 @@
 import assert from "node:assert/strict";
+import { createHmac } from "node:crypto";
 import test from "node:test";
+import { HttpError, hmacSha256Base64Url } from "../../supabase/functions/_shared/core.ts";
 import {
   assertAnyMatch,
   assertMatch,
@@ -93,13 +95,41 @@ test("full-order PII access is limited to the member, CS, and owner roles", () =
   );
 });
 
-test("server order creation and guest lookup Edge Functions use database authority", () => {
+test("server order creation and guest lookup Edge Functions use database authority", async () => {
   const createOrder = edgeByCapability("Create order", [/create.*order|order.*create/i], [/variant/i, /quantity/i, /(?:rpc|reserve)/i]);
   assertMatch(createOrder.source, /\bPOST\b/, `${createOrder.name} must accept POST only.`);
   assertMatch(createOrder.source, /(?:variantId|variant_id)/, `${createOrder.name} must accept variant IDs.`);
   assertMatch(createOrder.source, /quantity/, `${createOrder.name} must accept quantities.`);
   assertMatch(createOrder.source, /\.rpc\s*\(/, `${createOrder.name} must delegate atomic reservation/order creation to a DB RPC.`);
-  assertAnyMatch(createOrder.source, [/crypto\.getRandomValues/i, /randomUUID\s*\(/i, /randomBytes/i], `${createOrder.name} must issue a cryptographically random guest lookup token.`);
+  const keyedGuestToken = /guestLookupToken\s*=\s*await\s+hmacSha256Base64Url\s*\(/.test(createOrder.source);
+  if (keyedGuestToken) {
+    // Deterministic tokens let a guest recover a timed-out create-order response.
+    // Bind this allowance to the configured secret and execute its fail-closed guard.
+    assertMatch(createOrder.source, /guestLookupToken\s*=\s*await\s+hmacSha256Base64Url\(\s*Deno\.env\.get\("GUEST_ORDER_TOKEN_SECRET"\)\s*\|\|\s*"",\s*`guest-order:\$\{idempotencyKey\}:\$\{fingerprint\}`/, "New guest tokens must derive from the server secret, idempotency key, and request fingerprint.");
+    assertMatch(createOrder.source, /const secret = Deno\.env\.get\("GUEST_ORDER_TOKEN_SECRET"\)\s*\|\|\s*""/, "Guest recovery must use the same configured server secret.");
+    assertMatch(createOrder.source, /secret\.length\s*<\s*32/, "Guest recovery must enforce the same 32-character secret floor as token issuance.");
+    assertMatch(createOrder.source, /guestLookupToken\s*=\s*await\s+hmacSha256Base64Url\(secret,\s*`guest-order:\$\{idempotencyKey\}:\$\{fingerprint\}`\)/, "Guest recovery must regenerate the original secret-bound token.");
+    const value = "guest-order:retryable-request-key:request-fingerprint";
+    for (let length = 0; length < 32; length += 1) {
+      await assert.rejects(
+        hmacSha256Base64Url("x".repeat(length), value),
+        (error) => error instanceof HttpError && error.status === 503 && error.code === "SECURITY_CONFIG_MISSING",
+        `Guest-token derivation must fail closed for a ${length}-character secret.`,
+      );
+    }
+    const secret = "0123456789abcdef0123456789abcdef";
+    const token = await hmacSha256Base64Url(secret, value);
+    assert.equal(token, createHmac("sha256", secret).update(value).digest("base64url"));
+    assert.equal(await hmacSha256Base64Url(secret, value), token, "A timed-out request must recover the same token.");
+    assert.notEqual(await hmacSha256Base64Url("x".repeat(32), value), token, "The token must be bound to the configured secret.");
+    assert.notEqual(await hmacSha256Base64Url(secret, `${value}-other`), token, "The token must be bound to the request.");
+  } else {
+    assertAnyMatch(createOrder.source, [
+      /guestLookupToken\s*=[^;]*crypto\.getRandomValues\s*\(/i,
+      /guestLookupToken\s*=[^;]*\brandomUUID\s*\(/i,
+      /guestLookupToken\s*=[^;]*\brandomBytes\s*\(/i,
+    ], `${createOrder.name} must issue a CSPRNG guest token or use a keyed derivation with a fail-closed secret floor.`);
+  }
   assertMatch(createOrder.source, /(?:guest[\w]*hash|hash[\w]*guest|hmacSha256)/i, `${createOrder.name} must persist only a guest-token hash.`);
   assertNoMatch(createOrder.source, /(?:const|let|var)\s+(?:total|amount|price)\s*=\s*body\.(?:total|amount|price)|\bbody\.(?:totalKrw|total_krw|unitPrice|unit_price)\b/i, `${createOrder.name} must not trust a client total or price.`);
 

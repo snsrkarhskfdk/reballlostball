@@ -1,0 +1,86 @@
+npm warn Unknown env config "http-proxy". This will stop working in the next major version of npm.
+
+> reball-lostball-home@0.2.0 test:db:grants
+> node scripts/test-data-api-grants.mjs
+
+MIGRATION 0001_init.sql sha256=8d5e4820a9b215b6d1fcc625db44d4fea7767ed65f62aec112ac08bccbf1aa9f
+MIGRATION 0002_admin_and_customer_policies.sql sha256=06a1bf8dab6378498bbde0fa895d576975a35fbaff4d2a014e2f54cf6b604eb3
+MIGRATION 0003_indexes_and_policy_cleanup.sql sha256=702e4b81cb0ac97ee98498b4fb1040e01f5fc1ede642c5e05c406750c35cdb39
+MIGRATION 0004_auth_profiles_and_mypage.sql sha256=b46081e74ddc52bec80f7281b3568ec1be23f84f9b8bfa03c8db1687f6cf558c
+MIGRATION 0005_login_id_for_profiles.sql sha256=f97ace67f5d95d969cc9cdaa36cd6f5472707fe359261146b112f813a03181f9
+MIGRATION 0006_login_id_edge_function_cleanup.sql sha256=90318f82d04fba6587293f1d3ea4b17405c7e3fad7c4de58cefc43bb4d4130c5
+MIGRATION 0007_admin_catalog_write_access.sql sha256=734d26b8237e1e79e618641b38996764b5878620849cb7488c1ba40470b4c4cc
+MIGRATION 20260711055444_production_commerce_security.sql sha256=d1b939c4efde1c5aedae999a0764f35f76303d91afe1cad27357b641da65a5e4
+MIGRATION 20260711055557_commerce_foreign_key_indexes.sql sha256=4995304379598c0e609b83f60c830db7e699a82dc745401f43eac495b4878974
+MIGRATION 20260820090000_add_s_grade_and_special_shipping.sql sha256=636d0799265b10dbd26068bdbf8b9b0aed5375e7e9bde9ad5c1d331ab578bb26
+MIGRATION 20260820091000_catalog_final_prices.sql sha256=186e87552936a262e9ee733151f8f0f654582c1bbda37cd0bc7b7355559af32f
+MIGRATION 20260825220500_order_shipping_tracking.sql sha256=b942567a494f4593fc3b859635335614d8e0c5e44881d3f399d86ac43977877c
+MIGRATION 20260827093500_expire_order_reservations_cron.sql sha256=6dcd2d22fb50b9bab1cac189efc7305e8cdba4ab93ed1b37ee9efdee5ba2a338
+MIGRATION 20260828043000_payment_confirm_webhook_race.sql sha256=269ade699e2dec3e3a2a03d2e6580626c60f65dd45a304e6f2dc4917d61ddc8d
+MIGRATION 20260828060000_payment_reconcile_scheduler.sql sha256=828cd2eb82ed8ce97e7020dee0f0a43af84af5f768790dcbf037edf2802e4c64
+MIGRATION 20260901080000_mobile_payment_return_capability.sql sha256=316ef4b6abf1bc3c6c8ad6d74384954abea2279328ad7187388c26e678333126
+MIGRATION 20260901102500_mobile_paid_guest_token_rotation.sql sha256=094dfe837bbbc6dc4facf4a2c124c93f5e136a65eac84125295a80610e4b63f2
+MIGRATION 20260901104000_payment_return_capability_ttl.sql sha256=70ee0aa68a892cc39408ff1370b6385c1660b5801feeacc1b0980cba213dda22
+MIGRATION 20260903130000_store_manager_ops.sql sha256=4271dd9870306d9fb4c9d0a04b49ad1debc2a93457d227ca42e52259441bcc9a
+MIGRATION 20260906150000_admin_ops_console_v2.sql sha256=c4b4015b44a265477c24aea022b8663f862c6c88363419a2763790bc53ededb0
+MIGRATION 20260907050000_admin_ops_console_v3_closure.sql sha256=04913783bb6f8c11bb500e54066787a8bb7d988eb4a68a0addfed8885f6f2dd1
+MIGRATION 20260907051000_admin_ops_console_v3_policy_hardening.sql sha256=432f93b8d72ac10faffe683dcf1ff42955f47dbc321e10bd40aa962facc5f4ef
+MIGRATION 20260907052000_admin_ops_console_v3_advisor_cleanup.sql sha256=0b9fff8f34db5d035ac9ec19ff73f69f6c2c5a84eecd2843eda7ce69bbfcf70f
+MIGRATION 20260909061000_admin_order_notes_per_order.sql sha256=1354bfd1e26145cb22adc277a56f87ece427741b087cecf3c9fc05466ad9bf33
+MIGRATION 20260909210500_admin_latest_payment_per_order.sql sha256=c66dcb29d1ec1a841848745500bf261d55f89bed802cad559704ec963481ef96
+MIGRATION 20260909211500_orders_pagination_indexes.sql sha256=d037778a169eff855be73a65fc9ea386976a66d3391f93a8021679c7a09d3c2b
+MIGRATION 20260911000000_edge_rate_limit_insert_race.sql sha256=eb01e21ffe54546754ce56ab7c6d25cd02ece5b4958ee35c859f17d744e1ca1c
+MIGRATION 20260911001000_guest_token_rotation_settled_states.sql sha256=9195b7ebfbb6edf1ba657b4c031c153b687b6395b0ede6e4e87e0219a5c592fd
+MIGRATION 20260911002000_payment_cancel_null_authorization.sql sha256=f7a399a858788b556e087200529d2dec44f345ff224eb914fd0b19bfc3823c55
+MIGRATION 20260911003000_finalize_confirmation_after_fulfilment.sql sha256=fa1ab3d618c84fff51d38a67d076931f838bc88f2204fbc8c16f9ab0e7c9eac6
+MIGRATION 20260914000000_payment_cancel_refund_account_null.sql sha256=b756f6afc4ca6ee87e416b6fdabfe3cebc6a3476b3c238469835fb8a98011548
+REPLAY 31 baseline migrations; cron/pg_net installs substituted, no scheduled jobs executed
+PASS baseline inquiry INSERT grant absent
+PASS baseline return SELECT grant absent
+PASS baseline service POS SELECT grant absent
+PASS baseline real inquiry SELECT denied (42501)
+PASS all public tables retain RLS
+PASS no anon target privileges
+PASS member target privilege matrix is minimal
+PASS service target privilege matrix is SELECT only
+PASS admin mutation RPC service only
+PASS member can create and return own inquiry
+PASS member can create own return
+PASS cannot insert another member inquiry (42501)
+PASS cannot spoof inquiry reply (42501)
+PASS cannot spoof resolved return (42501)
+PASS cannot return another member order (42501)
+PASS cannot spoof return requester (42501)
+PASS member cannot read POS
+PASS member cannot update inquiry (42501)
+PASS member cannot delete return (42501)
+PASS member cannot invoke actor-spoofed admin RPC (42501)
+PASS other member cannot read inquiry
+PASS other member cannot read return
+PASS store RLS customer_inquiries
+PASS store RLS return_requests
+PASS store RLS pos_devices
+PASS store cannot directly write POS (42501)
+PASS cs RLS customer_inquiries
+PASS cs RLS return_requests
+PASS cs RLS pos_devices
+PASS cs cannot directly write POS (42501)
+PASS payments RLS customer_inquiries
+PASS payments RLS return_requests
+PASS payments RLS pos_devices
+PASS payments cannot directly write POS (42501)
+PASS anon SELECT customer_inquiries (42501)
+PASS anon INSERT customer_inquiries (42501)
+PASS anon SELECT return_requests (42501)
+PASS anon INSERT return_requests (42501)
+PASS anon SELECT pos_devices (42501)
+PASS anon INSERT pos_devices (42501)
+PASS service cannot directly update inquiry (42501)
+PASS service cannot use customer actor as admin (42501)
+PASS service cannot use payments actor for CS reply (42501)
+PASS service store actor can create POS through RPC
+PASS service CS actor can reply through RPC
+PASS service payments actor can resolve return through RPC
+PASS three successful mutations produced audit entries
+FINAL_TABLE_ACL [{"relname":"addresses","relrowsecurity":true,"anon":null,"authenticated":"DELETE,INSERT,SELECT,UPDATE","service_role":null},{"relname":"admin_audit_logs","relrowsecurity":true,"anon":null,"authenticated":null,"service_role":"SELECT"},{"relname":"banners","relrowsecurity":true,"anon":"SELECT","authenticated":"SELECT","service_role":"SELECT"},{"relname":"benefit_applications","relrowsecurity":true,"anon":null,"authenticated":null,"service_role":null},{"relname":"benefit_policies","relrowsecurity":true,"anon":null,"authenticated":null,"service_role":"SELECT"},{"relname":"brands","relrowsecurity":true,"anon":"SELECT","authenticated":"SELECT","service_role":"SELECT"},{"relname":"commerce_settings","relrowsecurity":true,"anon":null,"authenticated":"SELECT","service_role":"DELETE,INSERT,SELECT,UPDATE"},{"relname":"customer_inquiries","relrowsecurity":true,"anon":null,"authenticated":"INSERT,SELECT","service_role":"SELECT"},{"relname":"inventory_lots","relrowsecurity":true,"anon":null,"authenticated":null,"service_role":null},{"relname":"inventory_reservations","relrowsecurity":true,"anon":null,"authenticated":"SELECT","service_role":"DELETE,INSERT,SELECT,UPDATE"},{"relname":"order_events","relrowsecurity":true,"anon":null,"authenticated":"SELECT","service_role":"DELETE,INSERT,SELECT,UPDATE"},{"relname":"order_item_snapshots","relrowsecurity":true,"anon":null,"authenticated":"SELECT","service_role":"DELETE,INSERT,SELECT,UPDATE"},{"relname":"order_items","relrowsecurity":true,"anon":null,"authenticated":"SELECT","service_role":"DELETE,INSERT,SELECT,UPDATE"},{"relname":"orders","relrowsecurity":true,"anon":null,"authenticated":"SELECT","service_role":"DELETE,INSERT,SELECT,UPDATE"},{"relname":"payment_attempts","relrowsecurity":true,"anon":null,"authenticated":null,"service_role":"DELETE,INSERT,SELECT,UPDATE"},{"relname":"payment_events","relrowsecurity":true,"anon":null,"authenticated":null,"service_role":"DELETE,INSERT,SELECT,UPDATE"},{"relname":"payment_refunds","relrowsecurity":true,"anon":null,"authenticated":"SELECT","service_role":"DELETE,INSERT,SELECT,UPDATE"},{"relname":"payment_snapshots","relrowsecurity":true,"anon":null,"authenticated":"SELECT","service_role":"DELETE,INSERT,SELECT,UPDATE"},{"relname":"payments","relrowsecurity":true,"anon":null,"authenticated":"SELECT","service_role":"DELETE,INSERT,SELECT,UPDATE"},{"relname":"policy_versions","relrowsecurity":true,"anon":"SELECT","authenticated":"SELECT","service_role":"SELECT"},{"relname":"pos_devices","relrowsecurity":true,"anon":null,"authenticated":"SELECT","service_role":"SELECT"},{"relname":"product_variants","relrowsecurity":true,"anon":"SELECT","authenticated":"SELECT","service_role":"DELETE,INSERT,SELECT,UPDATE"},{"relname":"products","relrowsecurity":true,"anon":"SELECT","authenticated":"SELECT","service_role":"DELETE,INSERT,SELECT,UPDATE"},{"relname":"profiles","relrowsecurity":true,"anon":null,"authenticated":"SELECT","service_role":"DELETE,INSERT,SELECT,UPDATE"},{"relname":"return_requests","relrowsecurity":true,"anon":null,"authenticated":"INSERT,SELECT","service_role":"SELECT"},{"relname":"reviews","relrowsecurity":true,"anon":null,"authenticated":"INSERT,SELECT,UPDATE","service_role":"SELECT"},{"relname":"shipping_snapshots","relrowsecurity":true,"anon":null,"authenticated":"SELECT","service_role":"DELETE,INSERT,SELECT,UPDATE"},{"relname":"shipping_surcharge_zones","relrowsecurity":true,"anon":null,"authenticated":"SELECT","service_role":"DELETE,INSERT,SELECT,UPDATE"},{"relname":"store_profile","relrowsecurity":true,"anon":"SELECT","authenticated":"SELECT","service_role":"SELECT"},{"relname":"user_roles","relrowsecurity":true,"anon":null,"authenticated":"SELECT","service_role":"DELETE,INSERT,SELECT,UPDATE"}]
+PASS 61 checks; restrictive fresh DB and legacy ACL replay; synthetic data rolled back

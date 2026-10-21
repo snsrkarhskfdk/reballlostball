@@ -14,7 +14,7 @@ import {
   readJson,
   safeLog,
 } from "../_shared/http.ts";
-import { enforceRateLimit, verifyCaptcha } from "../_shared/security.ts";
+import { clientIp, enforceRateLimit, verifyCaptcha } from "../_shared/security.ts";
 import { authAdmin, authPublic, rpc } from "../_shared/supabase.ts";
 
 const LOGIN_ID_PATTERN = /^[a-z0-9][a-z0-9._-]{3,19}$/;
@@ -40,8 +40,10 @@ Deno.serve(async (req: Request) => {
     const name = cleanString(profile.name, 80);
     const phone = normalizePhone(profile.phone);
 
-    await enforceRateLimit(req, "auth_signup", `${loginId}:${email}`, 5, 3600, 3600);
+    // Unverified CAPTCHA requests must only consume the caller's network quota.
+    await enforceRateLimit(req, "auth_signup_pre", clientIp(req), 5, 3600, 3600);
     await verifyCaptcha(req, body.captchaToken);
+    await enforceRateLimit(req, "auth_signup", `${loginId}:${email}`, 5, 3600, 3600);
 
     if (!LOGIN_ID_PATTERN.test(loginId) || !isEmailLike(email)
         || password.length < 8 || password.length > 72

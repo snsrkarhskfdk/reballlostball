@@ -14,7 +14,7 @@ import {
   readJson,
   safeLog,
 } from "../_shared/http.ts";
-import { assertMockPaymentProviderAllowed } from "../_shared/payments.ts";
+import { assertMockPaymentProviderAllowed, tossClientKey } from "../_shared/payments.ts";
 import { enforceRateLimit } from "../_shared/security.ts";
 import { rpc, sessionUser } from "../_shared/supabase.ts";
 
@@ -97,10 +97,7 @@ Deno.serve(async (req: Request) => {
     }
     if (order.paymentProvider === "mock") assertMockPaymentProviderAllowed();
 
-    const clientKey = Deno.env.get("TOSS_PAYMENTS_CLIENT_KEY") || "";
-    if (order.paymentProvider === "toss_payments" && !/^(test|live)_(g?ck)_/.test(clientKey)) {
-      throw new HttpError(503, "PAYMENT_CONFIG_MISSING", "결제 설정을 확인할 수 없습니다.");
-    }
+    const clientKey = order.paymentProvider === "toss_payments" ? tossClientKey() : "";
 
     const method = {
       card: "CARD",

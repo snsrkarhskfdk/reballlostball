@@ -1,0 +1,70 @@
+npm warn Unknown env config "http-proxy". This will stop working in the next major version of npm.
+
+> reball-lostball-home@0.2.0 test:contracts
+> node --test tests/contracts/*.contract.test.mjs
+
+✔ production migration is non-empty and implements atomic reservation/release (2.772968ms)
+✔ migration enforces order states, transitions, snapshots, and audit events (3.278407ms)
+✔ guest lookup is hash-only and order RLS/role grants fail closed (3.073479ms)
+✔ full-order PII access is limited to the member, CS, and owner roles (1.599373ms)
+✔ server order creation and guest lookup Edge Functions use database authority (14.145399ms)
+✔ payment prepare/confirm never trusts success URL and confirms DONE server-side (1.313975ms)
+✔ Toss webhook verification, state mapping, and duplicate handling are explicit (1.180644ms)
+✔ auth Edge Functions rate-limit, verify CAPTCHA, and never auto-confirm email (0.71235ms)
+✔ every explicit Edge Function environment variable is represented by the schema (0.747183ms)
+✔ create-order requires a client-stable idempotency key and recovers before mutable cart parsing (0.940624ms)
+✔ new-order payment methods are server allowlisted independently of hidden browser controls (0.211487ms)
+✔ catalog variants fail closed and never fabricate orderable stock (18.945993ms)
+✔ orders send only variant identity and quantity from the browser (4.817861ms)
+✔ payment preparation sends only the server order identity (2.633197ms)
+✔ legacy PII orders and local administrator trust are absent from the runtime entry (3.69284ms)
+✔ admin module enforces the four server roles and least privilege (1.148516ms)
+✔ browser sources contain no server secret names or credential-shaped values (1.70989ms)
+✔ environment schema is complete and example secrets are blank (0.886692ms)
+✔ development and build use the exact production entry (0.53859ms)
+✔ frontend modules are real entry dependencies and the build copies their import graph (287.486646ms)
+✔ home has one reachable h1 and the five conversion stages in order (49.166721ms)
+✔ button system exposes four variants, two heights, one radius, and interaction states (1.711762ms)
+✔ launch hardening runs before the storefront entry (1.12468ms)
+✔ checkout contract hides uncontracted virtual accounts and manual transfer account copy (0.550006ms)
+✔ Toss payment window is launched from a live user gesture after preparation (0.236225ms)
+✔ maximum delivery period promised to the PG is visible at checkout and product surfaces (0.210667ms)
+✔ customer payment cancellation and admin shipping use server APIs (0.249124ms)
+✔ guest lookup token is masked before normal order-page use (0.21913ms)
+✔ paid order UI receives customer cancellation action only for completed server status (1.147314ms)
+✔ public auth authority is CAPTCHA protected and server checked (1.039943ms)
+✔ store manager order pagination keeps PII and payment role boundaries (0.218398ms)
+✔ admin order pages select one authoritative latest payment independently per order (0.699131ms)
+✔ registered business address stays unchanged while return address uses Songnae collection location (1.132211ms)
+✔ return address override executes before storefront runtime (0.187712ms)
+✔ V3 ports every previously missing operations area onto the service-mediated console (1.328947ms)
+✔ extended mutations are service-role only, role checked and audited (0.503967ms)
+✔ last owner removal and customer-created support rows are hardened against races and spoofed state (0.189065ms)
+✔ new product registration is atomic and low-stock configuration is bounded and editable (0.273891ms)
+✔ cover photo protection and CSV formula-injection protection remain in force (0.481383ms)
+✔ returns cancellation supports the refund-account requirement for completed virtual accounts (0.194643ms)
+✔ member purchase totals exclude failed or fully canceled orders and subtract partial refunds (0.365259ms)
+✔ daily dashboard accounting keeps canceled same-day approvals in gross and uses refund ledger events (0.191748ms)
+✔ payment-only operators receive financial order fields without customer shipping PII (0.47297ms)
+✔ final audit keeps extension permissions deterministic after base-tab rerenders (0.531108ms)
+✔ extended console assets are injected in both production build and local E2E server (0.259991ms)
+✔ store_manager catalog writes move from direct RLS updates to one service-only audited transaction (1.696189ms)
+✔ owner operations exist but remain server-role gated and audited (0.240772ms)
+✔ payments and refunds are visible only to payments_manager or owner_admin (0.238418ms)
+✔ shipping remains mediated by server role checks and service-only RPC (2.027292ms)
+✔ product media stays size-limited, converted to webp, and attached through audited catalog action (0.94535ms)
+✔ operations console exposes dashboard, orders, products, shipping, members, audit, settings and staff (0.902066ms)
+✔ admin-console is authentication, origin and rate-limit guarded (0.196094ms)
+✔ store manager console is separately routed, noindexed and built with public config only (0.294883ms)
+✔ home stages own a paper background and dark readable copy (1.478042ms)
+✔ SECOND ROUND keeps the real ending still but retires decorative landing UI (0.462776ms)
+✔ SECOND ROUND desktop cinematic breaks out to 92vw without reintroducing crop (0.370076ms)
+✔ visual clarity guard loads last while the Toss path base remains intact (0.190206ms)
+ℹ tests 57
+ℹ suites 0
+ℹ pass 57
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 489.032331
