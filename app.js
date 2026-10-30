@@ -1506,12 +1506,23 @@ function mapOrderRecord(row, items = []) {
 }
 
 function routeTo(route) {
+  const previousRoute = state.route;
   state.menuOpen = false;
   location.hash = route;
   if (parseRoute() === route) {
     renderRoute();
-    window.requestAnimationFrame(flushPendingScroll);
+    window.requestAnimationFrame(() => completeRouteNavigation(previousRoute, route));
   }
+}
+
+function completeRouteNavigation(previousRoute, nextRoute) {
+  if (state.route !== nextRoute) return;
+  // Reset only navigation, never option changes, catalog hydration or form edits.
+  // Home section links keep their deliberate anchor target.
+  if (previousRoute !== nextRoute && !(nextRoute === "/" && state.pendingScrollTarget)) {
+    window.scrollTo({ top: 0, left: 0, behavior: "instant" });
+  }
+  flushPendingScroll();
 }
 
 function flushPendingScroll() {
@@ -1676,8 +1687,8 @@ function mapSupabaseProductToCatalogProduct(row) {
     brandName: stringOrEmpty(row.brands?.name).trim() || template.brandName || brandLabel(brandSlug),
     slug: safeProductSlug,
     name: stringOrEmpty(row.name).trim() || template.name,
-    line: stringOrEmpty(row.subtitle).trim() || template.line,
-    copy: stringOrEmpty(row.summary).trim() || template.copy || `${stringOrEmpty(row.subtitle).trim() || template.line} 기준으로 등록한 관리자 상품입니다.`,
+    line: stringOrEmpty(row.subtitle).trim(),
+    copy: stringOrEmpty(row.summary).trim(),
     price: Number(row.base_price_krw) || template.price,
     colors: colors.length ? colors : template.colors || ["화이트"],
     models: models.length ? models : template.models || [template.line || template.name],
@@ -2821,7 +2832,7 @@ function renderProductCard(product) {
       <div class="product-body">
         <div class="product-top"><span>${escapeHtml(product.brandName)}</span><b>로스트볼</b></div>
         <h3>${escapeHtml(product.name)}</h3>
-        <p>${escapeHtml(product.copy)}</p>
+        <p>${renderMultilineText(product.copy)}</p>
         <div class="product-price-stack" aria-label="상품 가격">
           ${metrics.orderable && metrics.compareAtPrice > metrics.price ? `<span><del>₩${money.format(metrics.compareAtPrice)}</del><b>${metrics.discountPercent}%</b></span>` : ""}
           <strong>${metrics.priced ? `₩${money.format(metrics.price)}부터` : "판매 준비중"}</strong>
@@ -2915,7 +2926,7 @@ function renderDetail(slug) {
           <div class="badge-row"><span>${orderable ? `재고 ${displayVariant.stock}세트` : "판매 준비중"}</span><b>${selection.grade || "-"}</b></div>
           <p class="buy-eyebrow">${escapeHtml(product.brandName)} / 로스트볼</p>
           <h1>${escapeHtml(product.name)}</h1>
-          <small>${escapeHtml(product.copy)}</small>
+          <small class="product-description">${renderMultilineText(product.copy)}</small>
           <div class="detail-price-block">
             <strong class="detail-price">₩${money.format(price)}</strong>
             ${orderable && displayVariant.compareAtPrice > price ? `<span><del>₩${money.format(displayVariant.compareAtPrice)}</del><b>${displayVariant.discountPercent}% 할인</b></span>` : ""}
@@ -6003,6 +6014,8 @@ function renderAdminProductRegisterForm() {
       <label>상품명<input name="name" value="${escapeHtml(template.name || "테일러메이드 TP5 로스트볼")}" data-required-input data-label="상품명" required /></label>
       <label>브랜드<input name="brandName" value="${escapeHtml(template.brandName || "테일러메이드")}" data-required-input data-label="브랜드" required /></label>
       <label>라인/설명<input name="line" value="${escapeHtml(template.line || "")}" data-required-input data-label="라인/설명" required /></label>
+      <label>상품 상세 설명<textarea name="copy" rows="5" maxlength="2000">${escapeHtml(template.copy || "")}</textarea></label>
+      <small class="admin-modal-helper">상품명·라인/설명·상품 상세 설명은 저장 후 고객 상품 화면에 반영됩니다. 이미지 안에 포함된 글자는 상세사진을 교체해야 바뀝니다.</small>
       <label>모델 옵션<input name="models" value="${escapeHtml(optionListValue(template.models))}" data-required-input data-label="모델 옵션" required /></label>
       <label>색상 옵션<input name="colors" value="${escapeHtml(optionListValue(template.colors))}" data-required-input data-label="색상 옵션" required /></label>
       <label>기본 가격<input name="price" inputmode="numeric" value="${escapeHtml(String(template.price || 11900))}" data-required-input data-label="기본 가격" required /></label>
@@ -7052,7 +7065,7 @@ async function handleAdminProductRegister() {
     slug,
     name,
     line,
-    copy: editingProduct?.copy || `${line} 기준으로 등록한 관리자 상품입니다.`,
+    copy: String(formData.get("copy") || "").trim(),
     price,
     colors,
     models,
@@ -8295,6 +8308,8 @@ async function hydrateFromSupabase() {
   }
 }
 
+if ("scrollRestoration" in window.history) window.history.scrollRestoration = "manual";
+
 function renderRoute() {
   state.route = parseRoute();
   bundleRegistry.clear();
@@ -8347,9 +8362,11 @@ function renderRoute() {
 }
 
 window.addEventListener("hashchange", () => {
+  const previousRoute = state.route;
   state.menuOpen = false;
   renderRoute();
-  window.requestAnimationFrame(flushPendingScroll);
+  const nextRoute = state.route;
+  window.requestAnimationFrame(() => completeRouteNavigation(previousRoute, nextRoute));
 });
 renderRoute();
 void configureSupabaseClient().then(() => {

@@ -34,13 +34,15 @@ const order = {id:"cccccccc-cccc-4ccc-8ccc-cccccccccccc",order_no:"RB-TEST",stat
 
 async function installMocks(page, role = "owner") {
   const requestedPages = [];
+  const savedPatches = [];
+  let productPatch = {};
   const rawHtml = await readFile(htmlPath, "utf8");
   const html = injectAdminConsoleAssets(rawHtml
     .replace('meta name="reball-supabase-url" content=""', 'meta name="reball-supabase-url" content="https://fake.supabase.test"')
     .replace('meta name="reball-supabase-publishable-key" content=""', 'meta name="reball-supabase-publishable-key" content="test-publishable"'));
 
   await page.route("**/store-manager.html*", (route) => route.fulfill({ status: 200, contentType: "text/html; charset=utf-8", body: html }));
-  await page.route("https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.110.2/+esm", (route) => route.fulfill({ status: 200, contentType: "text/javascript; charset=utf-8", body: fakeSupabaseModule }));
+  await page.route("https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.110.2/+esm", (route) => route.fulfill({ status: 200, contentType: "text/javascript; charset=utf-8", body: fakeSupabaseModule.replace('summary:"테스트"', `...${JSON.stringify(productPatch)}, summary:${JSON.stringify(productPatch.summary ?? "테스트")}`) }));
   await page.route("https://fake.supabase.test/functions/v1/**", async (route) => {
     const url = new URL(route.request().url());
     const view = url.searchParams.get("view");
@@ -76,12 +78,20 @@ async function installMocks(page, role = "owner") {
       else if (view === "settlement") body = { metrics:{grossKrw:52000,canceledKrw:0,netKrw:52000,completedRefundKrw:0},rows:[{order_id:order.id,status:"done",approved_amount:52000,canceled_amount:0,method:"card",approved_at:new Date().toISOString(),order:{order_no:"RB-TEST"}}],refunds:[] };
       else if (view === "brands") body = { brands:[{id:"ffffffff-ffff-4fff-8fff-ffffffffffff",name:"테스트",slug:"test",active:true}] };
     } else {
+      if (url.pathname.endsWith("/admin-console") && route.request().method() === "POST") {
+        const payload = route.request().postDataJSON();
+        if (payload.action === "catalogUpdate") {
+          savedPatches.push(payload);
+          productPatch = { ...productPatch, ...payload.productPatch };
+        }
+      }
       body = { result:{}, order:{} };
     }
     await route.fulfill({ status: 200, contentType: "application/json", headers:{"access-control-allow-origin":"*"}, body: JSON.stringify(body) });
   });
   await page.goto(`/store-manager.html?role=${role}`);
   await expect(page.locator("[data-app-panel]")).toBeVisible();
+  requestedPages.savedPatches = savedPatches;
   return requestedPages;
 }
 
@@ -138,4 +148,32 @@ test("complete operations console stays inside a 390px mobile viewport", async (
   await page.locator('[data-tab="settlement"]').click();
   await expect(page.locator("[data-extra-settlement-table]")).toContainText("RB-TEST");
   expect(await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth)).toBeLessThanOrEqual(1);
+});
+
+
+test("owner can save multiline product wording, reload it, and clear it", async ({ page }) => {
+  const requests = await installMocks(page);
+  await page.locator('[data-tab="products"]').click();
+  await page.locator('[name="productName"]').fill("새 상품명");
+  await page.locator('[name="productSubtitle"]').fill("새 한줄 설명");
+  const summary = '첫째 줄\n둘째 줄 <script>알림</script>';
+  await page.locator('textarea[name="productSummary"]').fill(summary);
+  await page.locator('[data-save-product]').click();
+  await expect.poll(() => requests.savedPatches.length).toBe(1);
+  expect(requests.savedPatches[0].productPatch).toMatchObject({ name: "새 상품명", subtitle: "새 한줄 설명", summary });
+  await page.reload();
+  await page.locator('[data-tab="products"]').click();
+  await expect(page.locator('[name="productName"]')).toHaveValue("새 상품명");
+  await expect(page.locator('[name="productSummary"]')).toHaveValue(summary);
+  await page.locator('[name="productSummary"]').fill("");
+  await page.locator('[data-save-product]').click();
+  await expect.poll(() => requests.savedPatches.length).toBe(2);
+  expect(requests.savedPatches[1].productPatch.summary).toBe("");
+});
+
+test("store manager cannot edit restricted product wording", async ({ page }) => {
+  await installMocks(page, "store");
+  await page.locator('[data-tab="products"]').click();
+  await expect(page.locator('[data-product-list]')).toContainText("테스트 로스트볼");
+  await expect(page.locator('[name="productName"], [name="productSubtitle"], [name="productSummary"]')).toHaveCount(0);
 });
