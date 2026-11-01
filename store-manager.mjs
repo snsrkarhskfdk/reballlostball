@@ -337,8 +337,9 @@ function renderProducts() {
     const variants = [...(product.product_variants || [])].sort((a, b) => String(a.sku).localeCompare(String(b.sku)));
     const metadata = canMetadata ? `
       <label class="sm-field">상품명<input class="sm-input" name="productName" value="${escapeHtml(product.name)}" /></label>
-      <label class="sm-field">한줄 설명<input class="sm-input" name="productSubtitle" value="${escapeHtml(product.subtitle || "")}" /></label>
-      <label class="sm-field">상세 요약<input class="sm-input" name="productSummary" value="${escapeHtml(product.summary || "")}" /></label>` : "";
+      <label class="sm-field">한줄 설명<input class="sm-input" name="productSubtitle" maxlength="240" value="${escapeHtml(product.subtitle || "")}" /></label>
+      <label class="sm-field">상품 상세 설명<textarea class="sm-input" name="productSummary" rows="5" maxlength="2000">${escapeHtml(product.summary || "")}</textarea></label>
+      <p class="sm-muted">상품명·한줄 설명·상품 상세 설명은 이 상품 저장 후 쇼핑몰에 반영됩니다. 줄바꿈도 유지됩니다. 이미지 안의 글자는 상세사진을 교체해 주세요.</p>` : "";
     return `<article class="sm-product" data-product-id="${escapeHtml(product.id)}">
       <div class="sm-product-head">
         <img class="sm-product-image" src="${escapeHtml(mediaUrl(productRepresentative(product)))}" alt="${escapeHtml(product.name)} 대표 사진" />
@@ -379,7 +380,7 @@ async function saveProduct(productId) {
     productPatch.subtitle = card.querySelector('[name="productSubtitle"]')?.value.trim() || "";
     productPatch.summary = card.querySelector('[name="productSummary"]')?.value.trim() || "";
   }
-  const variants = [...card.querySelectorAll("[data-variant-id]")].map((row) => ({
+  const variants = [...card.querySelectorAll(".sm-variant[data-variant-id]")].map((row) => ({
     id: row.dataset.variantId,
     priceKrw: Number(row.querySelector('[name="price"]')?.value),
     stockQty: Number(row.querySelector('[name="stock"]')?.value),

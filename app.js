@@ -37,7 +37,7 @@ import {
   requireAdminTab,
 } from "./src/frontend/auth/admin-permissions.mjs";
 import { captchaTokenFromForm, mountCaptchaWidgets } from "./src/frontend/auth/captcha-client.mjs";
-import { confirmTossPayment, prepareTossPayment, requestTossPayment } from "./src/frontend/payments/toss-client.mjs";
+import { confirmTossPayment, pendingTossConfirmation, prepareTossPayment, rememberTerminalPaymentFailure, requestTossPayment, terminalConfirmationFailure, terminalPaymentFailureRecorded } from "./src/frontend/payments/toss-client.mjs";
 import { normalizeCatalogSlug, sanitizeAssetReference } from "./src/frontend/core/url-safety.mjs";
 import { parseRoute, paymentReturnKind, paymentReturnParams, replacePaymentReturnUrl } from "./src/frontend/core/router.mjs";
 import { createAppState } from "./src/frontend/core/state.mjs";
@@ -105,7 +105,6 @@ const metaConfig = (name) => document.querySelector(`meta[name="${name}"]`)?.con
 const SUPABASE_URL = metaConfig("reball-supabase-url").replace(/\/$/, "");
 const SUPABASE_KEY = metaConfig("reball-supabase-publishable-key");
 const supabaseConfigured = /^https?:\/\//i.test(SUPABASE_URL) && Boolean(SUPABASE_KEY);
-const SUPABASE_SDK_TIMEOUT_MS = 2_500;
 const ADMIN_MEMBERS_FUNCTION_URL = `${SUPABASE_URL}/functions/v1/admin-members`;
 const SIGNUP_FUNCTION_URL = `${SUPABASE_URL}/functions/v1/signup-with-login-id`;
 const AUTH_ASSIST_FUNCTION_URL = `${SUPABASE_URL}/functions/v1/auth-assist`;
@@ -149,17 +148,10 @@ let supabase = createUnavailableSupabaseClient();
 
 async function configureSupabaseClient() {
   if (!supabaseConfigured) return;
-  let timeout;
   try {
-    const sdk = await Promise.race([
-      import("https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.110.2/+esm"),
-      new Promise((_, reject) => {
-        timeout = globalThis.setTimeout(
-          () => reject(new Error("Supabase SDK load timeout")),
-          SUPABASE_SDK_TIMEOUT_MS
-        );
-      }),
-    ]);
+    // Rendering already runs before this asynchronous boot. A slow CDN must not
+    // permanently discard a successfully loaded client and disable real stock.
+    const sdk = await import("https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.110.2/+esm");
     if (typeof sdk?.createClient !== "function") return;
     supabase = sdk.createClient(SUPABASE_URL, SUPABASE_KEY, {
       auth: {
@@ -171,8 +163,6 @@ async function configureSupabaseClient() {
     });
   } catch {
     // The static catalog remains usable and account/commerce actions fail closed.
-  } finally {
-    if (timeout) globalThis.clearTimeout(timeout);
   }
 }
 
@@ -738,10 +728,20 @@ async function ensureProfileRecord(user, profileOverrides = null) {
 async function loadAccountData(user, options = {}) {
   const { silent = false } = options;
   state.accountLoading = true;
+  // Only the newest load may publish. Anything older is a snapshot of a state the
+  // customer has already left -- a previous account, or a moment before a payment
+  // was confirmed -- and applying it shows them someone else's data or reverts
+  // their own. emptyAuthData() bumps this too, so a sign-out cancels a load in flight.
+  state.accountLoadSeq = (state.accountLoadSeq || 0) + 1;
+  const accountLoadTicket = state.accountLoadSeq;
   if (!silent && parseRoute() === "/mypage") renderMypage();
 
   try {
     const profile = await ensureProfileRecord(user);
+    // Captured where the queries are actually dispatched. Capturing it before the
+    // profile await meant a confirmation during that await discarded a snapshot the
+    // order queries had not even started yet.
+    const orderEpochAtQueryStart = state.orderEpoch || 0;
     const [addressesResult, ordersResult, orderItemsResult] = await Promise.all([
       supabase
         .from("addresses")
@@ -768,14 +768,51 @@ async function loadAccountData(user, options = {}) {
       itemsByOrderId.set(item.order_id, group);
     }
 
+    // A newer load started, or the session was cleared, while this one was in flight.
+    if (accountLoadTicket !== state.accountLoadSeq) return;
+    // Defence in depth: never publish one customer's account data under another's session.
+    const currentUserId = state.authUser?.id;
+    if (currentUserId && currentUserId !== user.id) return;
+
     state.viewer = buildViewer(user, profile);
     state.addresses = (addressesResult.data ?? []).map(mapAddressRecord);
-    state.orders = (ordersResult.data ?? []).map((order) => mapOrderRecord(order, itemsByOrderId.get(order.id) ?? []));
+    // An authoritative single-order write landed while this query was in flight, so
+    // this snapshot predates it. Applying it would revert a confirmed payment.
+    if ((state.orderEpoch || 0) === orderEpochAtQueryStart) {
+      state.orders = (ordersResult.data ?? []).map((order) => mapOrderRecord(order, itemsByOrderId.get(order.id) ?? []));
+    }
     state.paymentMethods = [];
   } finally {
     state.accountLoading = false;
   }
 }
+
+// A server response that authoritatively describes one order. Bump the epoch so a
+// bulk account refresh whose query started earlier cannot land afterwards and
+// overwrite it with pre-confirmation data -- which showed a paid order as unpaid.
+function commitServerOrder(order) {
+  state.orders = [order, ...state.orders.filter((item) => item.id !== order.id)];
+  state.orderEpoch = (state.orderEpoch || 0) + 1;
+}
+
+// Runtime modules (cancellation, recovery) act on the server directly and cannot
+// reach this module's state. Registered once, at module scope, so re-renders do not
+// stack duplicate listeners.
+document.addEventListener("reball:order-owner", (event) => {
+  if (typeof event.detail?.capture !== "function") return;
+  event.detail.capture(Object.freeze({
+    userId: state.authUser?.id ?? null,
+    epoch: state.authEpoch || 0,
+  }));
+});
+
+document.addEventListener("reball:order-updated", (event) => {
+  const owner = event.detail?.owner;
+  if (!owner || owner.userId !== (state.authUser?.id ?? null)
+    || owner.epoch !== (state.authEpoch || 0)) return;
+  const order = normalizeServerOrder(event.detail?.order);
+  if (order) commitServerOrder(order);
+});
 
 async function syncSessionState(session, options = {}) {
   const { silent = false } = options;
@@ -785,8 +822,12 @@ async function syncSessionState(session, options = {}) {
     return;
   }
 
+  if (state.authUser?.id !== session.user.id) emptyAuthData();
   state.authSession = session;
   state.authUser = session.user;
+  // Payment-return routes may retain their DOM while account data loads.
+  // Notify runtime controls only after both pieces of the new identity are bound.
+  globalThis.document?.dispatchEvent?.(new CustomEvent("reball:order-owner-changed"));
   await loadAccountData(session.user, { silent });
   await loadCurrentAuthRoles({ force: true });
 }
@@ -804,11 +845,13 @@ async function initializeAuth() {
     showToast(normalizeAuthError(error, "로그인 상태를 확인하지 못했습니다."));
   } finally {
     state.authReady = true;
-    if (await handleAuthCallbackHash()) return;
-    if (await handlePaymentReturn()) return;
-    renderRoute();
   }
 
+  // Register the auth listener BEFORE the routing calls below. A `return` inside
+  // `finally` exits this function, so registering afterwards meant a payment-return
+  // load never got a listener at all. Nothing else assigns state.authSession /
+  // state.authUser, so an in-SPA re-login from the payment recovery screen left the
+  // customer logged out until a full page reload.
   supabase.auth.onAuthStateChange((event, session) => {
     Promise.resolve()
       .then(async () => {
@@ -823,8 +866,10 @@ async function initializeAuth() {
         }
 
         if (session?.user) {
+          if (state.authUser?.id !== session.user.id) emptyAuthData();
           state.authSession = session;
           state.authUser = session.user;
+          globalThis.document?.dispatchEvent?.(new CustomEvent("reball:order-owner-changed"));
           if (event !== "TOKEN_REFRESHED") await loadAccountData(session.user, { silent: true });
           else if (!state.viewer) state.viewer = buildViewer(session.user);
           if (event !== "TOKEN_REFRESHED" || !state.authRolesLoaded) {
@@ -844,11 +889,20 @@ async function initializeAuth() {
           if (parseRoute().startsWith("/admin")) {
             state.adminMembersLoaded = false;
           }
+          // The payment return controller owns this screen and holds context the
+          // generic route branch does not have. supabase-js delivers INITIAL_SESSION
+          // to every new subscriber, so without this guard a logged-in member's
+          // payment return could be repainted mid-flow with a generic surface.
+          if (paymentReturnKind()) return;
           renderRoute();
         }
       })
       .catch((error) => showToast(normalizeAuthError(error)));
   });
+
+  if (await handleAuthCallbackHash()) return;
+  if (await handlePaymentReturn()) return;
+  renderRoute();
 }
 
 async function handleAuthFormSubmit(form) {
@@ -1053,9 +1107,9 @@ async function handlePasswordResetFormSubmit(form) {
   }
 }
 
-async function handleLogout(redirect = "/") {
+async function handleLogout(redirect = "/", options = {}) {
   try {
-    await supabase.auth.signOut();
+    await supabase.auth.signOut(options);
     emptyAuthData();
     showToast("로그아웃되었습니다.");
     routeTo(redirect);
@@ -1066,14 +1120,18 @@ async function handleLogout(redirect = "/") {
 
 async function loadCurrentAuthRoles(options = {}) {
   const { force = false } = options;
-  if (!state.authUser?.id) {
+  const actingUserId = state.authUser?.id;
+  if (!actingUserId) {
     state.authRoles = [];
     state.authRolesLoaded = true;
     return [];
   }
   if (state.authRolesLoaded && !force) return state.authRoles;
 
-  const { data, error } = await supabase.from("user_roles").select("role").eq("user_id", state.authUser.id);
+  state.authRolesLoadSeq = (state.authRolesLoadSeq || 0) + 1;
+  const rolesLoadTicket = state.authRolesLoadSeq;
+  const { data, error } = await supabase.from("user_roles").select("role").eq("user_id", actingUserId);
+  if (rolesLoadTicket !== state.authRolesLoadSeq || state.authUser?.id !== actingUserId) return [];
   if (error) throw error;
 
   state.authRoles = [...new Set((data || []).map((row) => stringOrEmpty(row.role).trim()).filter(Boolean))];
@@ -1158,7 +1216,8 @@ async function loadAdminMembers(options = {}) {
 }
 
 async function handleProfileSave(form) {
-  if (!state.authUser) {
+  const actingUser = state.authUser;
+  if (!actingUser) {
     showToast("로그인 상태를 다시 확인해 주세요.");
     routeTo("/login");
     return;
@@ -1169,7 +1228,7 @@ async function handleProfileSave(form) {
     name: stringOrEmpty(formData.get("name")).trim(),
     phone: stringOrEmpty(formData.get("phone")).trim(),
     telephone: stringOrEmpty(formData.get("telephone")).trim(),
-    email: stringOrEmpty(formData.get("email")).trim() || stringOrEmpty(state.authUser.email),
+    email: stringOrEmpty(formData.get("email")).trim() || stringOrEmpty(actingUser.email),
     marketing_sms: boolFromYesNo(formData.get("smsOptIn")),
     marketing_email: boolFromYesNo(formData.get("emailOptIn")),
     birth_date: stringOrEmpty(formData.get("birthday")).trim(),
@@ -1179,11 +1238,13 @@ async function handleProfileSave(form) {
   };
 
   try {
-    const profile = await ensureProfileRecord(state.authUser, payload);
-    state.viewer = buildViewer(state.authUser, profile);
+    const profile = await ensureProfileRecord(actingUser, payload);
+    if (state.authUser?.id !== actingUser.id) return;
+    state.viewer = buildViewer(actingUser, profile);
     showToast("회원 정보가 수정되었습니다.");
     renderMypage();
   } catch (error) {
+    if (state.authUser?.id !== actingUser.id) return;
     showToast(normalizeAuthError(error, "회원 정보를 저장하지 못했습니다."));
   }
 }
@@ -1338,6 +1399,14 @@ function normalizeAuthError(error, fallback = "요청을 처리하지 못했습�
 }
 
 function emptyAuthData() {
+  state.authEpoch = (state.authEpoch || 0) + 1;
+  // Invalidate any account load in flight so it cannot repopulate after sign-out.
+  state.accountLoadSeq = (state.accountLoadSeq || 0) + 1;
+  state.authRolesLoadSeq = (state.authRolesLoadSeq || 0) + 1;
+  state.orderCreateSeq = (state.orderCreateSeq || 0) + 1;
+  state.checkoutBusy = false;
+  state.checkoutIdempotencyKey = "";
+  state.paymentRequestState = "idle";
   state.viewer = null;
   state.authSession = null;
   state.authUser = null;
@@ -1427,12 +1496,23 @@ function mapOrderRecord(row, items = []) {
 }
 
 function routeTo(route) {
+  const previousRoute = state.route;
   state.menuOpen = false;
   location.hash = route;
   if (parseRoute() === route) {
     renderRoute();
-    window.requestAnimationFrame(flushPendingScroll);
+    window.requestAnimationFrame(() => completeRouteNavigation(previousRoute, route));
   }
+}
+
+function completeRouteNavigation(previousRoute, nextRoute) {
+  if (state.route !== nextRoute) return;
+  // Reset only navigation, never option changes, catalog hydration or form edits.
+  // Home section links keep their deliberate anchor target.
+  if (previousRoute !== nextRoute && !(nextRoute === "/" && state.pendingScrollTarget)) {
+    window.scrollTo({ top: 0, left: 0, behavior: "instant" });
+  }
+  flushPendingScroll();
 }
 
 function flushPendingScroll() {
@@ -1597,8 +1677,8 @@ function mapSupabaseProductToCatalogProduct(row) {
     brandName: stringOrEmpty(row.brands?.name).trim() || template.brandName || brandLabel(brandSlug),
     slug: safeProductSlug,
     name: stringOrEmpty(row.name).trim() || template.name,
-    line: stringOrEmpty(row.subtitle).trim() || template.line,
-    copy: stringOrEmpty(row.summary).trim() || template.copy || `${stringOrEmpty(row.subtitle).trim() || template.line} 기준으로 등록한 관리자 상품입니다.`,
+    line: stringOrEmpty(row.subtitle).trim(),
+    copy: stringOrEmpty(row.summary).trim(),
     price: Number(row.base_price_krw) || template.price,
     colors: colors.length ? colors : template.colors || ["화이트"],
     models: models.length ? models : template.models || [template.line || template.name],
@@ -2742,7 +2822,7 @@ function renderProductCard(product) {
       <div class="product-body">
         <div class="product-top"><span>${escapeHtml(product.brandName)}</span><b>로스트볼</b></div>
         <h3>${escapeHtml(product.name)}</h3>
-        <p>${escapeHtml(product.copy)}</p>
+        <p>${renderMultilineText(product.copy)}</p>
         <div class="product-price-stack" aria-label="상품 가격">
           ${metrics.orderable && metrics.compareAtPrice > metrics.price ? `<span><del>₩${money.format(metrics.compareAtPrice)}</del><b>${metrics.discountPercent}%</b></span>` : ""}
           <strong>${metrics.priced ? `₩${money.format(metrics.price)}부터` : "판매 준비중"}</strong>
@@ -2836,7 +2916,7 @@ function renderDetail(slug) {
           <div class="badge-row"><span>${orderable ? `재고 ${displayVariant.stock}세트` : "판매 준비중"}</span><b>${selection.grade || "-"}</b></div>
           <p class="buy-eyebrow">${escapeHtml(product.brandName)} / 로스트볼</p>
           <h1>${escapeHtml(product.name)}</h1>
-          <small>${escapeHtml(product.copy)}</small>
+          <small class="product-description">${renderMultilineText(product.copy)}</small>
           <div class="detail-price-block">
             <strong class="detail-price">₩${money.format(price)}</strong>
             ${orderable && displayVariant.compareAtPrice > price ? `<span><del>₩${money.format(displayVariant.compareAtPrice)}</del><b>${displayVariant.discountPercent}% 할인</b></span>` : ""}
@@ -3384,6 +3464,12 @@ function renderCheckout() {
 
 async function createOrder(formData) {
   if (state.checkoutBusy) return;
+  const actingUserId = state.authUser?.id ?? null;
+  state.orderCreateSeq = (state.orderCreateSeq || 0) + 1;
+  const orderCreateTicket = state.orderCreateSeq;
+  // Session invalidation also advances this ticket, including sign-out/sign-in as the same user.
+  const ownsCheckout = () => orderCreateTicket === state.orderCreateSeq
+    && (state.authUser?.id ?? null) === actingUserId;
   const customer = checkoutCustomerFromForm(formData);
   if (!isCheckoutCustomerValid(customer)) {
     showToast("받는 사람, 휴대폰 번호, 5자리 우편번호와 기본주소를 확인해 주세요.");
@@ -3414,10 +3500,11 @@ async function createOrder(formData) {
         paymentMethod: String(formData.get("payment") || "card"),
       }
     );
+    if (!ownsCheckout()) return;
     const order = normalizeServerOrder(result);
     if (!order) throw new Error("서버 주문 응답에 주문번호가 없습니다.");
     order.customer = { ...order.customer, name: order.customer?.name || customer.receiverName };
-    state.orders = [order, ...state.orders.filter((item) => item.id !== order.id)];
+    commitServerOrder(order);
     if (result.lookupToken) {
       saveGuestLookupSession(globalThis.sessionStorage, { orderId: order.id, lookupToken: result.lookupToken });
     }
@@ -3427,11 +3514,14 @@ async function createOrder(formData) {
     routeTo(`/order/${order.id}`);
     await maybeRequestTossPayment(order, result);
   } catch (error) {
+    if (!ownsCheckout()) return;
     state.paymentRequestState = "error";
     showToast(normalizeAuthError(error, "주문을 생성하지 못했습니다. 장바구니는 유지됩니다."));
   } finally {
-    state.checkoutBusy = false;
-    if (parseRoute() === "/checkout") renderCheckout();
+    if (ownsCheckout()) {
+      state.checkoutBusy = false;
+      if (parseRoute() === "/checkout") renderCheckout();
+    }
   }
 }
 
@@ -3467,20 +3557,44 @@ async function requestTossPaymentForOrder(orderId) {
   });
 }
 
-function renderPaymentReturnStatus({ kind = "processing", orderId = "", message = "" } = {}) {
+function renderPaymentReturnStatus({ kind = "processing", orderId = "", message = "", retryable = true } = {}) {
   const isProcessing = kind === "processing";
+  const isRecovery = kind === "recovery";
+  // Callers may omit `retryable` -- the startup payment-return controller and the
+  // generic route branch both do -- so consult the persisted verdict here rather than
+  // at each call site. A reload has no error code to classify from.
+  const canRetry = retryable && !terminalPaymentFailureRecorded(orderId, globalThis.sessionStorage);
+  const pending = isRecovery && pendingTossConfirmation(orderId, globalThis.sessionStorage);
+  const title = isProcessing ? "결제 승인 결과를 확인하고 있습니다."
+    : isRecovery ? "결제 승인 결과가 아직 확정되지 않았습니다." : "결제를 완료하지 못했습니다.";
+  const description = isProcessing ? "창을 닫거나 뒤로 이동하지 말고 잠시만 기다려 주세요."
+    : message || (isRecovery ? "같은 주문의 결제 결과를 다시 확인해 주세요. 로그인이 필요한 경우 다시 로그인한 뒤 확인해 주세요."
+      : "결제 정보를 확인한 뒤 다시 시도해 주세요.");
   layout(`
     <section class="complete-page payment-return-page" aria-live="polite">
-      <div class="complete-icon">${isProcessing ? icons.lock : icons.close}</div>
-      <h1>${isProcessing ? "결제 승인 결과를 확인하고 있습니다." : "결제를 완료하지 못했습니다."}</h1>
-      <p>${escapeHtml(isProcessing ? "창을 닫거나 뒤로 이동하지 말고 잠시만 기다려 주세요." : message || "결제 정보를 확인한 뒤 다시 시도해 주세요.")}</p>
+      <div class="complete-icon">${isProcessing || isRecovery ? icons.lock : icons.close}</div>
+      <h1>${title}</h1>
+      <p>${escapeHtml(description)}</p>
+      ${isRecovery ? "<p>이미 승인되었을 수 있으니 새 주문이나 재결제 전에 기존 주문의 결제 결과를 확인해 주세요.</p>" : ""}
       ${orderId ? `<dl><div><dt>주문번호</dt><dd>${escapeHtml(orderId)}</dd></div></dl>` : ""}
       <div class="complete-actions">
-        ${!isProcessing && orderId ? `<button class="primary-btn" type="button" data-payment-retry="${escapeHtml(orderId)}">결제 다시 시도</button>` : ""}
-        ${!isProcessing ? '<button class="secondary-btn" type="button" data-route="/">홈으로 이동</button>' : ""}
+        ${isRecovery && pending ? `<button class="primary-btn" type="button" data-payment-confirm-recovery="${escapeHtml(orderId)}">결제 결과 다시 확인</button>` : ""}
+        ${isRecovery && orderId ? `<button class="${pending ? "secondary-btn" : "primary-btn"}" type="button" data-route="/order/${escapeHtml(orderId)}">기존 주문 확인</button>` : ""}
+        ${isRecovery && orderId ? `<button class="secondary-btn" type="button" data-payment-reauth="${escapeHtml(orderId)}">다시 로그인</button>` : ""}
+        ${!isProcessing && !isRecovery && orderId && canRetry ? `<button class="primary-btn" type="button" data-payment-retry="${escapeHtml(orderId)}">결제 다시 시도</button>` : ""}
+        ${!isProcessing && !isRecovery && orderId && !canRetry ? `<button class="primary-btn" type="button" data-route="/order/${escapeHtml(orderId)}">주문 내역 확인</button>` : ""}
+        ${!isProcessing && !isRecovery ? '<button class="secondary-btn" type="button" data-route="/">홈으로 이동</button>' : ""}
       </div>
     </section>
   `);
+}
+
+async function handlePaymentReauthentication(orderId) {
+  if (!/^[A-Z0-9_-]{6,64}$/.test(orderId)) return;
+  // Clear a stale local login through the existing logout flow without removing
+  // the saved confirmation tuple; login returns to this same order's recovery.
+  setAuthRedirect(`/payment/recovery?orderId=${encodeURIComponent(orderId)}`);
+  await handleLogout("/login", { scope: "local" });
 }
 
 async function handlePaymentReturn() {
@@ -3489,16 +3603,31 @@ async function handlePaymentReturn() {
   const params = paymentReturnParams();
   const orderId = String(params.get("orderId") || "").trim().toUpperCase();
 
-  if (kind === "fail") {
-    replacePaymentReturnUrl("/payment/fail");
+  if (kind === "fail" || kind === "recovery") {
+    replacePaymentReturnUrl(`/payment/${kind}`);
     renderPaymentReturnStatus({
-      kind: "fail",
+      kind,
       orderId: /^[A-Z0-9_-]{6,64}$/.test(orderId) ? orderId : "",
-      message: "결제가 취소되었거나 승인되지 않았습니다. 결제수단을 확인하고 다시 시도해 주세요.",
+      message: kind === "fail" ? "결제가 취소되었거나 승인되지 않았습니다. 결제수단을 확인하고 다시 시도해 주세요." : "",
     });
     return true;
   }
 
+  const actingUserId = state.authUser?.id ?? null;
+  const authEpoch = state.authEpoch || 0;
+  state.paymentConfirmSeq = (state.paymentConfirmSeq || 0) + 1;
+  const confirmationTicket = state.paymentConfirmSeq;
+  const ownsConfirmation = () => confirmationTicket === state.paymentConfirmSeq
+    && authEpoch === (state.authEpoch || 0)
+    && actingUserId === (state.authUser?.id ?? null);
+  const paymentStorage = globalThis.sessionStorage;
+  // The payment client also publishes guest credentials and clears recovery data.
+  // Bind those deferred storage effects to the same owner as the visible result.
+  const ownedStorage = {
+    getItem: (key) => ownsConfirmation() ? paymentStorage?.getItem(key) ?? null : null,
+    setItem: (key, value) => { if (ownsConfirmation()) paymentStorage?.setItem(key, value); },
+    removeItem: (key) => { if (ownsConfirmation()) paymentStorage?.removeItem(key); },
+  };
   renderPaymentReturnStatus({ kind: "processing", orderId });
   try {
     const guestLookup = loadGuestLookupSession(globalThis.sessionStorage);
@@ -3507,6 +3636,7 @@ async function handlePaymentReturn() {
         baseUrl: SUPABASE_URL,
         anonKey: SUPABASE_KEY,
         accessToken: state.authSession?.access_token || "",
+        storage: ownedStorage,
       },
       {
         paymentKey: params.get("paymentKey"),
@@ -3515,21 +3645,31 @@ async function handlePaymentReturn() {
         guestLookupToken: guestLookup?.orderId === orderId ? guestLookup.lookupToken : "",
       }
     );
+    if (!ownsConfirmation()) return true;
     const order = normalizeServerOrder(result);
     if (!order) throw new Error("결제 완료 주문을 확인하지 못했습니다.");
-    state.orders = [order, ...state.orders.filter((item) => item.id !== order.id)];
+    commitServerOrder(order);
     state.paymentRequestState = result.paid ? "paid" : "waiting_for_deposit";
     replacePaymentReturnUrl(`/order/${encodeURIComponent(order.id)}`);
     renderRoute();
     showToast(result.paid ? "결제가 완료되었습니다." : "가상계좌 입금 안내를 확인해 주세요.");
   } catch (error) {
-    state.paymentRequestState = "error";
-    replacePaymentReturnUrl("/payment/fail");
+    if (!ownsConfirmation()) return true;
+    const needsRecovery = ["PAYMENT_CONFIRM_RECOVERY_REQUIRED", "PAYMENT_CONFIRM_AUTH_REQUIRED"].includes(error?.code);
+    // A definitive decline leaves the order payment_failed, so prepare-payment will
+    // refuse it. Advertising "결제 다시 시도" there is a control that cannot succeed.
+    const terminal = terminalConfirmationFailure(error);
+    state.paymentRequestState = needsRecovery ? "recovery_required" : "error";
+    replacePaymentReturnUrl(needsRecovery ? "/payment/recovery" : "/payment/fail");
     renderPaymentReturnStatus({
-      kind: "fail",
+      kind: needsRecovery ? "recovery" : "fail",
       orderId: /^[A-Z0-9_-]{6,64}$/.test(orderId) ? orderId : "",
       message: error?.message || "결제 승인 결과를 확인하지 못했습니다. 같은 주문으로 다시 확인해 주세요.",
+      retryable: !terminal,
     });
+    // Survive a re-render and a reload: the route branch has no error code.
+    state.paymentReturnRetryable = !terminal;
+    if (terminal) rememberTerminalPaymentFailure(orderId, globalThis.sessionStorage, error);
   }
   return true;
 }
@@ -5864,6 +6004,8 @@ function renderAdminProductRegisterForm() {
       <label>상품명<input name="name" value="${escapeHtml(template.name || "테일러메이드 TP5 로스트볼")}" data-required-input data-label="상품명" required /></label>
       <label>브랜드<input name="brandName" value="${escapeHtml(template.brandName || "테일러메이드")}" data-required-input data-label="브랜드" required /></label>
       <label>라인/설명<input name="line" value="${escapeHtml(template.line || "")}" data-required-input data-label="라인/설명" required /></label>
+      <label>상품 상세 설명<textarea name="copy" rows="5" maxlength="2000">${escapeHtml(template.copy || "")}</textarea></label>
+      <small class="admin-modal-helper">상품명·라인/설명·상품 상세 설명은 저장 후 고객 상품 화면에 반영됩니다. 이미지 안에 포함된 글자는 상세사진을 교체해야 바뀝니다.</small>
       <label>모델 옵션<input name="models" value="${escapeHtml(optionListValue(template.models))}" data-required-input data-label="모델 옵션" required /></label>
       <label>색상 옵션<input name="colors" value="${escapeHtml(optionListValue(template.colors))}" data-required-input data-label="색상 옵션" required /></label>
       <label>기본 가격<input name="price" inputmode="numeric" value="${escapeHtml(String(template.price || 11900))}" data-required-input data-label="기본 가격" required /></label>
@@ -6913,7 +7055,7 @@ async function handleAdminProductRegister() {
     slug,
     name,
     line,
-    copy: editingProduct?.copy || `${line} 기준으로 등록한 관리자 상품입니다.`,
+    copy: String(formData.get("copy") || "").trim(),
     price,
     colors,
     models,
@@ -7614,7 +7756,11 @@ function bindPageEvents() {
       );
       const matchedOrder = normalizeServerOrder(result);
       if (!matchedOrder) throw new Error("주문 정보를 찾을 수 없습니다.");
-      state.orders = [matchedOrder, ...state.orders.filter((order) => order.id !== matchedOrder.id)];
+      // The lookup just proved this token. Persist it, or payment preparation and any
+      // reload afterwards read empty storage and the customer loses access to the
+      // order they just opened.
+      saveGuestLookupSession(globalThis.sessionStorage, { orderId: matchedOrder.id, lookupToken });
+      commitServerOrder(matchedOrder);
       routeTo(`/order/${matchedOrder.id}`);
     } catch (error) {
       showToast(error.message || "주문 정보를 찾을 수 없습니다.");
@@ -7632,6 +7778,11 @@ function bindPageEvents() {
   document.querySelectorAll("[data-logout]").forEach((node) => {
     node.addEventListener("click", async () => {
       await handleLogout("/");
+    });
+  });
+  document.querySelectorAll("[data-payment-reauth]").forEach((node) => {
+    node.addEventListener("click", async () => {
+      await handlePaymentReauthentication(node.dataset.paymentReauth);
     });
   });
   document.querySelectorAll("[data-buy-now]").forEach((node) =>
@@ -8147,6 +8298,8 @@ async function hydrateFromSupabase() {
   }
 }
 
+if ("scrollRestoration" in window.history) window.history.scrollRestoration = "manual";
+
 function renderRoute() {
   state.route = parseRoute();
   bundleRegistry.clear();
@@ -8178,9 +8331,10 @@ function renderRoute() {
     const orderId = String(paymentReturnParams().get("orderId") || "").trim().toUpperCase();
     if (a === "success") return renderPaymentReturnStatus({ kind: "processing", orderId });
     return renderPaymentReturnStatus({
-      kind: "fail",
+      kind: a === "recovery" ? "recovery" : "fail",
       orderId: /^[A-Z0-9_-]{6,64}$/.test(orderId) ? orderId : "",
-      message: "결제를 완료하지 못했습니다. 결제 정보를 확인한 뒤 다시 시도해 주세요.",
+      message: a === "recovery" ? "" : "결제를 완료하지 못했습니다. 결제 정보를 확인한 뒤 다시 시도해 주세요.",
+      retryable: state.paymentReturnRetryable !== false,
     });
   }
   if (base === "mypage") return renderMypage();
@@ -8198,9 +8352,11 @@ function renderRoute() {
 }
 
 window.addEventListener("hashchange", () => {
+  const previousRoute = state.route;
   state.menuOpen = false;
   renderRoute();
-  window.requestAnimationFrame(flushPendingScroll);
+  const nextRoute = state.route;
+  window.requestAnimationFrame(() => completeRouteNavigation(previousRoute, nextRoute));
 });
 renderRoute();
 void configureSupabaseClient().then(() => {
