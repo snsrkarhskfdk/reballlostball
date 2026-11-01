@@ -105,7 +105,6 @@ const metaConfig = (name) => document.querySelector(`meta[name="${name}"]`)?.con
 const SUPABASE_URL = metaConfig("reball-supabase-url").replace(/\/$/, "");
 const SUPABASE_KEY = metaConfig("reball-supabase-publishable-key");
 const supabaseConfigured = /^https?:\/\//i.test(SUPABASE_URL) && Boolean(SUPABASE_KEY);
-const SUPABASE_SDK_TIMEOUT_MS = 2_500;
 const ADMIN_MEMBERS_FUNCTION_URL = `${SUPABASE_URL}/functions/v1/admin-members`;
 const SIGNUP_FUNCTION_URL = `${SUPABASE_URL}/functions/v1/signup-with-login-id`;
 const AUTH_ASSIST_FUNCTION_URL = `${SUPABASE_URL}/functions/v1/auth-assist`;
@@ -149,17 +148,10 @@ let supabase = createUnavailableSupabaseClient();
 
 async function configureSupabaseClient() {
   if (!supabaseConfigured) return;
-  let timeout;
   try {
-    const sdk = await Promise.race([
-      import("https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.110.2/+esm"),
-      new Promise((_, reject) => {
-        timeout = globalThis.setTimeout(
-          () => reject(new Error("Supabase SDK load timeout")),
-          SUPABASE_SDK_TIMEOUT_MS
-        );
-      }),
-    ]);
+    // Rendering already runs before this asynchronous boot. A slow CDN must not
+    // permanently discard a successfully loaded client and disable real stock.
+    const sdk = await import("https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.110.2/+esm");
     if (typeof sdk?.createClient !== "function") return;
     supabase = sdk.createClient(SUPABASE_URL, SUPABASE_KEY, {
       auth: {
@@ -171,8 +163,6 @@ async function configureSupabaseClient() {
     });
   } catch {
     // The static catalog remains usable and account/commerce actions fail closed.
-  } finally {
-    if (timeout) globalThis.clearTimeout(timeout);
   }
 }
 

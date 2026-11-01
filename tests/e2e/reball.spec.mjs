@@ -178,19 +178,25 @@ test("product navigation resets scroll while product interaction keeps its posit
 
 
 test("storefront displays saved multiline wording as text and respects cleared descriptions", async ({ page }) => {
+  let sdkLoads = 0;
   let summary = "첫째 줄\n둘째 줄 <img src=x onerror=alert(1)>";
   const raw = await readFile(new URL("../../index.html", import.meta.url), "utf8");
   const html = raw.replace('meta name="reball-supabase-url" content=""', 'meta name="reball-supabase-url" content="https://fake.supabase.test"').replace('meta name="reball-supabase-publishable-key" content=""', 'meta name="reball-supabase-publishable-key" content="test-publishable"');
   await page.route("**/index.html*", route => route.fulfill({ contentType: "text/html", body: html }));
-  await page.route("https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.110.2/+esm", route => route.fulfill({ contentType: "text/javascript", body: `
+  await page.route("https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.110.2/+esm", async route => {
+    sdkLoads += 1;
+    if (sdkLoads === 1) await new Promise(resolve => setTimeout(resolve, 3200));
+    return route.fulfill({ contentType: "text/javascript", body: `
     export function createClient() { return {
       auth: { getSession: async()=>({data:{session:null}}), onAuthStateChange:()=>({data:{subscription:{unsubscribe(){}}}}) },
-      from:()=>({select(){return this},eq:async()=>({data:[{slug:"titleist-pro-v1-v1x-lostball",name:"수정한 상품명",subtitle:"수정한 한줄 설명",summary:${JSON.stringify(summary)},brands:{slug:"titleist",name:"타이틀리스트"},product_variants:[]}],error:null})})
+      from:()=>({select(){return this},eq:async()=>({data:[{slug:"titleist-pro-v1-v1x-lostball",name:"수정한 상품명",subtitle:"수정한 한줄 설명",summary:${JSON.stringify(summary)},brands:{slug:"titleist",name:"타이틀리스트"},product_variants:[{id:"bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",sku:"TEST-A-10",option_model:"PRO V1",option_color:"화이트",grade:"A",pack_size:10,price_krw:15000,stock_qty:3,active:true}]}],error:null})})
     }; }
-  ` }));
+  ` }); });
   await page.goto("/index.html#/product/titleist-pro-v1-v1x-lostball");
   await expect(page.locator("main h1")).toHaveText("수정한 상품명");
   await expect(page.locator(".product-description")).toHaveText(summary, { useInnerText: true });
+  await expect(page.locator("[data-add-detail]")).toBeEnabled();
+  await expect(page.locator("[data-add-detail]")).toHaveAttribute("data-variant-id", "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb");
   await expect(page.locator(".product-description br")).toHaveCount(1);
   await expect(page.locator(".product-description img")).toHaveCount(0);
   summary = "";
