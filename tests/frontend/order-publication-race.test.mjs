@@ -24,7 +24,8 @@ function harness(userId = "A") {
     state, console, normalizeServerOrder, SUPABASE_URL: "http://127.0.0.1:1", SUPABASE_KEY: "synthetic",
     checkoutCustomerFromForm: () => ({ receiverName: "Alpha private", receiverPhone: "01000000001" }),
     isCheckoutCustomerValid: () => true, orderLinePayload: () => [{ variantId: "synthetic", qty: 1 }],
-    renderCheckout: () => { effects.renders += 1; }, createIdempotencyKey: () => "synthetic-idempotency",
+    renderCheckout: () => { effects.renders += 1; }, syncCheckoutSubmitState: () => {},
+    createIdempotencyKey: () => "synthetic-idempotency",
     createOrderRequest: (options, payload) => new Promise((resolve, reject) => requests.push({ options, payload, resolve, reject })),
     saveGuestLookupSession: (_storage, session) => effects.guestSessions.push(session),
     saveCartState: () => { effects.cartSaves += 1; }, routeTo: path => effects.routes.push(path),
@@ -127,4 +128,14 @@ test("R42-N03: current-user failure stays visible and retry is unlocked", async 
   assert.equal(h.state.checkoutBusy, false);
   assert.equal(h.state.paymentRequestState, "error");
   assert.deepEqual(h.effects.toasts, ["synthetic failure"]);
+});
+
+test("checkout pending and rejection keep the existing form instead of repainting its inputs", async () => {
+  const h = harness(null), pending = start(h);
+  assert.equal(h.effects.renders, 0, "Starting checkout must retain the customer's existing form controls");
+  h.requests[0].reject(new Error("synthetic outage"));
+  await pending;
+  assert.equal(h.effects.renders, 0, "Failure must unlock the same form for retry");
+  assert.equal(h.state.checkoutBusy, false);
+  assert.deepEqual(h.effects.toasts, ["synthetic outage"]);
 });

@@ -3462,6 +3462,16 @@ function renderCheckout() {
   `);
 }
 
+function syncCheckoutSubmitState() {
+  const button = document.querySelector("[data-checkout-form] .checkout-submit-btn");
+  if (!button) return;
+  button.disabled = !state.cart.length || state.checkoutBusy;
+  button.classList.toggle("is-loading", state.checkoutBusy);
+  button.setAttribute("aria-busy", String(state.checkoutBusy));
+  const copy = button.querySelector(".checkout-submit-copy b");
+  if (copy) copy.textContent = state.checkoutBusy ? "서버에서 주문 확인 중" : "주문 접수하기";
+}
+
 async function createOrder(formData) {
   if (state.checkoutBusy) return;
   const actingUserId = state.authUser?.id ?? null;
@@ -3485,7 +3495,9 @@ async function createOrder(formData) {
     const items = orderLinePayload(state.cart);
     state.checkoutBusy = true;
     state.paymentRequestState = "creating_order";
-    renderCheckout();
+    // Keep the same controls and their current values. Repainting here discarded
+    // the shipping address/payment method before a failed request could retry.
+    syncCheckoutSubmitState();
     state.checkoutIdempotencyKey ||= createIdempotencyKey();
     const result = await createOrderRequest(
       {
@@ -3520,7 +3532,7 @@ async function createOrder(formData) {
   } finally {
     if (ownsCheckout()) {
       state.checkoutBusy = false;
-      if (parseRoute() === "/checkout") renderCheckout();
+      if (parseRoute() === "/checkout") syncCheckoutSubmitState();
     }
   }
 }

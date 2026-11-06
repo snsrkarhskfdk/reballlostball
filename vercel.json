@@ -1,5 +1,10 @@
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
+  "git": {
+    "deploymentEnabled": {
+      "repair/mr-dr01-harness-declare-scope": false
+    }
+  },
   "buildCommand": "npm run build",
   "outputDirectory": "dist",
   "redirects": [
