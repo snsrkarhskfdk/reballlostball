@@ -47,7 +47,10 @@ async function checkoutHarness(page) {
   await form.locator('[name="zipCode"]').fill("12345");
   await form.locator('[name="roadAddress"]').fill("Synthetic test road");
   await form.locator('[name="detailAddress"]').fill("Synthetic unit");
-  await form.locator('[name="payment"][value="transfer"]').check();
+  // The native radio is visually covered by the styled label. Use the same
+  // visible target as a customer instead of forcing a click on the input.
+  await form.locator("label.checkout-method").filter({ hasText: "계좌이체" }).click();
+  await expect(form.locator('[name="payment"][value="transfer"]')).toBeChecked();
   return form;
 }
 

@@ -118,3 +118,22 @@ No merge, production SQL/Edge change, production deployment, DNS/key rotation,
 real customer order, real charge/refund or separately billed model API request was
 performed. A configuration/preparation record is not a completed cloud task, and
 an opened TEST window is not provider approval.
+
+## Follow-up verification
+
+Full QA #181 at `64ae05d` passed Windows portability, lint/build, unit/contract
+checks and 72 existing browser tests. The two new browser cases timed out in the
+fixture while trying to click the styled radio's covered native input, before
+reaching checkout submission. The fixture now clicks the visible payment-method
+label and asserts the radio is selected. Read the follow-up CI result rather than
+reporting #181 as successful. Data API grants #8 passed.
+
+An additional privileged hosted database-function integration test used only the
+new synthetic order inside `BEGIN`/`ROLLBACK`: release returned 1 and stock rose
+by exactly one; repeating release returned 0 with no second increment. Rollback
+readback confirmed payment_ready/ready, reserved, released_at NULL and stock=9.
+This is actual PostgreSQL function/replay evidence, not authenticated API or Toss
+cancellation evidence. No provider was contacted by this transaction.
+
+The ChatGPT secure sign-in request was interrupted. Cloud environment/task
+inspection is still blocked and has not been retried or represented as complete.
