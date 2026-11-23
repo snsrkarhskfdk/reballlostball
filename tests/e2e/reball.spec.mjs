@@ -60,8 +60,8 @@ test("Toss success return confirms on the server and removes paymentKey from the
       contentType: "application/json",
       body: JSON.stringify({
         order: {
-          id: "order-1", orderNumber: "RB-20260826-001", status: "paid", paymentStatus: "paid",
-          deliveryStatus: "preparing", amount: 17000, paidAmount: 17000, paymentMethod: "card", items: [],
+          id: "order-1", orderNo: "ORDER-1", status: "paid", paymentStatus: "paid",
+          deliveryStatus: "preparing", totalKrw: 17000, paidAmount: 17000, paymentMethod: "card", items: [],
         },
       }),
     });

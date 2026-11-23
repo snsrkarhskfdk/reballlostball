@@ -7,6 +7,11 @@ const TOSS_CONFIRM_TIMEOUT_MS = 30_000;
 const TOSS_CONFIRM_AUTO_ATTEMPTS = 3;
 const PAYMENT_RETURN_STORAGE_PREFIX = "reball.paymentReturnToken.";
 const PAYMENT_CONFIRM_STORAGE_PREFIX = "reball.paymentConfirm.";
+// Match the server's accepted settlement states, including a duplicate response
+// after fulfilment has advanced or a virtual account is awaiting its deposit.
+const CONFIRMED_ORDER_STATUSES = new Set([
+  "waiting_for_deposit", "paid", "shipping_ready", "shipped", "delivered",
+]);
 const RECOVERABLE_CONFIRM_CODES = new Set([
   "PAYMENT_RESULT_UNKNOWN",
   "PAYMENT_RESPONSE_MISMATCH",
@@ -96,7 +101,22 @@ async function postJson(fetchImpl, url, body, headers = {}, timeoutMs = TOSS_API
       body: JSON.stringify(body),
       signal: controller.signal,
     });
-    const payload = await response.json().catch(() => ({}));
+    let payload;
+    try {
+      payload = await response.json();
+    } catch (error) {
+      // fetch resolves as soon as headers arrive. Reading its body can still time
+      // out, fail, or produce truncated JSON after the server accepted payment.
+      if (controller.signal.aborted || error?.name === "AbortError" || error?.name === "TimeoutError") throw error;
+      if (!response.ok) {
+        // Preserve status-based handling even when a gateway returns HTML: 401
+        // needs reauthentication, whereas 5xx needs exact-confirmation recovery.
+        throw requestError("결제 요청에 실패했습니다.", { status: response.status });
+      }
+      throw requestError("결제 서버 응답을 확인할 수 없습니다. 같은 주문에서 다시 확인해 주세요.", {
+        code: "PAYMENT_RESPONSE_MISMATCH", status: response.status,
+      });
+    }
     if (!response.ok) {
       throw requestError(payload?.message || "결제 요청에 실패했습니다.", {
         code: payload?.code,
@@ -106,7 +126,7 @@ async function postJson(fetchImpl, url, body, headers = {}, timeoutMs = TOSS_API
     }
     return payload;
   } catch (error) {
-    if (error?.name === "AbortError" || error?.name === "TimeoutError") {
+    if (controller.signal.aborted || error?.name === "AbortError" || error?.name === "TimeoutError") {
       throw requestError("결제 서버 연결 시간이 초과되었습니다. 같은 주문에서 다시 확인해 주세요.", {
         code: "CLIENT_TIMEOUT",
       });
@@ -309,6 +329,18 @@ export async function confirmTossPayment(config, confirmation) {
   for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
     try {
       const result = await postJson(fetchImpl, confirmUrl, confirmBody, confirmHeaders, confirmTimeoutMs);
+      const order = result?.order;
+      if (!result || typeof result !== "object" || Array.isArray(result)
+          || !order || typeof order !== "object" || Array.isArray(order)
+          || order.orderNo !== orderId
+          || !Number.isSafeInteger(order.totalKrw) || order.totalKrw !== amount
+          || !CONFIRMED_ORDER_STATUSES.has(order.status)) {
+        // HTTP 200 alone does not prove that this order was confirmed. Keep both
+        // recovery credentials until the authoritative order matches the request.
+        throw requestError("결제 승인 응답이 주문과 일치하지 않습니다. 같은 주문에서 다시 확인해 주세요.", {
+          code: "PAYMENT_RESPONSE_MISMATCH",
+        });
+      }
       const refreshedGuestLookupToken = String(result?.guestLookupToken || "").trim();
       if (refreshedGuestLookupToken) {
         saveGuestLookupSession(storage, {

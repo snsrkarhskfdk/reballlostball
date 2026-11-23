@@ -53,16 +53,29 @@ function normalizedSearch(value: string | null): string {
   return cleanString(value, 120).trim().toLocaleLowerCase("ko-KR");
 }
 
-function orderSearchText(order: AnyRow, canOrderPii: boolean): string {
+function orderSearchText(order: AnyRow, canOrderPii: boolean, scope: OrderScope): string {
   const safeParts = [order.order_no, order.status, order.payment_status, order.payment_method, order.payment_provider, order.total_krw];
   if (!canOrderPii) return safeParts.join(" ").toLocaleLowerCase("ko-KR");
+  const address = (order.address_snapshot || {}) as AnyRow;
+  const name = address.receiverName || address.receiver_name || address.name || "";
+  const phone = address.receiverPhone || address.receiver_phone || address.phone || "";
+  const road = address.roadAddress || address.road_address || address.address || "";
+  const items = Array.isArray(order.order_items) ? order.order_items : [];
+  // Keep the console's field order and spaces: serialized JSON breaks phrases
+  // such as a product name followed by its variant before client filtering runs.
+  const consoleParts = scope === "shipping"
+    ? [order.order_no, name, phone, ...items.map((item) => item.product_name)]
+    : [order.order_no, name, phone, road, ...items.map((item) => `${item.product_name || ""} ${item.variant_name || ""}`.trim())];
   return [
+    consoleParts.filter(Boolean).join(" "),
     ...safeParts,
-    JSON.stringify(order.address_snapshot || {}),
-    JSON.stringify(order.order_items || []),
+    road,
+    address.detailAddress || address.detail_address,
+    address.zipCode || address.zip_code || address.postalCode,
+    address.memo,
     order.shipping_carrier,
     order.tracking_number,
-  ].join(" ").toLocaleLowerCase("ko-KR");
+  ].filter(Boolean).join(" ").toLocaleLowerCase("ko-KR");
 }
 
 function applyScopeStatus(params: URLSearchParams, scope: OrderScope, requestedStatus: string): void {
@@ -123,7 +136,7 @@ async function pagedOrders({
     applyScopeStatus(params, scope, requestedStatus);
     const chunk = await serviceSelect<AnyRow[]>(`/rest/v1/orders?${params}`);
     for (const order of chunk) {
-      if (orderSearchText(order, canOrderPii).includes(query)) matches.push(order);
+      if (orderSearchText(order, canOrderPii, scope).includes(query)) matches.push(order);
       if (matches.length >= neededMatches) break;
     }
     scanned += chunk.length;

@@ -32,11 +32,11 @@ test("ambiguous Toss confirmation stays on exact confirmation recovery and never
         paid: true,
         order: {
           id: "order-recover-1",
-          orderNumber: "ORDER-RECOVER-1",
+          orderNo: "ORDER-RECOVER-1",
           status: "paid",
           paymentStatus: "done",
           deliveryStatus: "preparing",
-          amount: 17000,
+          totalKrw: 17000,
           paidAmount: 17000,
           paymentMethod: "card",
           items: [],

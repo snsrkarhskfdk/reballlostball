@@ -85,7 +85,7 @@ test("success confirmation replaces lost guest identity with a refreshed lookup 
     sentBody = JSON.parse(init.body);
     return okJson({
       paid: true,
-      order: { orderNo: orderId },
+      order: { orderNo: orderId, status: "paid", totalKrw: 30500 },
       guestLookupToken: refreshedLookupToken,
     });
   };

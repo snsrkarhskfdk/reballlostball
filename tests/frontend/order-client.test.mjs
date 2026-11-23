@@ -70,7 +70,8 @@ test("토스 성공 복귀값은 서버 payment-confirm으로 전달한다", asy
       anonKey: "anon",
       fetchImpl: async (url, options) => {
         request = { url, options, body: JSON.parse(options.body) };
-        return { ok: true, json: async () => ({ paid: true }) };
+        return { ok: true, json: async () => ({ paid: true,
+          order: { orderNo: "ORDER_123456", status: "paid", totalKrw: 18000 } }) };
       },
     },
     { paymentKey: "payment-key", orderId: "ORDER_123456", amount: 18000, guestLookupToken: "guest-token" }

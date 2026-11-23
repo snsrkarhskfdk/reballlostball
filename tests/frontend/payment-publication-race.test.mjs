@@ -200,7 +200,9 @@ for (const failure of [false, true]) {
     h.stored.set("reball.paymentConfirm.RB-SYNTHETIC-A", "current-session-value");
     const before = JSON.stringify([...h.stored]);
     release({ ok: !failure, status: failure ? 400 : 200,
-      json: async () => failure ? { code: "DECLINED", message: "synthetic decline" } : { ...response, guestLookupToken: "synthetic-refreshed-token" } });
+      json: async () => failure ? { code: "DECLINED", message: "synthetic decline" } : {
+        ...response, order: { ...response.order, status: "paid", totalKrw: 17000 },
+        guestLookupToken: "synthetic-refreshed-token" } });
     await pending;
     assert.equal(JSON.stringify([...h.stored]), before, "helper storage effects must be owned too");
   });

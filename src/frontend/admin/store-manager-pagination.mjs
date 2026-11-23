@@ -75,11 +75,14 @@ function dispatchPagination(scope) {
   }));
 }
 
-async function applyPaginationPayload(scope, response, requestSeq) {
+async function applyPaginationPayload(scope, response, requestSeq, requestToken) {
   const state = scopes[scope];
-  if (!state || requestSeq !== state.requestSeq) return;
+  const isCurrent = () => state && requestSeq === state.requestSeq
+    && latestOrdersRequest?.token === requestToken && activeOrdersScope() === scope;
+  if (!isCurrent()) return;
   if (response.ok) {
     const payload = await response.clone().json().catch(() => ({}));
+    if (!isCurrent()) return;
     state.page = Math.max(1, Number(payload?.page) || state.page);
     state.pageSize = Math.max(20, Number(payload?.pageSize) || state.pageSize);
     state.hasMore = payload?.hasMore === true;
@@ -109,15 +112,6 @@ function registerScopedRequest(nativeFetch, originalUrl, init, scope) {
   return latestOrdersRequest;
 }
 
-async function currentScopedResponse(nativeFetch, originalUrl, init, preferredScope = "") {
-  const scope = activeOrdersScope() || preferredScope;
-  if (!scope) return null;
-  const current = registerScopedRequest(nativeFetch, originalUrl, init, scope);
-  const response = await current.promise;
-  await applyPaginationPayload(scope, response, current.requestSeq);
-  return response;
-}
-
 function installAdminFetchBoundary() {
   const nativeFetch = globalThis.fetch?.bind(globalThis);
   if (!nativeFetch || globalThis.__reballStoreManagerFetchBoundary) return;
@@ -137,37 +131,51 @@ function installAdminFetchBoundary() {
       }
     }
 
-    const request = registerScopedRequest(nativeFetch, originalUrl, init, scope);
+    let current = registerScopedRequest(nativeFetch, originalUrl, init, scope);
     try {
-      const response = await request.promise;
+      for (;;) {
+        let response;
+        try {
+          response = await current.promise;
+        } catch (error) {
+          if (latestOrdersRequest?.token === current.token) throw error;
+          current = latestOrdersRequest;
+          continue;
+        }
 
-      // If a newer orders/shipping/returns read started, never let this older
-      // caller overwrite the console's shared state.orders. Give it a clone of
-      // the newest request result instead so both callers converge on one dataset.
-      if (latestOrdersRequest?.token !== request.token) {
-        const newest = latestOrdersRequest;
-        const newestResponse = await newest.promise;
-        await applyPaginationPayload(newest.scope, newestResponse, newest.requestSeq);
-        return newestResponse.clone();
+        // Another read can supersede a replacement while it is awaited. Follow
+        // replacements until both the response and its parsed pager are current.
+        if (latestOrdersRequest?.token !== current.token) {
+          current = latestOrdersRequest;
+          continue;
+        }
+        const visibleScope = activeOrdersScope();
+        if (visibleScope && visibleScope !== current.scope) {
+          current = registerScopedRequest(nativeFetch, originalUrl, init, visibleScope);
+          continue;
+        }
+
+        await applyPaginationPayload(current.scope, response, current.requestSeq, current.token);
+        if (latestOrdersRequest?.token !== current.token) {
+          current = latestOrdersRequest;
+          continue;
+        }
+        // A tab may have changed while its session lookup has not started fetch.
+        // The token alone therefore cannot authorize publishing after body parsing.
+        const settledScope = activeOrdersScope();
+        if (settledScope && settledScope !== current.scope) {
+          current = registerScopedRequest(nativeFetch, originalUrl, init, settledScope);
+          continue;
+        }
+        // Keep the shared response unread so later stale callers can also clone it.
+        return response.clone();
       }
-
-      // A tab can become visible just before its own loader starts. If that
-      // happens while the old request is in flight, fetch the now-visible scope
-      // before returning anything to the legacy shared-state loader.
-      const visibleScope = activeOrdersScope();
-      if (visibleScope && visibleScope !== scope) {
-        const replacement = await currentScopedResponse(nativeFetch, originalUrl, init, visibleScope);
-        return replacement ? replacement.clone() : response;
-      }
-
-      await applyPaginationPayload(scope, response, request.requestSeq);
-      return response;
     } catch (error) {
-      const state = scopes[scope];
-      if (request.requestSeq === state.requestSeq) {
+      const state = scopes[current.scope];
+      if (current.requestSeq === state.requestSeq && latestOrdersRequest?.token === current.token) {
         state.pending = false;
         state.searchTruncated = false;
-        dispatchPagination(scope);
+        dispatchPagination(current.scope);
       }
       if (error?.name === "AbortError" || error?.name === "TimeoutError") throw new Error("관리자 서버 연결 시간이 초과되었습니다. 새로고침 후 다시 시도해 주세요.");
       throw error;
