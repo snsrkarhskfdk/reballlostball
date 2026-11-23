@@ -1,0 +1,58 @@
+/ego-browser
+
+리볼로스트볼 출시 마감 작업의 단일 실행 관리자로 이어서 진행해.
+사용자 PC의 기존 로컬 Codex와 설치된 ego(lite)를 사용해.
+재설치·기본 브라우저 변경·다른 프로젝트 Space 초기화는 하지 마.
+
+저장소: https://github.com/snsrkarhskfdk/reballlostball
+브랜치: repair/mr-dr01-harness-declare-scope
+기존 PR: #37
+실행 관리 정본: docs/operations/release-control/CONTROL_KO.md
+상태: docs/operations/release-control/TASKS.json
+
+먼저 실제 origin·브랜치·미커밋 변경을 확인하고 최신 관리파일을 가져와.
+사용자 변경을 보존하고 강제 reset/force push를 하지 마.
+기존 리볼 checkout을 찾아 사용해. 경로를 모르면 옛 C: 경로나 다른 프로젝트의
+D: 경로를 임의로 쓰지 마. 작업공간을 새로 만드는 것은 필요한 경우로 제한해.
+
+AGENTS.md, CONTROL_KO.md, TASKS.json을 읽고 아래 명령으로 현재 상태를 확인해.
+node scripts/reball-release-control.mjs validate
+node scripts/reball-release-control.mjs status
+
+TASKS에서 R01이 아직 미완료라면 첫 실행은 R01만 수행해. 이미 검증됐다면
+현재 연결과 대상 환경을 다시 읽고 첫 미완료 작업에서 이어가. 완료 기록을 초기화하지 마.
+실제 Codex 모델·추론 설정·세션 담당자를 기록하고,
+Get-Command ego-browser 및 설치된 ego-browser skill 전체 가이드를 읽어.
+끝표시까지 읽은 설치본 API를 사용하고 웹 예제/Playwright API를 임의로 섞지 마.
+기존 리볼 작업 Space가 있으면 재사용해. 없을 때만 '리볼로스트볼 최종 검증'
+전용 Space를 만들고 실제 숫자 ID와 Page label을 TASKS에 기록해.
+
+테스트 origin:
+https://reballlostball-git-repair-mr-dr01-a7fa2f-thechangcnds-projects.vercel.app
+TEST Supabase: aohziyemqxfhpbbqpicx
+인계 시 검증 코드: b2e17ad1351834028dfadd53f1dac7ad485bb883
+운영 Supabase: qbftalhhyfcndanrcwpy (변경 금지)
+이 값들은 초기 기준이다. 이후 승인·검증을 거쳐 갱신된 TASKS의 코드와 대상이 우선한다.
+
+R01은 연결·URL·실제 backend·배포 ID/SHA·현재 계정의 읽기 확인이다.
+기존 사이트가 41684cf라고 해도 연결 확인은 가능하지만 최신코드 검증은 아니다.
+Space 생성/브라우저 열림만으로 PASS 처리하지 마.
+배포·계정 생성·역할 부여·PG 호출·cron 변경은 R01 범위가 아니다.
+
+초기 상태에서는 기존 11/7 배포 금지 조건이 유지되고 TEST 배포 승인이 대기 상태다.
+R01을 끝내고 영수증을 검증한 뒤 R02의 유효한 기존 승인이 있는지 확인해.
+없을 때만 필요한 승인 한 건을 구체적으로 보고하고, 있으면 출처를 기록하고 진행해.
+이후 실제로 승인된 단계는 이전 승인을 재질문하지 말고 기록하고 이어서 수행해.
+아직 없는 승인·Space ID·로그인·결제 성공을 만들었다고 쓰지 마.
+
+RECEIPT.template.json을 복사해 실제 관측값으로 채우고 receipts/에 저장해.
+node scripts/reball-release-control.mjs receipt <실제 영수증 경로>
+검사를 통과하고 증거를 검토한 경우에만 작업을 VERIFIED로 올려.
+지정된 실행자 하나만 브라우저를 조작하고, 중단 시 같은 run/Space로 재개해.
+반응이 없다고 결제나 주문을 반복하지 말고 기존 결과부터 확인해.
+
+완료/차단 결과를 TASKS와 함께 기존 PR 브랜치에 반영해.
+자동 배포 비활성 설정은 유지해. 비밀번호·토큰·결제키·주소·전화번호는 공유하지 마.
+마지막 답변은 실제 모델/추론 설정, run ID, Space ID, 작업 결과, 세 SHA,
+영수증 경로, 반영 commit, 차단 사유, 다음 작업 한 개로 보고해.
+자료만 다시 설명하지 말고 R01 연결 확인을 실제로 수행하거나 정확한 로컬 차단을 남겨.

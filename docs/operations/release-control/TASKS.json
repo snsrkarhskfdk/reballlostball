@@ -1,0 +1,167 @@
+{
+  "schema_version": 1,
+  "work_id": "REBALL-RELEASE-20261124",
+  "configured_on": "2026-11-24",
+  "configuration_status": "CONFIGURED_EXECUTION_NOT_STARTED",
+  "repository": {
+    "full_name": "snsrkarhskfdk/reballlostball",
+    "url": "https://github.com/snsrkarhskfdk/reballlostball",
+    "branch": "repair/mr-dr01-harness-declare-scope",
+    "pr": 37
+  },
+  "code": {
+    "reviewed_sha": "b2e17ad1351834028dfadd53f1dac7ad485bb883",
+    "ci_url": "https://github.com/snsrkarhskfdk/reballlostball/actions/runs/45170818242",
+    "db_grants_ci_url": "https://github.com/snsrkarhskfdk/reballlostball/actions/runs/45170818150",
+    "note": "배포할 검증 코드와 실행 관리파일의 커밋은 별개다. 실제 코드 수정 시 새 커밋의 CI를 확인한 뒤 이 기준을 갱신한다."
+  },
+  "environment": {
+    "test_origin": "https://reballlostball-git-repair-mr-dr01-a7fa2f-thechangcnds-projects.vercel.app",
+    "expected_test_project_ref": "aohziyemqxfhpbbqpicx",
+    "production_origin": "https://reballlostball.com",
+    "production_project_ref": "qbftalhhyfcndanrcwpy",
+    "last_observed_test_deployment_id": "dpl_D2Lvz1sXBSVSCfuBFsYUKPwnh7Va",
+    "last_observed_test_deployed_sha": "41684cf8592aafc64ad6b9556aa1ba51e82b891f",
+    "last_observed_production_deployed_sha": "9f26f27a8b8833236618db9c0e72bdf415e7f161",
+    "last_observed_at": "2026-11-23T21:04:34+09:00",
+    "fresh_observation_required_before_mutation": true
+  },
+  "authorization": {
+    "test_deploy": "PENDING",
+    "test_account_setup": "PENDING",
+    "test_transactions": "PENDING",
+    "test_scheduler": "PENDING",
+    "production": "DENIED",
+    "source": "2026-11-07 CHECKOUT_EXECUTION: PR updates permitted; deployments prohibited. 2026-11-24 user requested orchestration setup, not deployment.",
+    "records": []
+  },
+  "execution": {
+    "executor": "LOCAL_CODEX",
+    "browser": "ego-browser",
+    "space_name": "리볼로스트볼 최종 검증",
+    "space_id": null,
+    "page_labels": [],
+    "run_id": null,
+    "owner": null,
+    "heartbeat_at": null,
+    "skill_observed": false,
+    "actual_model": null,
+    "actual_reasoning_level": null,
+    "local_connection_verified": false,
+    "writer_policy": "Only one local Codex controller may edit state or operate this task's browser pages. Other agents review only."
+  },
+  "observations": {
+    "test_db_observed_at": "2026-11-23T21:02:10+09:00",
+    "auth_users": 0,
+    "orders": 7,
+    "payments": 7,
+    "provider_payment_keys_present": 0,
+    "approval_timestamps_present": 0,
+    "cancellation_timestamps_present": 0,
+    "payment_refunds": 0,
+    "active_cron_jobs": 0,
+    "expired_but_reserved_count": 1,
+    "note": "관측값이며 변경 허가가 아니다. 매번 현재 상태를 다시 읽고 기존 테스트 데이터를 새 실행 소유로 취급하지 않는다."
+  },
+  "tasks": [
+    {
+      "id": "R00",
+      "title": "검증 코드 기준 확정",
+      "evidence_kind": "ci",
+      "status": "VERIFIED",
+      "requires": [],
+      "approval": null,
+      "acceptance": ["full_qa", "browser_e2e", "accessibility", "windows_portability", "db_grants"],
+      "evidence": ["receipts/R00_20261123.json"],
+      "blocked_reason": null
+    },
+    {
+      "id": "R01",
+      "title": "로컬 Codex와 기존 ego Space 연결 및 대상 실측",
+      "evidence_kind": "connection",
+      "status": "READY",
+      "requires": ["R00"],
+      "approval": null,
+      "acceptance": ["installed_skill_read", "space_and_owner_recorded", "test_origin_and_backend_verified", "deployment_and_account_observed"],
+      "evidence": [],
+      "blocked_reason": null
+    },
+    {
+      "id": "R02",
+      "title": "검증 코드의 분리된 TEST 배포",
+      "evidence_kind": "test",
+      "status": "BLOCKED",
+      "requires": ["R00", "R01"],
+      "approval": "test_deploy",
+      "acceptance": ["explicit_test_deploy_approval", "exact_source_ci", "frontend_deployed_sha", "edge_versions_aligned", "test_configuration_verified", "production_unchanged"],
+      "evidence": [],
+      "blocked_reason": "기존 배포 금지 조건을 해제하는 TEST 한정 승인이 아직 없음."
+    },
+    {
+      "id": "R03",
+      "title": "회원 및 관리자 실제 인증과 권한 확인",
+      "evidence_kind": "test",
+      "status": "PENDING",
+      "requires": ["R02"],
+      "approval": "test_account_setup",
+      "acceptance": ["synthetic_accounts_owned", "signup_and_auth_verified", "address_persistence", "own_order_access", "cross_account_denied", "admin_role_login", "admin_search_and_shipping"],
+      "evidence": [],
+      "blocked_reason": "TEST 배포와 테스트 계정·역할 설정 범위 확인이 먼저 필요함."
+    },
+    {
+      "id": "R04",
+      "title": "실제 Toss TEST 승인과 주문 복귀",
+      "evidence_kind": "test",
+      "status": "PENDING",
+      "requires": ["R02", "R03"],
+      "approval": "test_transactions",
+      "acceptance": ["provider_test_mode_observed", "legitimate_provider_authorization", "confirmation_matches_order_amount", "approval_database_readback", "return_refresh_lookup", "uncertain_result_recovery"],
+      "evidence": [],
+      "blocked_reason": "실제 인증·동의 단계가 남아 있음. 창이 열리거나 mock 테스트가 통과한 것으로 완료 처리하지 않음."
+    },
+    {
+      "id": "R05",
+      "title": "TEST 취소 및 중복 처리·재고 복구",
+      "evidence_kind": "test",
+      "status": "PENDING",
+      "requires": ["R04"],
+      "approval": "test_transactions",
+      "acceptance": ["provider_cancel_confirmed", "refund_order_database_match", "stock_restored_once", "confirm_webhook_replay", "cancel_replay_no_duplicate"],
+      "evidence": [],
+      "blocked_reason": "소유가 확인된 승인 TEST 주문이 먼저 필요함."
+    },
+    {
+      "id": "R06",
+      "title": "예약 만료와 결제 대사 실행 검증",
+      "evidence_kind": "test",
+      "status": "PENDING",
+      "requires": ["R02"],
+      "approval": "test_scheduler",
+      "acceptance": ["scheduler_scope_authorized", "owned_expiry_fixture", "expired_stock_released_once", "unexpired_reservation_preserved", "reconciliation_readback", "schedule_end_state_recorded"],
+      "evidence": [],
+      "blocked_reason": "현재 TEST cron 활성 0개. 기존 주문 일괄 정리 대신 승인된 테스트 실행·일정 범위를 확정해야 함."
+    },
+    {
+      "id": "R07",
+      "title": "운영 반영안과 복구·인계 준비",
+      "evidence_kind": "test",
+      "status": "PENDING",
+      "requires": ["R03", "R05", "R06"],
+      "approval": null,
+      "acceptance": ["test_evidence_reviewed", "source_and_pr_reconciled", "migration_edge_env_plan", "backup_and_rollback_prepared", "merchant_readiness_checked", "owner_handover_prepared"],
+      "evidence": [],
+      "blocked_reason": "실제 TEST 검증 영수증을 검토한 뒤 운영 반영안만 작성함."
+    },
+    {
+      "id": "R08",
+      "title": "승인된 운영 반영 및 실제 최종 확인·인계",
+      "evidence_kind": "production",
+      "status": "BLOCKED",
+      "requires": ["R07"],
+      "approval": "production",
+      "acceptance": ["explicit_production_scope_and_spend_limit", "coordinated_release_verified", "approved_live_payment_cancel", "production_scheduler_verified", "rollback_recorded", "operator_handover_confirmed"],
+      "evidence": [],
+      "blocked_reason": "운영 변경과 실결제는 승인되지 않았음. TEST 승인으로 운영 단계에 진입하지 않음."
+    }
+  ]
+}
