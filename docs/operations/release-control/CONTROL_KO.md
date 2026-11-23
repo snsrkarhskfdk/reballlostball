@@ -178,3 +178,9 @@ ChatGPT에 위 결과 또는 반영된 커밋을 알려주면 같은 PR과 영�
 - [설치본 런타임 가이드 우선](https://www.egolite.ai/document/en/docs/windows/ego-browser)
 - [Space 재개·계정 확인·handoff](https://www.egolite.ai/document/en/docs/windows/space)
 - [Codex 실행환경과 권한](https://www.egolite.ai/document/en/docs/codex)
+
+## 2026-11-24 R01 실행 기록
+
+- 담당 `LOCAL_CODEX-REBALL-R01-20261124-01`, run `REBALL-RELEASE-20261124-R01-CODEX-01`. 기존 리볼 Space는 목록에 없었고 Space 2 / p1을 생성했다.
+- 사전 소유권 원격 등록 전에 테스트 사이트를 읽은 순서 위반이 있었다. 이 등록을 원격에서 확인한 다음 동일 Space에서 대상을 다시 읽는다. 첫 조회는 결제·주문·계정·배포를 변경하지 않았다.
+- 런타임은 Node 24.18.0으로 관리 검사를 실행했다. 지정된 Node 22 실행은 확인되지 않았다. 모델은 세션에 표시된 GPT-6 Codex이며 구체 변형과 추론 수준은 노출되지 않았다.
