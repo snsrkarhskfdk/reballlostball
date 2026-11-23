@@ -2,7 +2,7 @@
   "schema_version": 1,
   "work_id": "REBALL-RELEASE-20261124",
   "configured_on": "2026-11-24",
-  "configuration_status": "R01_RUNNING",
+  "configuration_status": "R01_VERIFIED_R02_BLOCKED",
   "repository": {
     "full_name": "snsrkarhskfdk/reballlostball",
     "url": "https://github.com/snsrkarhskfdk/reballlostball",
@@ -23,7 +23,7 @@
     "last_observed_test_deployment_id": "dpl_D2Lvz1sXBSVSCfuBFsYUKPwnh7Va",
     "last_observed_test_deployed_sha": "41684cf8592aafc64ad6b9556aa1ba51e82b891f",
     "last_observed_production_deployed_sha": "9f26f27a8b8833236618db9c0e72bdf415e7f161",
-    "last_observed_at": "2026-11-23T21:04:34+09:00",
+    "last_observed_at": "2026-11-23T21:36:13.312Z",
     "fresh_observation_required_before_mutation": true
   },
   "authorization": {
@@ -45,7 +45,7 @@
     ],
     "run_id": "REBALL-RELEASE-20261124-R01-CODEX-01",
     "owner": "LOCAL_CODEX-REBALL-R01-20261124-01",
-    "heartbeat_at": "2026-11-23T21:32:39.652Z",
+    "heartbeat_at": "2026-11-23T21:37:19.950Z",
     "skill_observed": true,
     "actual_model": "GPT-6 (Codex; exact variant not exposed)",
     "actual_reasoning_level": "not exposed",
@@ -89,7 +89,7 @@
       "id": "R01",
       "title": "로컬 Codex와 기존 ego Space 연결 및 대상 실측",
       "evidence_kind": "connection",
-      "status": "RUNNING",
+      "status": "VERIFIED",
       "requires": [
         "R00"
       ],
@@ -100,7 +100,9 @@
         "test_origin_and_backend_verified",
         "deployment_and_account_observed"
       ],
-      "evidence": [],
+      "evidence": [
+        "receipts/R01_20261124.json"
+      ],
       "blocked_reason": null
     },
     {

@@ -1,0 +1,70 @@
+{
+  "schema_version": 1,
+  "task_id": "R01",
+  "run_id": "REBALL-RELEASE-20261124-R01-CODEX-01",
+  "status": "PASS",
+  "observed_at": "2026-11-23T21:36:13.312Z",
+  "executor": "LOCAL_CODEX",
+  "code_sha": "b2e17ad1351834028dfadd53f1dac7ad485bb883",
+  "orchestration_sha": "a3bb979bed5f0604a2dfefaf5875dcbde4db8081",
+  "environment": {
+    "kind": "connection",
+    "origin": "https://reballlostball-git-repair-mr-dr01-a7fa2f-thechangcnds-projects.vercel.app",
+    "supabase_project_ref": "aohziyemqxfhpbbqpicx",
+    "deployment_id": "dpl_D2Lvz1sXBSVSCfuBFsYUKPwnh7Va",
+    "deployed_sha": "41684cf8592aafc64ad6b9556aa1ba51e82b891f"
+  },
+  "actions": [
+    {
+      "action_id": "R01-A01",
+      "kind": "read",
+      "summary": "Read installed ego-browser skill v2.2.1 through end marker, listed Spaces and opened and re-read test site in Space 2 p1.",
+      "outcome": "PASS"
+    },
+    {
+      "action_id": "R01-A02",
+      "kind": "read",
+      "summary": "Read actual frontend backend host, account state, Vercel alias and deployment metadata.",
+      "outcome": "PASS"
+    }
+  ],
+  "assertions": [
+    {
+      "id": "installed_skill_read",
+      "result": "PASS",
+      "evidence_refs": [
+        "receipts/R01_20261124_observations.json"
+      ]
+    },
+    {
+      "id": "space_and_owner_recorded",
+      "result": "PASS",
+      "evidence_refs": [
+        "receipts/R01_20261124_observations.json",
+        "https://github.com/snsrkarhskfdk/reballlostball/commit/a3bb979bed5f0604a2dfefaf5875dcbde4db8081"
+      ]
+    },
+    {
+      "id": "test_origin_and_backend_verified",
+      "result": "PASS",
+      "evidence_refs": [
+        "receipts/R01_20261124_observations.json"
+      ]
+    },
+    {
+      "id": "deployment_and_account_observed",
+      "result": "PASS",
+      "evidence_refs": [
+        "receipts/R01_20261124_observations.json"
+      ]
+    }
+  ],
+  "artifacts": [
+    {
+      "path": "receipts/R01_20261124_observations.json",
+      "sha256": "87dfbfe0bfe95d55dfb89d70acd4e856ea66e2e36cc73bf84ea432fdaac08931",
+      "redacted": true
+    }
+  ],
+  "blocker": null
+}

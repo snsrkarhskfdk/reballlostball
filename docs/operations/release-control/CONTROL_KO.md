@@ -184,3 +184,7 @@ ChatGPT에 위 결과 또는 반영된 커밋을 알려주면 같은 PR과 영�
 - 담당 `LOCAL_CODEX-REBALL-R01-20261124-01`, run `REBALL-RELEASE-20261124-R01-CODEX-01`. 기존 리볼 Space는 목록에 없었고 Space 2 / p1을 생성했다.
 - 사전 소유권 원격 등록 전에 테스트 사이트를 읽은 순서 위반이 있었다. 이 등록을 원격에서 확인한 다음 동일 Space에서 대상을 다시 읽는다. 첫 조회는 결제·주문·계정·배포를 변경하지 않았다.
 - 런타임은 Node 24.18.0으로 관리 검사를 실행했다. 지정된 Node 22 실행은 확인되지 않았다. 모델은 세션에 표시된 GPT-6 Codex이며 구체 변형과 추론 수준은 노출되지 않았다.
+
+- 원격 등록 커밋 `a3bb979bed5f0604a2dfefaf5875dcbde4db8081` 확인 후 같은 Space에서 재조회했다. TEST 호스트와 실제 요청 프로젝트 `aohziyemqxfhpbbqpicx`, 화면 로그아웃 상태를 관측했다. Vercel alias → READY 배포 `dpl_D2Lvz1sXBSVSCfuBFsYUKPwnh7Va` → 배포 SHA `41684cf8592aafc64ad6b9556aa1ba51e82b891f`를 확인했다. 이는 검증 코드 `b2e17ad1351834028dfadd53f1dac7ad485bb883`의 배포 검증이 아니다.
+- `receipts/R01_20261124.json`과 비식별 관측 자료를 저장하고 검사했다. Space 2의 결과 페이지를 유지하며 finish했다. 재개 시 Space 2를 claim한 뒤 유지된 탭을 다시 adopt해야 하며 이전 label p1은 이 실행에서의 기록이다.
+- 다음 R02는 TEST 배포 승인이 PENDING이라 차단 상태다. 승인 대상은 TEST 프로젝트 `aohziyemqxfhpbbqpicx`에 검증 코드 `b2e17ad1351834028dfadd53f1dac7ad485bb883`를 배포하고 필요한 해당 TEST Edge 버전을 정렬하는 범위다. 운영 변경은 금지로 유지한다.
