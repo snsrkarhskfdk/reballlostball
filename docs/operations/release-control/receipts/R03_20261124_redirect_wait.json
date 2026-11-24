@@ -1,0 +1,80 @@
+{
+  "schema_version": 1,
+  "task_id": "R03",
+  "run_id": "REBALL-RELEASE-20261124-R03-CODEX-01",
+  "status": "BLOCKED",
+  "observed_at": "2026-11-24T09:19:21.715Z",
+  "executor": "LOCAL_CODEX",
+  "code_sha": "b2e17ad1351834028dfadd53f1dac7ad485bb883",
+  "orchestration_sha": "f3e9ade8aaa71cd962cc01b563ed500e13e6919c",
+  "environment": {
+    "kind": "test",
+    "origin": "https://reballlostball-git-repair-mr-dr01-a7fa2f-thechangcnds-projects.vercel.app",
+    "supabase_project_ref": "aohziyemqxfhpbbqpicx",
+    "deployment_id": "dpl_4Y7UgDo1MRu6f7bZAQVPtctvVryn",
+    "deployed_sha": "b2e17ad1351834028dfadd53f1dac7ad485bb883"
+  },
+  "actions": [
+    {
+      "action_id": "R03-A01",
+      "kind": "read",
+      "summary": "Verified approved TEST project, source deployment and initial aggregate counts.",
+      "outcome": "PASS"
+    },
+    {
+      "action_id": "R03-A02",
+      "kind": "mutation",
+      "summary": "User completed CAPTCHA and submitted the first prepared synthetic signup; TEST Auth shows one user with zero confirmed; one confirmation email was delivered.",
+      "outcome": "PASS"
+    },
+    {
+      "action_id": "R03-A03",
+      "kind": "read",
+      "summary": "The received confirmation link redirects to localhost:3000; TEST Auth dashboard independently shows SITE_URL localhost:3000 and no additional redirect URLs. Link remains unopened.",
+      "outcome": "BLOCKED"
+    }
+  ],
+  "assertions": [
+    {
+      "id": "synthetic_accounts_owned",
+      "result": "NOT_RUN",
+      "evidence_refs": []
+    },
+    {
+      "id": "signup_and_auth_verified",
+      "result": "NOT_RUN",
+      "evidence_refs": []
+    },
+    {
+      "id": "address_persistence",
+      "result": "NOT_RUN",
+      "evidence_refs": []
+    },
+    {
+      "id": "own_order_access",
+      "result": "NOT_RUN",
+      "evidence_refs": []
+    },
+    {
+      "id": "cross_account_denied",
+      "result": "NOT_RUN",
+      "evidence_refs": []
+    },
+    {
+      "id": "admin_role_login",
+      "result": "NOT_RUN",
+      "evidence_refs": []
+    },
+    {
+      "id": "admin_search_and_shipping",
+      "result": "NOT_RUN",
+      "evidence_refs": []
+    }
+  ],
+  "artifacts": [],
+  "blocker": {
+    "owner": "USER",
+    "required_action": "Approve or decline changing only the TEST Supabase Auth SITE_URL from localhost:3000 to the exact stable TEST preview origin.",
+    "resume_check": "After approval, re-read project and existing setting, update only TEST SITE_URL, confirm actual safe post-confirmation destination, and resume same account without duplicate signup."
+  }
+}

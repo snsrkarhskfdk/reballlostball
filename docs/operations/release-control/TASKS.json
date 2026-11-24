@@ -2,7 +2,7 @@
   "schema_version": 1,
   "work_id": "REBALL-RELEASE-20261124",
   "configured_on": "2026-11-24",
-  "configuration_status": "R03_RUNNING",
+  "configuration_status": "R03_WAITING_FOR_USER",
   "repository": {
     "full_name": "snsrkarhskfdk/reballlostball",
     "url": "https://github.com/snsrkarhskfdk/reballlostball",
@@ -64,11 +64,12 @@
     "space_name": "리볼로스트볼 최종 검증",
     "space_id": 2,
     "page_labels": [
-      "p1"
+      "p1",
+      "p2"
     ],
     "run_id": "REBALL-RELEASE-20261124-R03-CODEX-01",
     "owner": "LOCAL_CODEX-REBALL-R03-20261124-01",
-    "heartbeat_at": "2026-11-24T09:15:39.088Z",
+    "heartbeat_at": "2026-11-24T09:19:21.715Z",
     "skill_observed": true,
     "actual_model": "GPT-6 (Codex; exact variant not exposed)",
     "actual_reasoning_level": "not exposed",
@@ -155,7 +156,7 @@
       "id": "R03",
       "title": "회원 및 관리자 실제 인증과 권한 확인",
       "evidence_kind": "test",
-      "status": "RUNNING",
+      "status": "WAITING_FOR_USER",
       "requires": [
         "R02"
       ],
@@ -170,9 +171,9 @@
         "admin_search_and_shipping"
       ],
       "evidence": [
-        "receipts/R03_20261124_captcha_wait.json"
+        "receipts/R03_20261124_redirect_wait.json"
       ],
-      "blocked_reason": null
+      "blocked_reason": "TEST Supabase 인증 기본 URL이 localhost:3000이라 가입 확인 후 안전한 TEST 복귀를 위해 범위 지정 설정 변경 승인 대기."
     },
     {
       "id": "R04",
