@@ -202,3 +202,6 @@ ChatGPT에 위 결과 또는 반영된 커밋을 알려주면 같은 PR과 영�
 - 2026-11-24T07:05:45.082Z: TEST 17개 함수의 실제 소스 파일과 승인 코드 트리를 비교했다. 16개는 일치했고 `admin-orders-page`만 달랐다. TEST 프로젝트에 해당 함수만 배포하여 version 19 → 20, ACTIVE, verify_jwt=false를 확인했으며 5개 소스 파일 재조회에서 승인 코드와 일치했다. 원격 bundle SHA-256 `f02f49d8c904fa9fb5784a870a7dc41fdd03b490f34096347316dd3947cb11a2`. 프런트엔드 배포는 아직 미실행.
 
 - 2026-11-24T07:08:29.060Z: ego Space 2 Vercel 대시보드에서 정확한 `b2e17ad1351834028dfadd53f1dac7ad485bb883`와 브랜치 `repair/mr-dr01-harness-declare-scope`를 선택해 Preview 배포를 한 번 시작했다. 배포 ID `dpl_4Y7UgDo1MRu6f7bZAQVPtctvVryn`, 최초 관측 BUILDING. 완료와 TEST 설정을 확인하기 전 성공으로 처리하지 않는다.
+
+- 2026-11-24T07:11:40.242Z: 승인 코드의 Preview 배포 `dpl_4Y7UgDo1MRu6f7bZAQVPtctvVryn` READY, 브랜치 alias와 실제 TEST backend, Turnstile 공개 설정, Edge CORS 204를 확인했다. 운영 도메인의 배포 ID와 SHA는 변경 전후 동일했다. 프런트의 Toss 공개 키는 비어 있으며 서버 측 설정 검증 전 결제 준비 완료로 판단하지 않는다.
+- TEST 서버 측 런타임·결제/CAPTCHA·콜백 설정 확인을 위해 Supabase 로그인 화면을 같은 Space 2 p2에 열고 사용자에게 넘겼다. R02는 `WAITING_FOR_USER`, 부분 결과는 `receipts/R02_20261124_partial.json`. 인증 후 같은 run을 재개한다.

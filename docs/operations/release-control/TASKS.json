@@ -2,7 +2,7 @@
   "schema_version": 1,
   "work_id": "REBALL-RELEASE-20261124",
   "configured_on": "2026-11-24",
-  "configuration_status": "R02_RUNNING",
+  "configuration_status": "R02_WAITING_FOR_USER",
   "repository": {
     "full_name": "snsrkarhskfdk/reballlostball",
     "url": "https://github.com/snsrkarhskfdk/reballlostball",
@@ -20,10 +20,10 @@
     "expected_test_project_ref": "aohziyemqxfhpbbqpicx",
     "production_origin": "https://reballlostball.com",
     "production_project_ref": "qbftalhhyfcndanrcwpy",
-    "last_observed_test_deployment_id": "dpl_D2Lvz1sXBSVSCfuBFsYUKPwnh7Va",
-    "last_observed_test_deployed_sha": "41684cf8592aafc64ad6b9556aa1ba51e82b891f",
+    "last_observed_test_deployment_id": "dpl_4Y7UgDo1MRu6f7bZAQVPtctvVryn",
+    "last_observed_test_deployed_sha": "b2e17ad1351834028dfadd53f1dac7ad485bb883",
     "last_observed_production_deployed_sha": "9f26f27a8b8833236618db9c0e72bdf415e7f161",
-    "last_observed_at": "2026-11-23T21:36:13.312Z",
+    "last_observed_at": "2026-11-24T07:11:40.242Z",
     "fresh_observation_required_before_mutation": true
   },
   "authorization": {
@@ -58,7 +58,7 @@
     ],
     "run_id": "REBALL-RELEASE-20261124-R02-CODEX-01",
     "owner": "LOCAL_CODEX-REBALL-R02-20261124-01",
-    "heartbeat_at": "2026-11-24T07:05:45.082Z",
+    "heartbeat_at": "2026-11-24T07:11:40.242Z",
     "skill_observed": true,
     "actual_model": "GPT-6 (Codex; exact variant not exposed)",
     "actual_reasoning_level": "not exposed",
@@ -122,7 +122,7 @@
       "id": "R02",
       "title": "검증 코드의 분리된 TEST 배포",
       "evidence_kind": "test",
-      "status": "RUNNING",
+      "status": "WAITING_FOR_USER",
       "requires": [
         "R00",
         "R01"
@@ -137,9 +137,9 @@
         "production_unchanged"
       ],
       "evidence": [
-        "receipts/R02_20261124_waiting.json"
+        "receipts/R02_20261124_partial.json"
       ],
-      "blocked_reason": null
+      "blocked_reason": "TEST 백엔드 결제·CAPTCHA·콜백 설정 확인을 위해 ego Space 2 p2에서 Supabase 로그인 필요."
     },
     {
       "id": "R03",
