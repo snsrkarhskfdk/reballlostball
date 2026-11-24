@@ -198,3 +198,5 @@ ChatGPT에 위 결과 또는 반영된 커밋을 알려주면 같은 PR과 영�
 - 배포 및 Edge 변경은 아직 실행하지 않았다. 대기 영수증: `receipts/R02_20261124_waiting.json`. 기존 승인과 run ID를 유지한다.
 
 - 2026-11-24T07:02:43.642Z: 사용자가 Vercel 인증 완료를 알렸고 같은 Space 2 p2를 인수했다. Preview 브랜치의 SUPABASE_URL이 TEST 프로젝트를 가리키는 것을 확인했다. 동일 run과 기존 TEST 승인으로 재개했다.
+
+- 2026-11-24T07:05:45.082Z: TEST 17개 함수의 실제 소스 파일과 승인 코드 트리를 비교했다. 16개는 일치했고 `admin-orders-page`만 달랐다. TEST 프로젝트에 해당 함수만 배포하여 version 19 → 20, ACTIVE, verify_jwt=false를 확인했으며 5개 소스 파일 재조회에서 승인 코드와 일치했다. 원격 bundle SHA-256 `f02f49d8c904fa9fb5784a870a7dc41fdd03b490f34096347316dd3947cb11a2`. 프런트엔드 배포는 아직 미실행.
