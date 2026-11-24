@@ -2,7 +2,7 @@
   "schema_version": 1,
   "work_id": "REBALL-RELEASE-20261124",
   "configured_on": "2026-11-24",
-  "configuration_status": "R01_VERIFIED_R02_BLOCKED",
+  "configuration_status": "R02_RUNNING",
   "repository": {
     "full_name": "snsrkarhskfdk/reballlostball",
     "url": "https://github.com/snsrkarhskfdk/reballlostball",
@@ -27,13 +27,25 @@
     "fresh_observation_required_before_mutation": true
   },
   "authorization": {
-    "test_deploy": "PENDING",
+    "test_deploy": "APPROVED",
     "test_account_setup": "PENDING",
     "test_transactions": "PENDING",
     "test_scheduler": "PENDING",
     "production": "DENIED",
     "source": "2026-11-07 CHECKOUT_EXECUTION: PR updates permitted; deployments prohibited. 2026-11-24 user requested orchestration setup, not deployment.",
-    "records": []
+    "records": [
+      {
+        "capability": "test_deploy",
+        "status": "APPROVED",
+        "source": "2026-11-24 user replied 승인해 to the immediately preceding explicit R02 TEST frontend and required TEST Edge deployment question",
+        "approved_by": "USER",
+        "approved_at": "2026-11-24T06:45:30.020Z",
+        "scope": {
+          "project_ref": "aohziyemqxfhpbbqpicx",
+          "code_sha": "b2e17ad1351834028dfadd53f1dac7ad485bb883"
+        }
+      }
+    ]
   },
   "execution": {
     "executor": "LOCAL_CODEX",
@@ -43,9 +55,9 @@
     "page_labels": [
       "p1"
     ],
-    "run_id": "REBALL-RELEASE-20261124-R01-CODEX-01",
-    "owner": "LOCAL_CODEX-REBALL-R01-20261124-01",
-    "heartbeat_at": "2026-11-23T21:37:19.950Z",
+    "run_id": "REBALL-RELEASE-20261124-R02-CODEX-01",
+    "owner": "LOCAL_CODEX-REBALL-R02-20261124-01",
+    "heartbeat_at": "2026-11-24T06:45:30.020Z",
     "skill_observed": true,
     "actual_model": "GPT-6 (Codex; exact variant not exposed)",
     "actual_reasoning_level": "not exposed",
@@ -109,7 +121,7 @@
       "id": "R02",
       "title": "검증 코드의 분리된 TEST 배포",
       "evidence_kind": "test",
-      "status": "BLOCKED",
+      "status": "RUNNING",
       "requires": [
         "R00",
         "R01"
@@ -124,7 +136,7 @@
         "production_unchanged"
       ],
       "evidence": [],
-      "blocked_reason": "기존 배포 금지 조건을 해제하는 TEST 한정 승인이 아직 없음."
+      "blocked_reason": null
     },
     {
       "id": "R03",

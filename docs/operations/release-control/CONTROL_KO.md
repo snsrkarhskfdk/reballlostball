@@ -188,3 +188,8 @@ ChatGPT에 위 결과 또는 반영된 커밋을 알려주면 같은 PR과 영�
 - 원격 등록 커밋 `a3bb979bed5f0604a2dfefaf5875dcbde4db8081` 확인 후 같은 Space에서 재조회했다. TEST 호스트와 실제 요청 프로젝트 `aohziyemqxfhpbbqpicx`, 화면 로그아웃 상태를 관측했다. Vercel alias → READY 배포 `dpl_D2Lvz1sXBSVSCfuBFsYUKPwnh7Va` → 배포 SHA `41684cf8592aafc64ad6b9556aa1ba51e82b891f`를 확인했다. 이는 검증 코드 `b2e17ad1351834028dfadd53f1dac7ad485bb883`의 배포 검증이 아니다.
 - `receipts/R01_20261124.json`과 비식별 관측 자료를 저장하고 검사했다. Space 2의 결과 페이지를 유지하며 finish했다. 재개 시 Space 2를 claim한 뒤 유지된 탭을 다시 adopt해야 하며 이전 label p1은 이 실행에서의 기록이다.
 - 다음 R02는 TEST 배포 승인이 PENDING이라 차단 상태다. 승인 대상은 TEST 프로젝트 `aohziyemqxfhpbbqpicx`에 검증 코드 `b2e17ad1351834028dfadd53f1dac7ad485bb883`를 배포하고 필요한 해당 TEST Edge 버전을 정렬하는 범위다. 운영 변경은 금지로 유지한다.
+
+## 2026-11-24 R02 승인 및 실행
+
+- 사용자가 직전의 TEST 프런트엔드 및 필요한 TEST Edge 배포 범위 질문에 “승인해”라고 답했다. 기록 시각 2026-11-24T06:45:30.020Z; 대상 TEST 프로젝트 `aohziyemqxfhpbbqpicx`, 코드 `b2e17ad1351834028dfadd53f1dac7ad485bb883`. 운영 변경, 계정 생성, 거래 및 스케줄 변경 승인은 포함하지 않는다.
+- 실행자 `LOCAL_CODEX-REBALL-R02-20261124-01`, run `REBALL-RELEASE-20261124-R02-CODEX-01`. 환경 변수가 누락되면 빌드가 운영 Supabase로 기본 설정될 수 있으므로 정확한 브랜치 설정을 확인하기 전 배포하지 않는다.
