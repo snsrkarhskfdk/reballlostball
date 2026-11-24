@@ -1,0 +1,61 @@
+{
+  "observed_at": "2026-11-24T08:45:17.803Z",
+  "run_id": "REBALL-RELEASE-20261124-R02-CODEX-01",
+  "reviewed_sha": "b2e17ad1351834028dfadd53f1dac7ad485bb883",
+  "source_ci": [
+    "https://github.com/snsrkarhskfdk/reballlostball/actions/runs/45170818242",
+    "https://github.com/snsrkarhskfdk/reballlostball/actions/runs/45170818150"
+  ],
+  "preview": {
+    "origin": "https://reballlostball-git-repair-mr-dr01-a7fa2f-thechangcnds-projects.vercel.app",
+    "deployment_id": "dpl_4Y7UgDo1MRu6f7bZAQVPtctvVryn",
+    "state": "READY",
+    "branch": "repair/mr-dr01-harness-declare-scope",
+    "deployed_sha": "b2e17ad1351834028dfadd53f1dac7ad485bb883",
+    "backend_ref": "aohziyemqxfhpbbqpicx",
+    "supabase_public_key_present": true,
+    "captcha_provider": "turnstile",
+    "captcha_site_key_present": true,
+    "toss_frontend_key_present": false,
+    "logged_out": true
+  },
+  "edge": {
+    "project_ref": "aohziyemqxfhpbbqpicx",
+    "function_count": 17,
+    "unchanged_source_matches": 16,
+    "updated_function": "admin-orders-page",
+    "version_before": 19,
+    "version_after": 20,
+    "verify_jwt": false,
+    "post_deploy_five_files_match": true,
+    "bundle_sha256": "f02f49d8c904fa9fb5784a870a7dc41fdd03b490f34096347316dd3947cb11a2",
+    "browser_preflight_status": 204,
+    "cors_matches_origin": true
+  },
+  "backend_config": {
+    "method": "Authenticated TEST project dashboard; names and one-way digest comparison to known non-secret expected values, no secret values retrieved",
+    "runtime": "test",
+    "payment_provider": "toss_payments",
+    "captcha_mode": "enforced",
+    "captcha_provider": "turnstile",
+    "app_origin_matches": true,
+    "success_callback_matches_test_origin": true,
+    "fail_callback_matches_test_origin": true,
+    "required_payment_captcha_and_order_secret_names_present": true,
+    "toss_keys_last_updated": "2026-11-01T12:29:26Z",
+    "captcha_secret_last_updated": "2026-10-22T03:08:35Z",
+    "hostname_allowlist_last_updated": "2026-10-22T03:35:17Z",
+    "hostname_allowlist_exact_contents": "not disclosed by dashboard; exact list not independently read",
+    "key_values_and_mode": "not readable; TEST payment window previously observed 2026-11-07 after key update; current provider transaction not run"
+  },
+  "production": {
+    "before": "dpl_6VBFnUd9GyFTCoxsGdJRCVymCXmV",
+    "after": "dpl_6VBFnUd9GyFTCoxsGdJRCVymCXmV",
+    "sha": "9f26f27a8b8833236618db9c0e72bdf415e7f161"
+  },
+  "limitations": [
+    "Payment key type and current provider authorization/cancellation are not independently verified; enforce TEST-mode confirmation during R04 before a transaction.",
+    "CAPTCHA hostname list contents and current CAPTCHA challenge validation are not independently verified; confirm as part of approved R03 without bypass.",
+    "No account, role, order, payment, scheduler, or production mutation was performed."
+  ]
+}

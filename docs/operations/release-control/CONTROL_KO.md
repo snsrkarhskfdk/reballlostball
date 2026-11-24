@@ -205,3 +205,6 @@ ChatGPT에 위 결과 또는 반영된 커밋을 알려주면 같은 PR과 영�
 
 - 2026-11-24T07:11:40.242Z: 승인 코드의 Preview 배포 `dpl_4Y7UgDo1MRu6f7bZAQVPtctvVryn` READY, 브랜치 alias와 실제 TEST backend, Turnstile 공개 설정, Edge CORS 204를 확인했다. 운영 도메인의 배포 ID와 SHA는 변경 전후 동일했다. 프런트의 Toss 공개 키는 비어 있으며 서버 측 설정 검증 전 결제 준비 완료로 판단하지 않는다.
 - TEST 서버 측 런타임·결제/CAPTCHA·콜백 설정 확인을 위해 Supabase 로그인 화면을 같은 Space 2 p2에 열고 사용자에게 넘겼다. R02는 `WAITING_FOR_USER`, 부분 결과는 `receipts/R02_20261124_partial.json`. 인증 후 같은 run을 재개한다.
+
+- 2026-11-24T08:45:49.209Z: 사용자 Supabase 로그인 후 같은 Space를 인수해 TEST 프로젝트 설정을 확인했다. DENO_ENV=test, PAYMENT_PROVIDER=toss_payments, CAPTCHA enforced/turnstile, APP_ORIGIN 및 TEST 성공/실패 콜백을 일방향 digest와 알려진 비밀이 아닌 기대값 대조로 확인했다. 결제·CAPTCHA 등의 비밀 이름 존재와 수정 시각만 확인했다. 비밀값·실제 결제 인증은 확인하지 않았다. TEST 이전 결제창은 11/7에 TEST로 관측됐고 해당 키의 마지막 수정 시각은 11/1이지만 현재 제공자 성공 증거가 아니다. CAPTCHA 호스트 목록의 정확한 내용과 현재 인증 성공도 미검증이다. R03/R04에서 각각 확인한다.
+- 승인된 Preview와 TEST Edge 배포 및 대상 검증은 `receipts/R02_20261124_final.json`에 기록해 R02 VERIFIED. 이후 Space 2 결과 페이지만 남겨 종료했다. 다음 R03의 TEST 계정·역할 설정 승인은 여전히 PENDING이다.
