@@ -2,7 +2,7 @@
   "schema_version": 1,
   "work_id": "REBALL-RELEASE-20261124",
   "configured_on": "2026-11-24",
-  "configuration_status": "R02_CANDIDATE_RUNNING",
+  "configuration_status": "R03_VERIFIED_R04_PENDING",
   "repository": {
     "full_name": "snsrkarhskfdk/reballlostball",
     "url": "https://github.com/snsrkarhskfdk/reballlostball",
@@ -10,9 +10,9 @@
     "pr": 37
   },
   "code": {
-    "reviewed_sha": "b2e17ad1351834028dfadd53f1dac7ad485bb883",
-    "ci_url": "https://github.com/snsrkarhskfdk/reballlostball/actions/runs/45170818242",
-    "db_grants_ci_url": "https://github.com/snsrkarhskfdk/reballlostball/actions/runs/45170818150",
+    "reviewed_sha": "7c0c9c46753e9ebcf97c388839d2e91cef038385",
+    "ci_url": "https://github.com/snsrkarhskfdk/reballlostball/actions/runs/45381714310",
+    "db_grants_ci_url": "https://github.com/snsrkarhskfdk/reballlostball/actions/runs/45381714434",
     "note": "배포할 검증 코드와 실행 관리파일의 커밋은 별개다. 실제 코드 수정 시 새 커밋의 CI를 확인한 뒤 이 기준을 갱신한다.",
     "candidate": {
       "sha": "7c0c9c46753e9ebcf97c388839d2e91cef038385",
@@ -21,10 +21,10 @@
       "db_grants_url": "https://github.com/snsrkarhskfdk/reballlostball/actions/runs/45381714434",
       "qa_status": "PASS",
       "test_deploy_approval": "APPROVED",
-      "deployed": false,
+      "deployed": true,
       "limitations": "Backend resend 429 handling and no self-service recovery remain open; successful R03 evidence applies to prior deployed SHA.",
       "deployment_id": "dpl_9VZRGqUxpPRTyovRmyik8GhRJCyU",
-      "deployment_state": "BUILDING"
+      "deployment_state": "READY"
     }
   },
   "environment": {
@@ -32,10 +32,10 @@
     "expected_test_project_ref": "aohziyemqxfhpbbqpicx",
     "production_origin": "https://reballlostball.com",
     "production_project_ref": "qbftalhhyfcndanrcwpy",
-    "last_observed_test_deployment_id": "dpl_4Y7UgDo1MRu6f7bZAQVPtctvVryn",
-    "last_observed_test_deployed_sha": "b2e17ad1351834028dfadd53f1dac7ad485bb883",
+    "last_observed_test_deployment_id": "dpl_9VZRGqUxpPRTyovRmyik8GhRJCyU",
+    "last_observed_test_deployed_sha": "7c0c9c46753e9ebcf97c388839d2e91cef038385",
     "last_observed_production_deployed_sha": "9f26f27a8b8833236618db9c0e72bdf415e7f161",
-    "last_observed_at": "2026-11-24T07:11:40.242Z",
+    "last_observed_at": "2026-11-24T11:52:02.129Z",
     "fresh_observation_required_before_mutation": true
   },
   "authorization": {
@@ -92,7 +92,7 @@
     ],
     "run_id": "REBALL-RELEASE-20261124-R02-CANDIDATE-01",
     "owner": "LOCAL_CODEX-REBALL-R02-CANDIDATE-01",
-    "heartbeat_at": "2026-11-24T11:46:54.889Z",
+    "heartbeat_at": "2026-11-24T11:52:02.129Z",
     "skill_observed": true,
     "actual_model": "GPT-6 (Codex; exact variant not exposed)",
     "actual_reasoning_level": "not exposed",
@@ -128,7 +128,7 @@
         "db_grants"
       ],
       "evidence": [
-        "receipts/R00_20261123.json"
+        "receipts/R00_20261124_candidate.json"
       ],
       "blocked_reason": null
     },
@@ -156,7 +156,7 @@
       "id": "R02",
       "title": "검증 코드의 분리된 TEST 배포",
       "evidence_kind": "test",
-      "status": "RUNNING",
+      "status": "VERIFIED",
       "requires": [
         "R00",
         "R01"
@@ -171,8 +171,7 @@
         "production_unchanged"
       ],
       "evidence": [
-        "receipts/R02_20261124_final.json",
-        "receipts/R02_20261124_candidate_waiting.json"
+        "receipts/R02_20261124_candidate_final.json"
       ],
       "blocked_reason": null
     },
@@ -180,7 +179,7 @@
       "id": "R03",
       "title": "회원 및 관리자 실제 인증과 권한 확인",
       "evidence_kind": "test",
-      "status": "PENDING",
+      "status": "VERIFIED",
       "requires": [
         "R02"
       ],
@@ -195,9 +194,9 @@
         "admin_search_and_shipping"
       ],
       "evidence": [
-        "receipts/R03_20261124_final.json"
+        "receipts/R03_20261124_candidate_recheck.json"
       ],
-      "blocked_reason": "신규 승인 코드의 TEST 배포 및 영향받는 가입 화면 재검증 필요; 기존 R03 영수증은 이전 코드에 한정."
+      "blocked_reason": null
     },
     {
       "id": "R04",

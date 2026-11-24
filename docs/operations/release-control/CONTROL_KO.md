@@ -248,3 +248,7 @@ ChatGPT에 위 결과 또는 반영된 커밋을 알려주면 같은 PR과 영�
 - 2026-11-24T11:44:11.348Z: 사용자의 Vercel 인증 완료 후 기존 Space 2 p1을 인수해 해당 브랜치의 Preview SUPABASE_URL이 정확히 TEST 프로젝트를 가리킴을 재확인했다. 승인된 동일 run을 재개한다.
 
 - 2026-11-24T11:46:54.889Z: Space 2 p1에서 승인된 정확한 SHA와 브랜치를 선택하여 Preview 배포를 한 번 제출했다. Vercel 배포 ID `dpl_9VZRGqUxpPRTyovRmyik8GhRJCyU`, 최초 관측 BUILDING. 완료 전에는 PASS 처리하지 않으며 중복 생성하지 않는다.
+
+- 2026-11-24T11:52:02.129Z: 승인된 Preview `dpl_9VZRGqUxpPRTyovRmyik8GhRJCyU`는 READY이며 브랜치 alias가 정확한 후보 SHA와 TEST backend를 가리킨다. 운영 alias는 전후 `dpl_6VBFnUd9GyFTCoxsGdJRCVymCXmV`로 같았다. TEST Edge 17개는 이전 버전 상태를 유지하고 해당 후보에서 Edge 소스 차이는 없다.
+- 기존 Space 2에서 합성 관리자 로그아웃 후 비로그인 가입 완료 화면을 직접 열어 메일 발송 단정 문구가 없고 고객센터 안내·링크·푸터 전화 링크가 동작함을 확인했다. 새 계정·주문·결제는 만들지 않았다. 이전 실제 고객/관리자 인증과 주문 권한·검색·합성 배송 검증은 이전 배포에서 수행한 근거를 관련 소스 불변 검토와 함께 승계하며, 새 배포에서 반복한 것으로 주장하지 않는다. 상세 `receipts/R02_R03_20261124_candidate_observations.json`.
+- 기준 코드를 `7c0c9c46753e9ebcf97c388839d2e91cef038385`로 갱신하고 R00/R02/R03 영수증을 새로 검증한다. 메일 429 처리와 셀프 재발송 부재는 미해결이며 프런트 문구 변경만으로 메일 전달이 복구된 것은 아니다. R04 실제 제공자 TEST 거래는 별도 승인 전 실행하지 않는다.

@@ -1,0 +1,97 @@
+{
+  "schema_version": 1,
+  "task_id": "R03",
+  "run_id": "REBALL-RELEASE-20261124-R02-CANDIDATE-01",
+  "status": "PASS",
+  "observed_at": "2026-11-24T11:52:02.129Z",
+  "executor": "LOCAL_CODEX",
+  "code_sha": "7c0c9c46753e9ebcf97c388839d2e91cef038385",
+  "orchestration_sha": "daf3d55cd6a583e1776875cd2fb6c6840ec77dc9",
+  "environment": {
+    "kind": "test",
+    "origin": "https://reballlostball-git-repair-mr-dr01-a7fa2f-thechangcnds-projects.vercel.app",
+    "supabase_project_ref": "aohziyemqxfhpbbqpicx",
+    "deployment_id": "dpl_9VZRGqUxpPRTyovRmyik8GhRJCyU",
+    "deployed_sha": "7c0c9c46753e9ebcf97c388839d2e91cef038385"
+  },
+  "actions": [
+    {
+      "action_id": "R03-C01",
+      "kind": "read",
+      "summary": "On the new deployment in Space 2, checked anonymous signup completion guidance and support navigation; no new account or order was created.",
+      "outcome": "PASS"
+    },
+    {
+      "action_id": "R03-C02",
+      "kind": "read",
+      "summary": "Reviewed exact source delta and current Edge metadata; carried forward prior real account, address, access, search and synthetic shipping observations without claiming they were repeated.",
+      "outcome": "PASS"
+    }
+  ],
+  "assertions": [
+    {
+      "id": "synthetic_accounts_owned",
+      "result": "PASS",
+      "evidence_refs": [
+        "receipts/R02_R03_20261124_candidate_observations.json",
+        "receipts/R03_20261124_final.json"
+      ]
+    },
+    {
+      "id": "signup_and_auth_verified",
+      "result": "PASS",
+      "evidence_refs": [
+        "receipts/R02_R03_20261124_candidate_observations.json",
+        "receipts/R03_20261124_final.json"
+      ]
+    },
+    {
+      "id": "address_persistence",
+      "result": "PASS",
+      "evidence_refs": [
+        "receipts/R02_R03_20261124_candidate_observations.json",
+        "receipts/R03_20261124_final.json"
+      ]
+    },
+    {
+      "id": "own_order_access",
+      "result": "PASS",
+      "evidence_refs": [
+        "receipts/R02_R03_20261124_candidate_observations.json",
+        "receipts/R03_20261124_final.json"
+      ]
+    },
+    {
+      "id": "cross_account_denied",
+      "result": "PASS",
+      "evidence_refs": [
+        "receipts/R02_R03_20261124_candidate_observations.json",
+        "receipts/R03_20261124_final.json"
+      ]
+    },
+    {
+      "id": "admin_role_login",
+      "result": "PASS",
+      "evidence_refs": [
+        "receipts/R02_R03_20261124_candidate_observations.json",
+        "receipts/R03_20261124_final.json"
+      ]
+    },
+    {
+      "id": "admin_search_and_shipping",
+      "result": "PASS",
+      "evidence_refs": [
+        "receipts/R02_R03_20261124_candidate_observations.json",
+        "receipts/R03_20261124_final.json"
+      ]
+    }
+  ],
+  "artifacts": [
+    {
+      "path": "receipts/R02_R03_20261124_candidate_observations.json",
+      "sha256": "81c5ff790cbb676f651daec718c44cbf8ec4b21c162c12ecb7b488e4d2d7d1f9",
+      "redacted": true
+    }
+  ],
+  "blocker": null
+}
