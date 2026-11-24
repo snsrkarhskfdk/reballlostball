@@ -246,3 +246,5 @@ ChatGPT에 위 결과 또는 반영된 커밋을 알려주면 같은 PR과 영�
 - 2026-11-24T11:35:29.098Z: 사용자 승인과 후보 SHA의 CI 성공, 기존 TEST alias의 배포와 실제 TEST backend, 기존 운영 alias 배포를 확인했다. Vercel 환경 변수 목록 연결은 403이었고 기존 ego Space 2 p1의 Preview `SUPABASE_URL` 확인에는 Vercel 6자리 인증이 다시 필요했다. 후보 배포는 시작하지 않았다. 사용자 인증 후 같은 run·Space를 인수하여 해당 값과 배포 상태를 다시 확인한다. 차단 영수증 `receipts/R02_20261124_candidate_waiting.json`.
 
 - 2026-11-24T11:44:11.348Z: 사용자의 Vercel 인증 완료 후 기존 Space 2 p1을 인수해 해당 브랜치의 Preview SUPABASE_URL이 정확히 TEST 프로젝트를 가리킴을 재확인했다. 승인된 동일 run을 재개한다.
+
+- 2026-11-24T11:46:54.889Z: Space 2 p1에서 승인된 정확한 SHA와 브랜치를 선택하여 Preview 배포를 한 번 제출했다. Vercel 배포 ID `dpl_9VZRGqUxpPRTyovRmyik8GhRJCyU`, 최초 관측 BUILDING. 완료 전에는 PASS 처리하지 않으며 중복 생성하지 않는다.

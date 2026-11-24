@@ -22,7 +22,9 @@
       "qa_status": "PASS",
       "test_deploy_approval": "APPROVED",
       "deployed": false,
-      "limitations": "Backend resend 429 handling and no self-service recovery remain open; successful R03 evidence applies to prior deployed SHA."
+      "limitations": "Backend resend 429 handling and no self-service recovery remain open; successful R03 evidence applies to prior deployed SHA.",
+      "deployment_id": "dpl_9VZRGqUxpPRTyovRmyik8GhRJCyU",
+      "deployment_state": "BUILDING"
     }
   },
   "environment": {
@@ -90,7 +92,7 @@
     ],
     "run_id": "REBALL-RELEASE-20261124-R02-CANDIDATE-01",
     "owner": "LOCAL_CODEX-REBALL-R02-CANDIDATE-01",
-    "heartbeat_at": "2026-11-24T11:44:11.348Z",
+    "heartbeat_at": "2026-11-24T11:46:54.889Z",
     "skill_observed": true,
     "actual_model": "GPT-6 (Codex; exact variant not exposed)",
     "actual_reasoning_level": "not exposed",
