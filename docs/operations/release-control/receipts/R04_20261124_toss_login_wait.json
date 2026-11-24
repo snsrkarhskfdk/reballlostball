@@ -69,7 +69,7 @@
   ],
   "blocker": {
     "owner": "USER",
-    "required_action": "Log in to the existing Toss Payments merchant/developer account in ego Space 2 p2. Do not send credentials or keys in chat.",
-    "resume_check": "Take over the same Space, find the merchant test keys and compare their hashes with the current TEST project secret hashes without exposing values; confirm TEST mode before creating any order, otherwise remain blocked."
+    "required_action": "The account owner must consent and personally complete Toss login and identity verification in ego Space 2. Do not send personal identity data, credentials, or codes in chat.",
+    "resume_check": "After owner verification and user notification, take over the same Space and compare merchant TEST key hashes with current TEST project secret hashes without exposing values; confirm TEST mode before creating any order."
   }
 }
