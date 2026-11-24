@@ -200,3 +200,5 @@ ChatGPT에 위 결과 또는 반영된 커밋을 알려주면 같은 PR과 영�
 - 2026-11-24T07:02:43.642Z: 사용자가 Vercel 인증 완료를 알렸고 같은 Space 2 p2를 인수했다. Preview 브랜치의 SUPABASE_URL이 TEST 프로젝트를 가리키는 것을 확인했다. 동일 run과 기존 TEST 승인으로 재개했다.
 
 - 2026-11-24T07:05:45.082Z: TEST 17개 함수의 실제 소스 파일과 승인 코드 트리를 비교했다. 16개는 일치했고 `admin-orders-page`만 달랐다. TEST 프로젝트에 해당 함수만 배포하여 version 19 → 20, ACTIVE, verify_jwt=false를 확인했으며 5개 소스 파일 재조회에서 승인 코드와 일치했다. 원격 bundle SHA-256 `f02f49d8c904fa9fb5784a870a7dc41fdd03b490f34096347316dd3947cb11a2`. 프런트엔드 배포는 아직 미실행.
+
+- 2026-11-24T07:08:29.060Z: ego Space 2 Vercel 대시보드에서 정확한 `b2e17ad1351834028dfadd53f1dac7ad485bb883`와 브랜치 `repair/mr-dr01-harness-declare-scope`를 선택해 Preview 배포를 한 번 시작했다. 배포 ID `dpl_4Y7UgDo1MRu6f7bZAQVPtctvVryn`, 최초 관측 BUILDING. 완료와 TEST 설정을 확인하기 전 성공으로 처리하지 않는다.
