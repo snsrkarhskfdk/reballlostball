@@ -2,7 +2,7 @@
   "schema_version": 1,
   "work_id": "REBALL-RELEASE-20261124",
   "configured_on": "2026-11-24",
-  "configuration_status": "R02_VERIFIED_R03_PENDING_APPROVAL",
+  "configuration_status": "R03_RUNNING",
   "repository": {
     "full_name": "snsrkarhskfdk/reballlostball",
     "url": "https://github.com/snsrkarhskfdk/reballlostball",
@@ -28,7 +28,7 @@
   },
   "authorization": {
     "test_deploy": "APPROVED",
-    "test_account_setup": "PENDING",
+    "test_account_setup": "APPROVED",
     "test_transactions": "PENDING",
     "test_scheduler": "PENDING",
     "production": "DENIED",
@@ -44,6 +44,17 @@
           "project_ref": "aohziyemqxfhpbbqpicx",
           "code_sha": "b2e17ad1351834028dfadd53f1dac7ad485bb883"
         }
+      },
+      {
+        "capability": "test_account_setup",
+        "status": "APPROVED",
+        "source": "2026-11-24 user approved synthetic-order access/search/shipping verification and separately approved two synthetic customer accounts plus one separate store_manager account in the TEST project",
+        "approved_by": "USER",
+        "approved_at": "2026-11-24T09:02:25.333Z",
+        "scope": {
+          "project_ref": "aohziyemqxfhpbbqpicx",
+          "code_sha": null
+        }
       }
     ]
   },
@@ -55,9 +66,9 @@
     "page_labels": [
       "p1"
     ],
-    "run_id": "REBALL-RELEASE-20261124-R02-CODEX-01",
-    "owner": "LOCAL_CODEX-REBALL-R02-20261124-01",
-    "heartbeat_at": "2026-11-24T08:45:49.209Z",
+    "run_id": "REBALL-RELEASE-20261124-R03-CODEX-01",
+    "owner": "LOCAL_CODEX-REBALL-R03-20261124-01",
+    "heartbeat_at": "2026-11-24T09:02:25.333Z",
     "skill_observed": true,
     "actual_model": "GPT-6 (Codex; exact variant not exposed)",
     "actual_reasoning_level": "not exposed",
@@ -144,7 +155,7 @@
       "id": "R03",
       "title": "회원 및 관리자 실제 인증과 권한 확인",
       "evidence_kind": "test",
-      "status": "PENDING",
+      "status": "RUNNING",
       "requires": [
         "R02"
       ],
@@ -159,7 +170,7 @@
         "admin_search_and_shipping"
       ],
       "evidence": [],
-      "blocked_reason": "TEST 전용 합성 계정 생성과 관리자 역할 설정의 구체적 승인 필요."
+      "blocked_reason": null
     },
     {
       "id": "R04",

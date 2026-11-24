@@ -208,3 +208,8 @@ ChatGPT에 위 결과 또는 반영된 커밋을 알려주면 같은 PR과 영�
 
 - 2026-11-24T08:45:49.209Z: 사용자 Supabase 로그인 후 같은 Space를 인수해 TEST 프로젝트 설정을 확인했다. DENO_ENV=test, PAYMENT_PROVIDER=toss_payments, CAPTCHA enforced/turnstile, APP_ORIGIN 및 TEST 성공/실패 콜백을 일방향 digest와 알려진 비밀이 아닌 기대값 대조로 확인했다. 결제·CAPTCHA 등의 비밀 이름 존재와 수정 시각만 확인했다. 비밀값·실제 결제 인증은 확인하지 않았다. TEST 이전 결제창은 11/7에 TEST로 관측됐고 해당 키의 마지막 수정 시각은 11/1이지만 현재 제공자 성공 증거가 아니다. CAPTCHA 호스트 목록의 정확한 내용과 현재 인증 성공도 미검증이다. R03/R04에서 각각 확인한다.
 - 승인된 Preview와 TEST Edge 배포 및 대상 검증은 `receipts/R02_20261124_final.json`에 기록해 R02 VERIFIED. 이후 Space 2 결과 페이지만 남겨 종료했다. 다음 R03의 TEST 계정·역할 설정 승인은 여전히 PENDING이다.
+
+## 2026-11-24 R03 승인 및 실행
+
+- 사용자는 합성 주문 자료로 접근 권한·검색·배송 상태를 검증하는 범위를 승인했고, 이어 TEST 합성 고객 2개와 별도 관리자 1개 및 store_manager 역할 부여도 승인했다. 승인 기록 2026-11-24T09:02:25.333Z, 대상 `aohziyemqxfhpbbqpicx`. 제공자 결제·취소 및 운영 변경은 포함되지 않는다.
+- 실행자 `LOCAL_CODEX-REBALL-R03-20261124-01`, run `REBALL-RELEASE-20261124-R03-CODEX-01`. 실행 전 읽기 관측: Auth 사용자 0명, 기존 주문 7건, 환불 0건. 기존 주문은 이 실행의 소유 자료가 아니다.
