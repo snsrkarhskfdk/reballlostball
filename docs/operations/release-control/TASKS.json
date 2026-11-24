@@ -2,7 +2,7 @@
   "schema_version": 1,
   "work_id": "REBALL-RELEASE-20261124",
   "configured_on": "2026-11-24",
-  "configuration_status": "R04_RUNNING",
+  "configuration_status": "R04_WAITING_FOR_USER",
   "repository": {
     "full_name": "snsrkarhskfdk/reballlostball",
     "url": "https://github.com/snsrkarhskfdk/reballlostball",
@@ -111,11 +111,12 @@
     "space_name": "리볼로스트볼 최종 검증",
     "space_id": 2,
     "page_labels": [
+      "p1",
       "p2"
     ],
     "run_id": "REBALL-RELEASE-20261124-R04-CODEX-01",
     "owner": "LOCAL_CODEX-REBALL-R04-20261124-01",
-    "heartbeat_at": "2026-11-24T12:00:41.872Z",
+    "heartbeat_at": "2026-11-24T12:07:33.070Z",
     "skill_observed": true,
     "actual_model": "GPT-6 (Codex; exact variant not exposed)",
     "actual_reasoning_level": "not exposed",
@@ -225,7 +226,7 @@
       "id": "R04",
       "title": "실제 Toss TEST 승인과 주문 복귀",
       "evidence_kind": "test",
-      "status": "RUNNING",
+      "status": "WAITING_FOR_USER",
       "requires": [
         "R02",
         "R03"
@@ -239,8 +240,10 @@
         "return_refresh_lookup",
         "uncertain_result_recovery"
       ],
-      "evidence": [],
-      "blocked_reason": null
+      "evidence": [
+        "receipts/R04_20261124_toss_login_wait.json"
+      ],
+      "blocked_reason": "현재 연동 키의 TEST 모드를 주문 전에 확인하려면 기존 Toss 가맹점/개발자 계정 로그인이 필요함. 주문·결제는 아직 실행하지 않음."
     },
     {
       "id": "R05",

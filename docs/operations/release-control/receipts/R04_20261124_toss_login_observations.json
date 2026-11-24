@@ -1,0 +1,37 @@
+{
+  "observed_at": "2026-11-24T12:07:33.070Z",
+  "space_id": 2,
+  "project_ref": "aohziyemqxfhpbbqpicx",
+  "frontend_sha": "7c0c9c46753e9ebcf97c388839d2e91cef038385",
+  "deployment_id": "dpl_9VZRGqUxpPRTyovRmyik8GhRJCyU",
+  "user_scope": {
+    "max_orders": 1,
+    "max_amount_krw": 23500,
+    "test_mode_required_before_order": true,
+    "cancellation": false,
+    "production": false
+  },
+  "preflight": {
+    "frontend_public_toss_key_present": false,
+    "server_key_names_present": [
+      "TOSS_PAYMENTS_CLIENT_KEY",
+      "TOSS_SECRET_KEY"
+    ],
+    "server_values": "write-only; dashboard exposes 64-character hashes, not key values",
+    "code_runtime_validation": "non-production accepts both test and live key prefixes",
+    "test_mode_now": "UNVERIFIED",
+    "historical_toss_test_window": "2026-11-07 only; not proof of current configured key",
+    "toss_developer_account": "login required"
+  },
+  "database_baseline": {
+    "orders": 8,
+    "payments": 7,
+    "active_reservations": 1,
+    "owned_r03_fixture_count": 1
+  },
+  "actions": {
+    "new_r04_order_created": false,
+    "payment_submitted": false
+  },
+  "next": "User signs in to existing Toss merchant/developer account in Space 2 p2. Compare current account TEST key digests to existing TEST project secret digests without storing or printing key values. Stop if mode cannot be demonstrated."
+}
