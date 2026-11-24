@@ -13,7 +13,17 @@
     "reviewed_sha": "b2e17ad1351834028dfadd53f1dac7ad485bb883",
     "ci_url": "https://github.com/snsrkarhskfdk/reballlostball/actions/runs/45170818242",
     "db_grants_ci_url": "https://github.com/snsrkarhskfdk/reballlostball/actions/runs/45170818150",
-    "note": "배포할 검증 코드와 실행 관리파일의 커밋은 별개다. 실제 코드 수정 시 새 커밋의 CI를 확인한 뒤 이 기준을 갱신한다."
+    "note": "배포할 검증 코드와 실행 관리파일의 커밋은 별개다. 실제 코드 수정 시 새 커밋의 CI를 확인한 뒤 이 기준을 갱신한다.",
+    "candidate": {
+      "sha": "7c0c9c46753e9ebcf97c388839d2e91cef038385",
+      "description": "Signup email delivery wording; frontend only",
+      "qa_url": "https://github.com/snsrkarhskfdk/reballlostball/actions/runs/45381714310",
+      "db_grants_url": "https://github.com/snsrkarhskfdk/reballlostball/actions/runs/45381714434",
+      "qa_status": "PASS",
+      "test_deploy_approval": "PENDING",
+      "deployed": false,
+      "limitations": "Backend resend 429 handling and no self-service recovery remain open; successful R03 evidence applies to prior deployed SHA."
+    }
   },
   "environment": {
     "test_origin": "https://reballlostball-git-repair-mr-dr01-a7fa2f-thechangcnds-projects.vercel.app",
@@ -69,7 +79,7 @@
     ],
     "run_id": "REBALL-RELEASE-20261124-R03-CODEX-01",
     "owner": "LOCAL_CODEX-REBALL-R03-20261124-01",
-    "heartbeat_at": "2026-11-24T11:01:43.168Z",
+    "heartbeat_at": "2026-11-24T11:12:59.356Z",
     "skill_observed": true,
     "actual_model": "GPT-6 (Codex; exact variant not exposed)",
     "actual_reasoning_level": "not exposed",
