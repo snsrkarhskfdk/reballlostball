@@ -1,0 +1,43 @@
+{
+  "observed_at": "2026-11-24T09:52:05.162Z",
+  "run_id": "REBALL-RELEASE-20261124-R03-CODEX-01",
+  "auth_site_url": "TEST preview origin verified on reload",
+  "test_users": 3,
+  "confirmed_users": 2,
+  "admin_account": "created but unconfirmed; confirmation email not received",
+  "email_error": {
+    "http_status": 429,
+    "code": "over_email_send_rate_limit",
+    "observed_at": "2026-11-24T09:45:47Z",
+    "source": "TEST Supabase auth logs; third signup UI nevertheless showed generic completion"
+  },
+  "first_account": {
+    "email_confirmed": true,
+    "callback_returned_to_test": true,
+    "synthetic_address_survives_reload": true
+  },
+  "fixture": {
+    "count": 1,
+    "items": 1,
+    "synthetic": true,
+    "marked_test_only": true,
+    "order_status": "shipping_ready",
+    "payment_status": "ready",
+    "payment_records": 0,
+    "inventory_reservations": 0,
+    "other_orders": 7,
+    "note": "Artificial shipping-state fixture; no provider charge or confirmed payment."
+  },
+  "security": {
+    "affected": "second synthetic customer",
+    "logout_status": 204,
+    "active_sessions_after": 0,
+    "exposed_access_token_expiry_kst": "2026-11-24 19:41:43 +09:00",
+    "auth_audit_actions_observed": [
+      "user_signedup",
+      "user_confirmation_requested",
+      "logout"
+    ],
+    "limitation": "No evidence of unexpected use in inspected actions; this does not prove none. Tool transcript cannot be redacted by available tools."
+  }
+}

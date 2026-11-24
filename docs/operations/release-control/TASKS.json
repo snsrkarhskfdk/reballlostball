@@ -2,7 +2,7 @@
   "schema_version": 1,
   "work_id": "REBALL-RELEASE-20261124",
   "configured_on": "2026-11-24",
-  "configuration_status": "R03_RUNNING",
+  "configuration_status": "R03_WAITING_FOR_USER",
   "repository": {
     "full_name": "snsrkarhskfdk/reballlostball",
     "url": "https://github.com/snsrkarhskfdk/reballlostball",
@@ -69,7 +69,7 @@
     ],
     "run_id": "REBALL-RELEASE-20261124-R03-CODEX-01",
     "owner": "LOCAL_CODEX-REBALL-R03-20261124-01",
-    "heartbeat_at": "2026-11-24T09:44:37.582Z",
+    "heartbeat_at": "2026-11-24T09:52:05.162Z",
     "skill_observed": true,
     "actual_model": "GPT-6 (Codex; exact variant not exposed)",
     "actual_reasoning_level": "not exposed",
@@ -156,7 +156,7 @@
       "id": "R03",
       "title": "회원 및 관리자 실제 인증과 권한 확인",
       "evidence_kind": "test",
-      "status": "RUNNING",
+      "status": "WAITING_FOR_USER",
       "requires": [
         "R02"
       ],
@@ -171,9 +171,9 @@
         "admin_search_and_shipping"
       ],
       "evidence": [
-        "receipts/R03_20261124_redirect_wait.json"
+        "receipts/R03_20261124_login_wait.json"
       ],
-      "blocked_reason": null
+      "blocked_reason": "첫 TEST 고객 로그인 Turnstile 사람 확인 대기; 관리자 이메일은 서비스 발송 제한 429로 미인증."
     },
     {
       "id": "R04",

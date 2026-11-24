@@ -1,0 +1,94 @@
+{
+  "schema_version": 1,
+  "task_id": "R03",
+  "run_id": "REBALL-RELEASE-20261124-R03-CODEX-01",
+  "status": "BLOCKED",
+  "observed_at": "2026-11-24T09:52:05.162Z",
+  "executor": "LOCAL_CODEX",
+  "code_sha": "b2e17ad1351834028dfadd53f1dac7ad485bb883",
+  "orchestration_sha": "8f153e4cccee3044fd9e7249c0fc822e63ec6511",
+  "environment": {
+    "kind": "test",
+    "origin": "https://reballlostball-git-repair-mr-dr01-a7fa2f-thechangcnds-projects.vercel.app",
+    "supabase_project_ref": "aohziyemqxfhpbbqpicx",
+    "deployment_id": "dpl_4Y7UgDo1MRu6f7bZAQVPtctvVryn",
+    "deployed_sha": "b2e17ad1351834028dfadd53f1dac7ad485bb883"
+  },
+  "actions": [
+    {
+      "action_id": "R03-A01",
+      "kind": "mutation",
+      "summary": "User approved TEST Auth Site URL correction; changed it and verified persisted value.",
+      "outcome": "PASS"
+    },
+    {
+      "action_id": "R03-A02",
+      "kind": "mutation",
+      "summary": "Created three approved synthetic accounts; two confirmed, third email rate limited. No role has been granted.",
+      "outcome": "PASS"
+    },
+    {
+      "action_id": "R03-A03",
+      "kind": "mutation",
+      "summary": "Created one clearly marked synthetic order and item for the first TEST customer, with zero payment or inventory reservation rows.",
+      "outcome": "PASS"
+    },
+    {
+      "action_id": "R03-A04",
+      "kind": "read",
+      "summary": "Verified first customer email confirmation and synthetic address persisted after reload; login needs human Turnstile.",
+      "outcome": "BLOCKED"
+    }
+  ],
+  "assertions": [
+    {
+      "id": "synthetic_accounts_owned",
+      "result": "NOT_RUN",
+      "evidence_refs": []
+    },
+    {
+      "id": "signup_and_auth_verified",
+      "result": "NOT_RUN",
+      "evidence_refs": []
+    },
+    {
+      "id": "address_persistence",
+      "result": "PASS",
+      "evidence_refs": [
+        "receipts/R03_20261124_login_wait_observations.json"
+      ]
+    },
+    {
+      "id": "own_order_access",
+      "result": "NOT_RUN",
+      "evidence_refs": []
+    },
+    {
+      "id": "cross_account_denied",
+      "result": "NOT_RUN",
+      "evidence_refs": []
+    },
+    {
+      "id": "admin_role_login",
+      "result": "NOT_RUN",
+      "evidence_refs": []
+    },
+    {
+      "id": "admin_search_and_shipping",
+      "result": "NOT_RUN",
+      "evidence_refs": []
+    }
+  ],
+  "artifacts": [
+    {
+      "path": "receipts/R03_20261124_login_wait_observations.json",
+      "sha256": "7376173c0469a10271b739f050e0a0d510b60c92fdcd387f5e34c81b075474c1",
+      "redacted": true
+    }
+  ],
+  "blocker": {
+    "owner": "USER",
+    "required_action": "Complete the human check on the first TEST customer login in ego Space 2, then press login or notify the controller.",
+    "resume_check": "Take over the same Space, inspect login outcome before retry, verify own and cross-account access; monitor third account email rate limit and never repeat signup."
+  }
+}
