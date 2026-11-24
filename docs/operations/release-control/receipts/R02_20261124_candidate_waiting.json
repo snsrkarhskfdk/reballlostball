@@ -1,0 +1,75 @@
+{
+  "schema_version": 1,
+  "task_id": "R02",
+  "run_id": "REBALL-RELEASE-20261124-R02-CANDIDATE-01",
+  "status": "BLOCKED",
+  "observed_at": "2026-11-24T11:35:29.098Z",
+  "executor": "LOCAL_CODEX",
+  "code_sha": "7c0c9c46753e9ebcf97c388839d2e91cef038385",
+  "orchestration_sha": "51e94cb9ceee4f28b4321fc93e3f83fc03834506",
+  "environment": {
+    "kind": "test",
+    "origin": "https://reballlostball-git-repair-mr-dr01-a7fa2f-thechangcnds-projects.vercel.app",
+    "supabase_project_ref": "aohziyemqxfhpbbqpicx",
+    "deployment_id": null,
+    "deployed_sha": null
+  },
+  "actions": [
+    {
+      "action_id": "R02-C01",
+      "kind": "read",
+      "summary": "Verified explicit frontend-only TEST deployment approval and both successful CI runs for exact candidate SHA.",
+      "outcome": "PASS"
+    },
+    {
+      "action_id": "R02-C02",
+      "kind": "read",
+      "summary": "Observed old TEST alias, TEST backend and unchanged production alias before mutation. Vercel connector env list returned 403; existing Space browser requires six-digit Vercel authentication to reveal branch-scoped Preview URL.",
+      "outcome": "BLOCKED"
+    }
+  ],
+  "assertions": [
+    {
+      "id": "explicit_test_deploy_approval",
+      "result": "PASS",
+      "evidence_refs": [
+        "TASKS.json",
+        "CONTROL_KO.md"
+      ]
+    },
+    {
+      "id": "exact_source_ci",
+      "result": "PASS",
+      "evidence_refs": [
+        "https://github.com/snsrkarhskfdk/reballlostball/actions/runs/45381714310",
+        "https://github.com/snsrkarhskfdk/reballlostball/actions/runs/45381714434"
+      ]
+    },
+    {
+      "id": "frontend_deployed_sha",
+      "result": "NOT_RUN",
+      "evidence_refs": []
+    },
+    {
+      "id": "edge_versions_aligned",
+      "result": "NOT_RUN",
+      "evidence_refs": []
+    },
+    {
+      "id": "test_configuration_verified",
+      "result": "NOT_RUN",
+      "evidence_refs": []
+    },
+    {
+      "id": "production_unchanged",
+      "result": "NOT_RUN",
+      "evidence_refs": []
+    }
+  ],
+  "artifacts": [],
+  "blocker": {
+    "owner": "USER",
+    "required_action": "Complete the Vercel six-digit authenticator verification in existing ego Space 2 p1; do not send the code in chat.",
+    "resume_check": "Take over Space 2, verify that the branch-scoped Preview URL is the exact TEST Supabase project, recheck alias and deployment state, then deploy only the approved frontend SHA."
+  }
+}
