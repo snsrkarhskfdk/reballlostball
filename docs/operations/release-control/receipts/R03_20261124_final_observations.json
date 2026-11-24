@@ -1,0 +1,42 @@
+{
+  "observed_at": "2026-11-24T11:01:43.168Z",
+  "run_id": "REBALL-RELEASE-20261124-R03-CODEX-01",
+  "space_id": 2,
+  "accounts": {
+    "synthetic_customers": 2,
+    "separate_synthetic_admin": 1,
+    "email_confirmed": 3,
+    "store_manager_granted_to_admin_only": true
+  },
+  "tests": {
+    "first_customer_address_survives_reload": true,
+    "first_customer_own_order_http_status": 200,
+    "second_customer_other_order_http_status": 404,
+    "second_customer_error": "ORDER_NOT_FOUND",
+    "admin_real_login_and_role": true,
+    "admin_order_search_product_and_variant": true,
+    "shipping_ui_submitted_for_owned_fixture_only": true,
+    "readback_status": "shipped",
+    "shipping_status_events": 1,
+    "synthetic_tracking": true
+  },
+  "fixture": {
+    "payment_status": "ready",
+    "payment_records": 0,
+    "inventory_reservations": 0,
+    "other_orders": 7,
+    "notes": "Synthetic and intentionally unpaid; no provider authorization, actual dispatch, or payment is implied."
+  },
+  "open_issue": {
+    "observed": "TEST Auth returned over_email_send_rate_limit / HTTP 429 during third signup, while signup completion incorrectly said a confirmation email was sent.",
+    "recovery": "After the rate window, a single resend for the same existing account succeeded; confirmation and login subsequently succeeded.",
+    "release_impact": "Delivery failure is not surfaced reliably. A successful later resend does not verify the original failure path; fix and retest before release."
+  },
+  "security": {
+    "affected": "second synthetic customer",
+    "global_logout_http_status": 204,
+    "active_sessions_after_logout": 0,
+    "access_jwt_expiry_kst": "2026-11-24 19:41:43 +09:00",
+    "limitation": "Expired; inspected Auth events cannot prove absence of misuse. Local diagnostic output cannot be edited with available tools."
+  }
+}
