@@ -193,3 +193,6 @@ ChatGPT에 위 결과 또는 반영된 커밋을 알려주면 같은 PR과 영�
 
 - 사용자가 직전의 TEST 프런트엔드 및 필요한 TEST Edge 배포 범위 질문에 “승인해”라고 답했다. 기록 시각 2026-11-24T06:45:30.020Z; 대상 TEST 프로젝트 `aohziyemqxfhpbbqpicx`, 코드 `b2e17ad1351834028dfadd53f1dac7ad485bb883`. 운영 변경, 계정 생성, 거래 및 스케줄 변경 승인은 포함하지 않는다.
 - 실행자 `LOCAL_CODEX-REBALL-R02-20261124-01`, run `REBALL-RELEASE-20261124-R02-CODEX-01`. 환경 변수가 누락되면 빌드가 운영 Supabase로 기본 설정될 수 있으므로 정확한 브랜치 설정을 확인하기 전 배포하지 않는다.
+
+- 2026-11-24T06:48:42.883Z: R02는 `WAITING_FOR_USER`. Vercel 앱 환경변수 목록 API는 403, CLI는 기존 로그인 자격 없음. ego Space 2 p2에서 해당 Preview 브랜치의 설정 항목은 확인했으나 TEST URL 값 보기에는 Vercel 6자리 인증이 필요했다. Space를 사용자에게 넘겼다. 사용자 인증 후 같은 Space를 인수하고 TEST URL·계정·대상을 재확인한다.
+- 배포 및 Edge 변경은 아직 실행하지 않았다. 대기 영수증: `receipts/R02_20261124_waiting.json`. 기존 승인과 run ID를 유지한다.

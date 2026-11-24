@@ -1,0 +1,75 @@
+{
+  "schema_version": 1,
+  "task_id": "R02",
+  "run_id": "REBALL-RELEASE-20261124-R02-CODEX-01",
+  "status": "BLOCKED",
+  "observed_at": "2026-11-24T06:48:42.883Z",
+  "executor": "LOCAL_CODEX",
+  "code_sha": "b2e17ad1351834028dfadd53f1dac7ad485bb883",
+  "orchestration_sha": "207f6f125cbd54883f122b3b7e3a62514939d0e2",
+  "environment": {
+    "kind": "test",
+    "origin": "https://reballlostball-git-repair-mr-dr01-a7fa2f-thechangcnds-projects.vercel.app",
+    "supabase_project_ref": "aohziyemqxfhpbbqpicx",
+    "deployment_id": null,
+    "deployed_sha": null
+  },
+  "actions": [
+    {
+      "action_id": "R02-A01",
+      "kind": "read",
+      "summary": "Verified user approval, exact-source CI, TEST origin and backend, existing alias and deployment, and 17 active TEST Edge functions.",
+      "outcome": "PASS"
+    },
+    {
+      "action_id": "R02-A02",
+      "kind": "read",
+      "summary": "Vercel connector environment list returned HTTP 403; CLI has no existing credentials; browser showed branch-scoped preview environment entries and requested 6-digit authentication to reveal the TEST URL.",
+      "outcome": "BLOCKED"
+    }
+  ],
+  "assertions": [
+    {
+      "id": "explicit_test_deploy_approval",
+      "result": "PASS",
+      "evidence_refs": [
+        "TASKS.json",
+        "CONTROL_KO.md"
+      ]
+    },
+    {
+      "id": "exact_source_ci",
+      "result": "PASS",
+      "evidence_refs": [
+        "https://github.com/snsrkarhskfdk/reballlostball/actions/runs/45170818242",
+        "https://github.com/snsrkarhskfdk/reballlostball/actions/runs/45170818150"
+      ]
+    },
+    {
+      "id": "frontend_deployed_sha",
+      "result": "NOT_RUN",
+      "evidence_refs": []
+    },
+    {
+      "id": "edge_versions_aligned",
+      "result": "NOT_RUN",
+      "evidence_refs": []
+    },
+    {
+      "id": "test_configuration_verified",
+      "result": "NOT_RUN",
+      "evidence_refs": []
+    },
+    {
+      "id": "production_unchanged",
+      "result": "NOT_RUN",
+      "evidence_refs": []
+    }
+  ],
+  "artifacts": [],
+  "blocker": {
+    "owner": "USER",
+    "required_action": "In ego lite Space 2 p2 complete Vercel authenticator verification for the preview SUPABASE_URL. Do not provide the code in chat.",
+    "resume_check": "After user confirms, take over Space 2, read branch-scoped preview URL and verify exact test project, recheck targets and deployment state before any deployment."
+  }
+}
