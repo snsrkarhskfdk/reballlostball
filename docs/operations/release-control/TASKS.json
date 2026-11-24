@@ -2,7 +2,7 @@
   "schema_version": 1,
   "work_id": "REBALL-RELEASE-20261124",
   "configured_on": "2026-11-24",
-  "configuration_status": "R03_VERIFIED_R04_PENDING",
+  "configuration_status": "R02_CANDIDATE_RUNNING",
   "repository": {
     "full_name": "snsrkarhskfdk/reballlostball",
     "url": "https://github.com/snsrkarhskfdk/reballlostball",
@@ -20,7 +20,7 @@
       "qa_url": "https://github.com/snsrkarhskfdk/reballlostball/actions/runs/45381714310",
       "db_grants_url": "https://github.com/snsrkarhskfdk/reballlostball/actions/runs/45381714434",
       "qa_status": "PASS",
-      "test_deploy_approval": "PENDING",
+      "test_deploy_approval": "APPROVED",
       "deployed": false,
       "limitations": "Backend resend 429 handling and no self-service recovery remain open; successful R03 evidence applies to prior deployed SHA."
     }
@@ -65,6 +65,17 @@
           "project_ref": "aohziyemqxfhpbbqpicx",
           "code_sha": null
         }
+      },
+      {
+        "capability": "test_deploy",
+        "status": "APPROVED",
+        "source": "User explicitly approved the immediately preceding proposed frontend-only TEST deployment of candidate 7c0c9c4 and requested revalidation in the existing ego Space.",
+        "approved_by": "USER",
+        "approved_at": "2026-11-24T11:31:55.331Z",
+        "scope": {
+          "project_ref": "aohziyemqxfhpbbqpicx",
+          "code_sha": "7c0c9c46753e9ebcf97c388839d2e91cef038385"
+        }
       }
     ]
   },
@@ -77,9 +88,9 @@
       "p1",
       "p2"
     ],
-    "run_id": "REBALL-RELEASE-20261124-R03-CODEX-01",
-    "owner": "LOCAL_CODEX-REBALL-R03-20261124-01",
-    "heartbeat_at": "2026-11-24T11:12:59.356Z",
+    "run_id": "REBALL-RELEASE-20261124-R02-CANDIDATE-01",
+    "owner": "LOCAL_CODEX-REBALL-R02-CANDIDATE-01",
+    "heartbeat_at": "2026-11-24T11:31:55.331Z",
     "skill_observed": true,
     "actual_model": "GPT-6 (Codex; exact variant not exposed)",
     "actual_reasoning_level": "not exposed",
@@ -143,7 +154,7 @@
       "id": "R02",
       "title": "검증 코드의 분리된 TEST 배포",
       "evidence_kind": "test",
-      "status": "VERIFIED",
+      "status": "RUNNING",
       "requires": [
         "R00",
         "R01"
@@ -166,7 +177,7 @@
       "id": "R03",
       "title": "회원 및 관리자 실제 인증과 권한 확인",
       "evidence_kind": "test",
-      "status": "VERIFIED",
+      "status": "PENDING",
       "requires": [
         "R02"
       ],
@@ -183,7 +194,7 @@
       "evidence": [
         "receipts/R03_20261124_final.json"
       ],
-      "blocked_reason": null
+      "blocked_reason": "신규 승인 코드의 TEST 배포 및 영향받는 가입 화면 재검증 필요; 기존 R03 영수증은 이전 코드에 한정."
     },
     {
       "id": "R04",
