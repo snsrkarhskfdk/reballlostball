@@ -2,7 +2,7 @@
   "schema_version": 1,
   "work_id": "REBALL-RELEASE-20261124",
   "configured_on": "2026-11-24",
-  "configuration_status": "R03_WAITING_FOR_USER",
+  "configuration_status": "R03_RUNNING",
   "repository": {
     "full_name": "snsrkarhskfdk/reballlostball",
     "url": "https://github.com/snsrkarhskfdk/reballlostball",
@@ -69,7 +69,7 @@
     ],
     "run_id": "REBALL-RELEASE-20261124-R03-CODEX-01",
     "owner": "LOCAL_CODEX-REBALL-R03-20261124-01",
-    "heartbeat_at": "2026-11-24T09:19:21.715Z",
+    "heartbeat_at": "2026-11-24T09:33:29.221Z",
     "skill_observed": true,
     "actual_model": "GPT-6 (Codex; exact variant not exposed)",
     "actual_reasoning_level": "not exposed",
@@ -156,7 +156,7 @@
       "id": "R03",
       "title": "회원 및 관리자 실제 인증과 권한 확인",
       "evidence_kind": "test",
-      "status": "WAITING_FOR_USER",
+      "status": "RUNNING",
       "requires": [
         "R02"
       ],
@@ -173,7 +173,7 @@
       "evidence": [
         "receipts/R03_20261124_redirect_wait.json"
       ],
-      "blocked_reason": "TEST Supabase 인증 기본 URL이 localhost:3000이라 가입 확인 후 안전한 TEST 복귀를 위해 범위 지정 설정 변경 승인 대기."
+      "blocked_reason": null
     },
     {
       "id": "R04",
@@ -276,6 +276,17 @@
       ],
       "evidence": [],
       "blocked_reason": "운영 변경과 실결제는 승인되지 않았음. TEST 승인으로 운영 단계에 진입하지 않음."
+    }
+  ],
+  "scoped_approvals": [
+    {
+      "capability": "test_auth_site_url",
+      "approved_by": "USER",
+      "approved_at": "2026-11-24T09:33:29.221Z",
+      "source": "User selected TEST 주소로 변경 승인 in response to explicit TEST Auth Site URL question",
+      "project_ref": "aohziyemqxfhpbbqpicx",
+      "from": "http://localhost:3000",
+      "to": "https://reballlostball-git-repair-mr-dr01-a7fa2f-thechangcnds-projects.vercel.app"
     }
   ]
 }
