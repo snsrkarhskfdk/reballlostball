@@ -2,7 +2,7 @@
   "schema_version": 1,
   "work_id": "REBALL-RELEASE-20261124",
   "configured_on": "2026-11-24",
-  "configuration_status": "R03_VERIFIED_R04_PENDING",
+  "configuration_status": "R04_RUNNING",
   "repository": {
     "full_name": "snsrkarhskfdk/reballlostball",
     "url": "https://github.com/snsrkarhskfdk/reballlostball",
@@ -41,7 +41,7 @@
   "authorization": {
     "test_deploy": "APPROVED",
     "test_account_setup": "APPROVED",
-    "test_transactions": "PENDING",
+    "test_transactions": "APPROVED",
     "test_scheduler": "PENDING",
     "production": "DENIED",
     "source": "2026-11-07 CHECKOUT_EXECUTION: PR updates permitted; deployments prohibited. 2026-11-24 user requested orchestration setup, not deployment.",
@@ -78,6 +78,30 @@
           "project_ref": "aohziyemqxfhpbbqpicx",
           "code_sha": "7c0c9c46753e9ebcf97c388839d2e91cef038385"
         }
+      },
+      {
+        "capability": "test_transactions",
+        "status": "APPROVED",
+        "source": "User explicitly approved one TEST order and one TEST payment verification up to 23,500 KRW, conditional on confirming TEST mode before creating the order.",
+        "approved_by": "USER",
+        "approved_at": "2026-11-24T12:00:41.872Z",
+        "scope": {
+          "project_ref": "aohziyemqxfhpbbqpicx",
+          "code_sha": "7c0c9c46753e9ebcf97c388839d2e91cef038385",
+          "tasks": [
+            "R04"
+          ],
+          "max_orders": 1,
+          "max_amount_krw": 23500,
+          "require_test_mode_before_order": true,
+          "excludes": [
+            "provider cancellation",
+            "refund",
+            "production",
+            "live payment",
+            "scheduler"
+          ]
+        }
       }
     ]
   },
@@ -87,12 +111,11 @@
     "space_name": "리볼로스트볼 최종 검증",
     "space_id": 2,
     "page_labels": [
-      "p1",
       "p2"
     ],
-    "run_id": "REBALL-RELEASE-20261124-R02-CANDIDATE-01",
-    "owner": "LOCAL_CODEX-REBALL-R02-CANDIDATE-01",
-    "heartbeat_at": "2026-11-24T11:52:02.129Z",
+    "run_id": "REBALL-RELEASE-20261124-R04-CODEX-01",
+    "owner": "LOCAL_CODEX-REBALL-R04-20261124-01",
+    "heartbeat_at": "2026-11-24T12:00:41.872Z",
     "skill_observed": true,
     "actual_model": "GPT-6 (Codex; exact variant not exposed)",
     "actual_reasoning_level": "not exposed",
@@ -202,7 +225,7 @@
       "id": "R04",
       "title": "실제 Toss TEST 승인과 주문 복귀",
       "evidence_kind": "test",
-      "status": "PENDING",
+      "status": "RUNNING",
       "requires": [
         "R02",
         "R03"
@@ -217,7 +240,7 @@
         "uncertain_result_recovery"
       ],
       "evidence": [],
-      "blocked_reason": "실제 인증·동의 단계가 남아 있음. 창이 열리거나 mock 테스트가 통과한 것으로 완료 처리하지 않음."
+      "blocked_reason": null
     },
     {
       "id": "R05",
@@ -236,7 +259,7 @@
         "cancel_replay_no_duplicate"
       ],
       "evidence": [],
-      "blocked_reason": "소유가 확인된 승인 TEST 주문이 먼저 필요함."
+      "blocked_reason": "소유가 확인된 승인 TEST 주문과 별도의 취소·환불 승인 필요. R04 한 건 결제 승인은 취소·환불을 포함하지 않음."
     },
     {
       "id": "R06",
