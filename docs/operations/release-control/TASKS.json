@@ -2,7 +2,7 @@
   "schema_version": 1,
   "work_id": "REBALL-RELEASE-20261124",
   "configured_on": "2026-11-24",
-  "configuration_status": "R03_RUNNING",
+  "configuration_status": "R03_WAITING_FOR_USER",
   "repository": {
     "full_name": "snsrkarhskfdk/reballlostball",
     "url": "https://github.com/snsrkarhskfdk/reballlostball",
@@ -68,7 +68,7 @@
     ],
     "run_id": "REBALL-RELEASE-20261124-R03-CODEX-01",
     "owner": "LOCAL_CODEX-REBALL-R03-20261124-01",
-    "heartbeat_at": "2026-11-24T09:02:25.333Z",
+    "heartbeat_at": "2026-11-24T09:05:49.865Z",
     "skill_observed": true,
     "actual_model": "GPT-6 (Codex; exact variant not exposed)",
     "actual_reasoning_level": "not exposed",
@@ -155,7 +155,7 @@
       "id": "R03",
       "title": "회원 및 관리자 실제 인증과 권한 확인",
       "evidence_kind": "test",
-      "status": "RUNNING",
+      "status": "WAITING_FOR_USER",
       "requires": [
         "R02"
       ],
@@ -169,8 +169,10 @@
         "admin_role_login",
         "admin_search_and_shipping"
       ],
-      "evidence": [],
-      "blocked_reason": null
+      "evidence": [
+        "receipts/R03_20261124_captcha_wait.json"
+      ],
+      "blocked_reason": "첫 합성 계정 회원가입을 위한 실제 Turnstile 사람 확인과 아이디 중복확인이 필요함."
     },
     {
       "id": "R04",
