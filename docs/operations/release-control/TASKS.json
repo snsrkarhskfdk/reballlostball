@@ -2,7 +2,7 @@
   "schema_version": 1,
   "work_id": "REBALL-RELEASE-20261124",
   "configured_on": "2026-11-24",
-  "configuration_status": "R02_CANDIDATE_WAITING_FOR_USER",
+  "configuration_status": "R02_CANDIDATE_RUNNING",
   "repository": {
     "full_name": "snsrkarhskfdk/reballlostball",
     "url": "https://github.com/snsrkarhskfdk/reballlostball",
@@ -90,7 +90,7 @@
     ],
     "run_id": "REBALL-RELEASE-20261124-R02-CANDIDATE-01",
     "owner": "LOCAL_CODEX-REBALL-R02-CANDIDATE-01",
-    "heartbeat_at": "2026-11-24T11:35:29.098Z",
+    "heartbeat_at": "2026-11-24T11:44:11.348Z",
     "skill_observed": true,
     "actual_model": "GPT-6 (Codex; exact variant not exposed)",
     "actual_reasoning_level": "not exposed",
@@ -154,7 +154,7 @@
       "id": "R02",
       "title": "검증 코드의 분리된 TEST 배포",
       "evidence_kind": "test",
-      "status": "WAITING_FOR_USER",
+      "status": "RUNNING",
       "requires": [
         "R00",
         "R01"
@@ -172,7 +172,7 @@
         "receipts/R02_20261124_final.json",
         "receipts/R02_20261124_candidate_waiting.json"
       ],
-      "blocked_reason": "Vercel Preview 환경값을 다시 확인하기 위해 ego Space 2 p1의 6자리 인증 필요. 아직 후보 배포는 시작하지 않음."
+      "blocked_reason": null
     },
     {
       "id": "R03",
