@@ -221,3 +221,5 @@ ChatGPT에 위 결과 또는 반영된 커밋을 알려주면 같은 PR과 영�
 - 2026-11-24T09:19:21.715Z: 첫 합성 계정 인증 메일은 도착했지만 링크의 redirect_to가 localhost:3000이었다. TEST Supabase Auth URL Configuration에서 SITE_URL이 같은 로컬 주소이고 추가 Redirect URL이 0개임을 확인했다. 인증 링크는 열지 않았다. TEST 기본 주소만 정확한 TEST Preview origin으로 바꾸는 승인을 요청했으며 계정은 1개·미인증 1개 상태로 보존한다.
 
 - 2026-11-24T09:33:29.221Z: 사용자가 TEST 프로젝트 Auth Site URL만 localhost:3000에서 정확한 TEST Preview origin으로 변경하도록 승인했다. 같은 R03 run을 재개하며 다른 Auth 설정은 변경하지 않는다.
+
+- 2026-11-24T09:34:57.448Z: 승인에 따라 TEST 프로젝트 Auth SITE_URL을 정확한 TEST Preview origin으로 변경하고 새로고침 후 확인했다. Redirect URL 목록은 비어 있는 그대로다. 기발송 이메일은 옛 로컬 redirect를 포함하므로 인증 시 실제 리디렉션을 먼저 안전하게 점검한다.
