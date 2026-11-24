@@ -2,7 +2,7 @@
   "schema_version": 1,
   "work_id": "REBALL-RELEASE-20261124",
   "configured_on": "2026-11-24",
-  "configuration_status": "R02_WAITING_FOR_USER",
+  "configuration_status": "R02_RUNNING",
   "repository": {
     "full_name": "snsrkarhskfdk/reballlostball",
     "url": "https://github.com/snsrkarhskfdk/reballlostball",
@@ -58,7 +58,7 @@
     ],
     "run_id": "REBALL-RELEASE-20261124-R02-CODEX-01",
     "owner": "LOCAL_CODEX-REBALL-R02-20261124-01",
-    "heartbeat_at": "2026-11-24T06:48:42.883Z",
+    "heartbeat_at": "2026-11-24T07:02:43.642Z",
     "skill_observed": true,
     "actual_model": "GPT-6 (Codex; exact variant not exposed)",
     "actual_reasoning_level": "not exposed",
@@ -122,7 +122,7 @@
       "id": "R02",
       "title": "검증 코드의 분리된 TEST 배포",
       "evidence_kind": "test",
-      "status": "WAITING_FOR_USER",
+      "status": "RUNNING",
       "requires": [
         "R00",
         "R01"
@@ -139,7 +139,7 @@
       "evidence": [
         "receipts/R02_20261124_waiting.json"
       ],
-      "blocked_reason": "Vercel의 브랜치별 TEST SUPABASE_URL 확인을 위해 기존 ego Space 2 p2에서 사용자 2단계 인증 필요."
+      "blocked_reason": null
     },
     {
       "id": "R03",

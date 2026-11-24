@@ -196,3 +196,5 @@ ChatGPT에 위 결과 또는 반영된 커밋을 알려주면 같은 PR과 영�
 
 - 2026-11-24T06:48:42.883Z: R02는 `WAITING_FOR_USER`. Vercel 앱 환경변수 목록 API는 403, CLI는 기존 로그인 자격 없음. ego Space 2 p2에서 해당 Preview 브랜치의 설정 항목은 확인했으나 TEST URL 값 보기에는 Vercel 6자리 인증이 필요했다. Space를 사용자에게 넘겼다. 사용자 인증 후 같은 Space를 인수하고 TEST URL·계정·대상을 재확인한다.
 - 배포 및 Edge 변경은 아직 실행하지 않았다. 대기 영수증: `receipts/R02_20261124_waiting.json`. 기존 승인과 run ID를 유지한다.
+
+- 2026-11-24T07:02:43.642Z: 사용자가 Vercel 인증 완료를 알렸고 같은 Space 2 p2를 인수했다. Preview 브랜치의 SUPABASE_URL이 TEST 프로젝트를 가리키는 것을 확인했다. 동일 run과 기존 TEST 승인으로 재개했다.
