@@ -11,6 +11,31 @@ const routes = [
   ["guest order", "/#/login/order"],
 ];
 
+test("signup completion does not claim an unconfirmed email was delivered", async ({ page }) => {
+  await page.addInitScript(() => {
+    sessionStorage.setItem("reball.pendingSignupEmail", "test@example.invalid");
+    sessionStorage.setItem("reball.pendingSignupLoginId", "syntheticuser");
+  });
+  await page.goto("/#/signup/complete");
+  const card = page.locator(".signup-complete-card");
+  await expect(card).toContainText("test@example.invalid");
+  await expect(card).toContainText("인증 메일을 확인");
+  await expect(card).toContainText("고객센터");
+  await expect(card).not.toContainText("메일을 보냈습니다");
+  await expect(card).not.toContainText("회원 정보를 다시 입력");
+  await card.getByRole("button", { name: "고객센터" }).click();
+  await expect(page).toHaveURL(/#\/customer-center$/);
+  await expect(page.locator('footer a[href^="tel:"]').first()).toBeVisible();
+});
+
+test("signup completion without stored details still offers honest guidance", async ({ page }) => {
+  await page.goto("/#/signup/complete");
+  const card = page.locator(".signup-complete-card");
+  await expect(card).toContainText("입력하신 이메일 주소의 인증 메일을 확인");
+  await expect(card).toContainText("고객센터");
+  await expect(card).not.toContainText("메일을 보냈습니다");
+});
+
 test("development entry uses the production HTML and app module", async ({ page }) => {
   const response = await page.goto("/");
   expect(response?.ok()).toBe(true);

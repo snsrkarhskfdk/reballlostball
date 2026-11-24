@@ -984,7 +984,7 @@ async function handleAuthFormSubmit(form) {
       setPendingSignupEmail(email);
       setPendingSignupLoginId(loginId);
       rememberSignupLoginId(loginId);
-      showToast("확인 메일을 보냈습니다. 이메일 인증 후 로그인해 주세요.");
+      showToast("가입 요청이 접수되었습니다. 이메일 인증 후 로그인해 주세요.");
       routeTo("/signup/complete");
 
       return;
@@ -3930,17 +3930,17 @@ function renderAuthPage(mode = "login", redirect = "/mypage") {
           <p>
             ${
               pendingEmail
-                ? `<strong>${escapeHtml(pendingEmail)}</strong> 주소로 인증 메일을 보냈습니다.`
-                : "입력하신 이메일 주소로 인증 메일을 보냈습니다."
+                ? `<strong>${escapeHtml(pendingEmail)}</strong> 주소의 인증 메일을 확인해 주세요.`
+                : "입력하신 이메일 주소의 인증 메일을 확인해 주세요."
             }
             ${pendingLoginId ? `<br />인증 후 <strong>${escapeHtml(pendingLoginId)}</strong> 아이디로 로그인할 수 있습니다.` : "메일 인증을 완료한 뒤 로그인해 주세요."}
           </p>
           <div class="signup-complete-notice">
             <b>인증 메일이 보이지 않으면</b>
-            <span>스팸함을 확인하거나, 입력 이메일이 잘못된 경우 회원 정보를 다시 입력해 주세요.</span>
+            <span>스팸함을 확인하고, 메일이 계속 보이지 않거나 이메일을 잘못 입력한 경우 고객센터에 문의해 주세요.</span>
           </div>
           <div class="signup-form-actions signup-complete-actions">
-            <button class="secondary-btn" type="button" data-route="/signup/form">정보 다시 입력</button>
+            <button class="secondary-btn" type="button" data-route="/customer-center">고객센터</button>
             <button class="primary-btn" type="button" data-route="/login">인증 후 로그인</button>
           </div>
         </article>
