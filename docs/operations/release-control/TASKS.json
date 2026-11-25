@@ -116,7 +116,7 @@
     ],
     "run_id": "REBALL-RELEASE-20261124-R04-CODEX-01",
     "owner": "LOCAL_CODEX-REBALL-R04-20261124-01",
-    "heartbeat_at": "2026-11-25T05:46:56.700Z",
+    "heartbeat_at": "2026-11-25T05:59:56.800Z",
     "skill_observed": true,
     "actual_model": "GPT-6 (Codex; exact variant not exposed)",
     "actual_reasoning_level": "not exposed",
@@ -241,7 +241,7 @@
         "uncertain_result_recovery"
       ],
       "evidence": [
-        "receipts/R04_20261125_expiry_scope_wait.json"
+        "receipts/R04_20261125_order_created.json"
       ],
       "blocked_reason": null
     },
@@ -356,7 +356,7 @@
     "evidence_sha256": "9ec4fe048294febca82a15c9aaa6486b3c4301c6ce06e2fec5f47aaf97ba023c",
     "max_orders": 1,
     "max_amount_krw": 23500,
-    "orders_created": 0,
+    "orders_created": 1,
     "expired_existing_orders": 1,
     "expired_existing_units": 1,
     "existing_data_approval": "APPROVED",
@@ -368,14 +368,16 @@
     },
     "order_intent": {
       "recorded_at": "2026-11-25T05:46:56.700Z",
-      "state": "PREPARED_NOT_SUBMITTED",
+      "state": "ORDER_CREATED_PAYMENT_READY",
       "max_orders": 1,
       "max_amount_krw": 23500,
       "synthetic_marker": "TEST ONLY R04 20261125",
       "last_known_order_count": 8,
       "last_known_payment_count": 7,
       "check_existing_before_any_retry": true,
-      "approved_expired_reservations": 1
+      "approved_expired_reservations": 1,
+      "created_observed_at": "2026-11-25T05:59:56.800Z",
+      "order_evidence": "receipts/R04_20261125_order_created_observations.json"
     }
   }
 }

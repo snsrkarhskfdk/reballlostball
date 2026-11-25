@@ -1,0 +1,36 @@
+{
+  "observed_at": "2026-11-25T05:59:56.800Z",
+  "run_id": "REBALL-RELEASE-20261124-R04-CODEX-01",
+  "space_id": 0,
+  "mode": "TEST keys verified against merchant and unchanged secret modification times",
+  "network": {
+    "first_checkout_request": "15 second client timeout; TEST Edge logs showed OPTIONS 204 only and DB had no new order or released reservation",
+    "retry": "same checkout form and session, first retry; actual create-order HTTP 201"
+  },
+  "created_order": {
+    "count": 1,
+    "synthetic": true,
+    "marker": "TEST ONLY R04 20261125",
+    "product_price_krw": 20000,
+    "total_krw": 23500,
+    "status": "payment_ready",
+    "payment_status": "ready",
+    "provider": "toss_payments",
+    "payment_rows": 1,
+    "active_reservations": 1,
+    "provider_authorization": "NOT_OBSERVED"
+  },
+  "approved_previous_expiry": {
+    "reservation_count": 1,
+    "units": 1,
+    "old_order_status": "payment_failed",
+    "old_payment_status": "expired",
+    "reservation_status": "expired",
+    "expiry_event_count": 1
+  },
+  "limits": {
+    "orders": 1,
+    "max_amount_krw": 23500
+  },
+  "payment_window": "Not observed; existing order page has enabled Toss payment button. No provider agreement or payment authorization has been performed."
+}

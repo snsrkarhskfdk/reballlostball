@@ -1,0 +1,83 @@
+{
+  "schema_version": 1,
+  "task_id": "R04",
+  "run_id": "REBALL-RELEASE-20261124-R04-CODEX-01",
+  "status": "BLOCKED",
+  "observed_at": "2026-11-25T05:59:56.800Z",
+  "executor": "LOCAL_CODEX",
+  "code_sha": "7c0c9c46753e9ebcf97c388839d2e91cef038385",
+  "orchestration_sha": "002161d6c1e7bb490ee48a5a8f20c17c0b1bd39b",
+  "environment": {
+    "kind": "test",
+    "origin": "https://reballlostball-git-repair-mr-dr01-a7fa2f-thechangcnds-projects.vercel.app",
+    "supabase_project_ref": "aohziyemqxfhpbbqpicx",
+    "deployment_id": "dpl_9VZRGqUxpPRTyovRmyik8GhRJCyU",
+    "deployed_sha": "7c0c9c46753e9ebcf97c388839d2e91cef038385"
+  },
+  "actions": [
+    {
+      "action_id": "R04-ORDER-01",
+      "kind": "mutation",
+      "summary": "With explicit scoped approval created one synthetic TEST order, after resolving a first timeout without a POST or DB mutation and retrying in the same checkout session.",
+      "outcome": "PASS"
+    },
+    {
+      "action_id": "R04-ORDER-02",
+      "kind": "read",
+      "summary": "Verified one payment-ready order at KRW 23,500 and the approved previous reservation expired once. Provider payment is not authorized.",
+      "outcome": "PASS"
+    },
+    {
+      "action_id": "R04-ORDER-03",
+      "kind": "read",
+      "summary": "Provider TEST payment window has not yet been observed; proceed only on this existing order and verify test indication before any authorization.",
+      "outcome": "BLOCKED"
+    }
+  ],
+  "assertions": [
+    {
+      "id": "provider_test_mode_observed",
+      "result": "PASS",
+      "evidence_refs": [
+        "receipts/R04_20261125_test_mode_observations.json"
+      ]
+    },
+    {
+      "id": "legitimate_provider_authorization",
+      "result": "NOT_RUN",
+      "evidence_refs": []
+    },
+    {
+      "id": "confirmation_matches_order_amount",
+      "result": "NOT_RUN",
+      "evidence_refs": []
+    },
+    {
+      "id": "approval_database_readback",
+      "result": "NOT_RUN",
+      "evidence_refs": []
+    },
+    {
+      "id": "return_refresh_lookup",
+      "result": "NOT_RUN",
+      "evidence_refs": []
+    },
+    {
+      "id": "uncertain_result_recovery",
+      "result": "NOT_RUN",
+      "evidence_refs": []
+    }
+  ],
+  "artifacts": [
+    {
+      "path": "receipts/R04_20261125_order_created_observations.json",
+      "sha256": "e286b9c3a6a87f4191797ccf2eacf1fcdf4ef56c31805b285be5d5cca4848934",
+      "redacted": true
+    }
+  ],
+  "blocker": {
+    "owner": "LOCAL_CODEX",
+    "required_action": "Open the payment window from the existing owned TEST order, verify the provider TEST indication and continue within the authorized amount and user-consent rules.",
+    "resume_check": "Read back the same synthetic order and payment status; do not create another order or repeat an uncertain payment."
+  }
+}
