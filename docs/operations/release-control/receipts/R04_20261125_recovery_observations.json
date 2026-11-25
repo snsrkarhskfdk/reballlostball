@@ -1,0 +1,35 @@
+{
+  "observed_at": "2026-11-25T06:35:59.088Z",
+  "space_id": 0,
+  "procedure": "On the already paid TEST order, call the actual payment-confirm endpoint with the same confirmation tuple. After the real duplicate HTTP 200, simulate loss of that response in the deployed frontend client; recheck the identical tuple against the actual endpoint.",
+  "first": {
+    "http": 200,
+    "duplicate": true,
+    "paid": true,
+    "amount_matches": true,
+    "client_error": "PAYMENT_CONFIRM_RECOVERY_REQUIRED",
+    "pending_confirmation_retained": true
+  },
+  "recheck": {
+    "http": 200,
+    "duplicate": true,
+    "paid": true,
+    "amount_matches": true,
+    "pending_confirmation_cleared": true
+  },
+  "edge_log": {
+    "options_204": 1,
+    "post_200": 2
+  },
+  "database_after": {
+    "synthetic_orders": 1,
+    "order_status": "paid",
+    "payment_status": "done",
+    "approved_amount_krw": 23500,
+    "consumed_reservations": 1
+  },
+  "limitations": [
+    "Client response loss was simulated after an actual duplicate backend response. No actual network failure occurred during the original provider authorization.",
+    "No second provider charge or new order was initiated; original settled-order endpoint code returns before provider.confirm."
+  ]
+}
