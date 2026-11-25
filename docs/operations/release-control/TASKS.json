@@ -116,7 +116,7 @@
     ],
     "run_id": "REBALL-RELEASE-20261124-R04-CODEX-01",
     "owner": "LOCAL_CODEX-REBALL-R04-20261124-01",
-    "heartbeat_at": "2026-11-25T05:41:08.525Z",
+    "heartbeat_at": "2026-11-25T05:46:56.700Z",
     "skill_observed": true,
     "actual_model": "GPT-6 (Codex; exact variant not exposed)",
     "actual_reasoning_level": "not exposed",
@@ -365,6 +365,17 @@
       "both_test_project_toss_keys_updated_at": "2026-11-01T12:29:26Z",
       "same_as_prior_verified_metadata": true,
       "limitation": "Key values and provider mode must still be checked at the actual payment window."
+    },
+    "order_intent": {
+      "recorded_at": "2026-11-25T05:46:56.700Z",
+      "state": "PREPARED_NOT_SUBMITTED",
+      "max_orders": 1,
+      "max_amount_krw": 23500,
+      "synthetic_marker": "TEST ONLY R04 20261125",
+      "last_known_order_count": 8,
+      "last_known_payment_count": 7,
+      "check_existing_before_any_retry": true,
+      "approved_expired_reservations": 1
     }
   }
 }
