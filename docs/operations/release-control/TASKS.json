@@ -109,13 +109,14 @@
     "executor": "LOCAL_CODEX",
     "browser": "ego-browser",
     "space_name": "리볼로스트볼 최종 검증",
-    "space_id": 1,
+    "space_id": 0,
     "page_labels": [
-      "p3"
+      "p1",
+      "p2"
     ],
     "run_id": "REBALL-RELEASE-20261124-R04-CODEX-01",
     "owner": "LOCAL_CODEX-REBALL-R04-20261124-01",
-    "heartbeat_at": "2026-11-25T05:32:36.815Z",
+    "heartbeat_at": "2026-11-25T05:41:08.525Z",
     "skill_observed": true,
     "actual_model": "GPT-6 (Codex; exact variant not exposed)",
     "actual_reasoning_level": "not exposed",
@@ -358,6 +359,12 @@
     "orders_created": 0,
     "expired_existing_orders": 1,
     "expired_existing_units": 1,
-    "existing_data_approval": "APPROVED"
+    "existing_data_approval": "APPROVED",
+    "post_reboot_key_metadata": {
+      "observed_at": "2026-11-25T05:41:08.525Z",
+      "both_test_project_toss_keys_updated_at": "2026-11-01T12:29:26Z",
+      "same_as_prior_verified_metadata": true,
+      "limitation": "Key values and provider mode must still be checked at the actual payment window."
+    }
   }
 }

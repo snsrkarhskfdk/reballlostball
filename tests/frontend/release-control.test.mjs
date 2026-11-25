@@ -123,12 +123,12 @@ test("WAITING_FOR_USER holds the single actor slot and blocks another runnable t
   rejects(validateBoard(board), /WAITING_FOR_USER requires actual run_id, owner/);
 });
 
-test("ego Space IDs accept observed positive integer or string identifiers", () => {
-  for (const spaceId of [null, 42, "42"]) {
+test("ego Space IDs accept observed nonnegative integer or string identifiers", () => {
+  for (const spaceId of [null, 0, "0", 42, "42"]) {
     const board = boardFixture(); board.execution.space_id = spaceId;
     assert.deepEqual(validateBoard(board), []);
   }
-  for (const spaceId of [0, -1, 1.5, Number.MAX_SAFE_INTEGER + 1, "", "space-observed-42"]) {
+  for (const spaceId of [-1, "-1", 1.5, Number.MAX_SAFE_INTEGER + 1, NaN, Infinity, false, "", " ", {}, [], "space-observed-42"]) {
     const board = boardFixture(); board.execution.space_id = spaceId;
     rejects(validateBoard(board), /execution.space_id/);
   }
@@ -139,9 +139,13 @@ test("connection PASS needs observed Space, labels, owner and skill while an unc
   Object.assign(unconnected.execution, { space_id: null, page_labels: [], owner: null, skill_observed: false, local_connection_verified: false });
   assert.deepEqual(validateBoard(unconnected), []);
   const errors = validateReceipt(receiptFixture(unconnected), unconnected);
-  rejects(errors, /positive ego Space ID/); rejects(errors, /browser page labels/);
+  rejects(errors, /nonnegative ego Space ID/); rejects(errors, /browser page labels/);
   rejects(errors, /controller owner/); rejects(errors, /skill_observed:true/);
   const observed = boardFixture(); observed.execution.local_connection_verified = false;
+  assert.deepEqual(validateReceipt(receiptFixture(observed), observed), []);
+  observed.execution.space_id = 0;
+  assert.deepEqual(validateReceipt(receiptFixture(observed), observed), []);
+  observed.execution.space_id = "0";
   assert.deepEqual(validateReceipt(receiptFixture(observed), observed), []);
 });
 

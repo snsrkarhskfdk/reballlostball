@@ -22,7 +22,7 @@ const text = (value) => typeof value === "string" && value.trim().length > 0;
 const nullableText = (value) => value === null || text(value);
 const normalKey = (key) => String(key).replace(/[^a-z0-9]/gi, "").toLowerCase();
 const spaceIdentifier = (value) => (typeof value === "number" || (typeof value === "string" && /^\d+$/.test(value)))
-  && Number.isSafeInteger(Number(value)) && Number(value) > 0;
+  && Number.isSafeInteger(Number(value)) && Number(value) >= 0;
 
 function isoTime(value) {
   if (typeof value !== "string") return false;
@@ -163,7 +163,7 @@ export function validateBoard(board) {
     if (board.execution.executor !== "LOCAL_CODEX") errors.push("execution.executor: must be LOCAL_CODEX");
     if (board.execution.browser !== "ego-browser") errors.push("execution.browser: must be ego-browser");
     const spaceId = board.execution.space_id;
-    if (spaceId !== null && !spaceIdentifier(spaceId)) errors.push("execution.space_id: expected positive safe integer, numeric string or null");
+    if (spaceId !== null && !spaceIdentifier(spaceId)) errors.push("execution.space_id: expected nonnegative safe integer, numeric string or null");
     for (const key of ["run_id", "owner"]) if (!nullableText(board.execution[key])) errors.push(`execution.${key}: expected nonempty string or null`);
     stringArray(board.execution.page_labels, "execution.page_labels", errors, { unique: true });
     if (board.execution.heartbeat_at !== null && !isoTime(board.execution.heartbeat_at)) errors.push("execution.heartbeat_at: expected ISO timestamp or null");
@@ -288,7 +288,7 @@ export function validateReceipt(receipt, board) {
   if (receipt.status === "PASS") {
     if (receipt.blocker !== null) errors.push("receipt.blocker: PASS must have null blocker");
     if (environment.kind === "connection") {
-      if (!spaceIdentifier(board?.execution?.space_id)) errors.push("receipt: connection PASS requires an observed positive ego Space ID");
+      if (!spaceIdentifier(board?.execution?.space_id)) errors.push("receipt: connection PASS requires an observed nonnegative ego Space ID");
       if (!Array.isArray(board?.execution?.page_labels) || !board.execution.page_labels.length) errors.push("receipt: connection PASS requires recorded browser page labels");
       if (!actualIdentifier(board?.execution?.owner)) errors.push("receipt: connection PASS requires an actual local controller owner");
       if (board?.execution?.skill_observed !== true) errors.push("receipt: connection PASS requires skill_observed:true");
