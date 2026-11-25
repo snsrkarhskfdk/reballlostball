@@ -2,7 +2,7 @@
   "schema_version": 1,
   "work_id": "REBALL-RELEASE-20261124",
   "configured_on": "2026-11-24",
-  "configuration_status": "R05_VERIFIED_R06_APPROVAL_PENDING",
+  "configuration_status": "R06_RUNNING",
   "repository": {
     "full_name": "snsrkarhskfdk/reballlostball",
     "url": "https://github.com/snsrkarhskfdk/reballlostball",
@@ -42,7 +42,7 @@
     "test_deploy": "APPROVED",
     "test_account_setup": "APPROVED",
     "test_transactions": "APPROVED",
-    "test_scheduler": "PENDING",
+    "test_scheduler": "APPROVED",
     "production": "DENIED",
     "source": "2026-11-07 CHECKOUT_EXECUTION: PR updates permitted; deployments prohibited. 2026-11-24 user requested orchestration setup, not deployment.",
     "records": [
@@ -125,6 +125,28 @@
             "scheduler"
           ]
         }
+      },
+      {
+        "capability": "test_scheduler",
+        "status": "APPROVED",
+        "source": "2026-11-25 user approved the immediately preceding proposal for at most two unpaid synthetic TEST orders/reservations, expiry/unexpired/replay checks and removal of temporary TEST schedules.",
+        "approved_by": "USER",
+        "approved_at": "2026-11-25T10:38:19.816Z",
+        "scope": {
+          "project_ref": "aohziyemqxfhpbbqpicx",
+          "code_sha": "7c0c9c46753e9ebcf97c388839d2e91cef038385",
+          "tasks": [
+            "R06"
+          ],
+          "max_synthetic_unpaid_orders": 2,
+          "remove_temporary_schedules": true,
+          "stop_for_unrelated_records": true,
+          "excludes": [
+            "provider payment",
+            "production",
+            "persistent scheduler"
+          ]
+        }
       }
     ]
   },
@@ -137,9 +159,9 @@
       "p1",
       "p2"
     ],
-    "run_id": "REBALL-RELEASE-20261124-R05-CODEX-01",
-    "owner": "LOCAL_CODEX-REBALL-R05-20261124-01",
-    "heartbeat_at": "2026-11-25T06:44:43.501Z",
+    "run_id": "REBALL-RELEASE-20261124-R06-CODEX-01",
+    "owner": "LOCAL_CODEX-REBALL-R06-20261124-01",
+    "heartbeat_at": "2026-11-25T10:38:19.816Z",
     "skill_observed": true,
     "actual_model": "GPT-6 (Codex; exact variant not exposed)",
     "actual_reasoning_level": "not exposed",
@@ -293,7 +315,7 @@
       "id": "R06",
       "title": "예약 만료와 결제 대사 실행 검증",
       "evidence_kind": "test",
-      "status": "PENDING",
+      "status": "RUNNING",
       "requires": [
         "R02"
       ],
@@ -307,7 +329,7 @@
         "schedule_end_state_recorded"
       ],
       "evidence": [],
-      "blocked_reason": "현재 TEST cron 활성 0개. 기존 주문 일괄 정리 대신 승인된 테스트 실행·일정 범위를 확정해야 함."
+      "blocked_reason": null
     },
     {
       "id": "R07",
@@ -427,8 +449,9 @@
     "expired_reserved_count": 0,
     "active_reserved_count": 0,
     "due_reconciliation_jobs": 0,
-    "approval": "PENDING",
+    "approval": "APPROVED",
     "proposal": "In TEST only, create up to two unpaid synthetic order/reservation fixtures; exercise expiry and preserve an unexpired fixture, check duplicate execution and reconciliation; temporarily create only the required TEST-targeted schedules and remove them after verification. Re-read eligibility and stop before acting on unrelated records. No provider payment, production operation or persistent schedule.",
-    "warning": "Source reconciliation cron migration contains a hard-coded production function URL. Do not run it unmodified against TEST."
+    "warning": "Source reconciliation cron migration contains a hard-coded production function URL. Do not run it unmodified against TEST.",
+    "approved_at": "2026-11-25T10:38:19.816Z"
   }
 }
