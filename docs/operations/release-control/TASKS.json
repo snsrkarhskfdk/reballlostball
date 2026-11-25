@@ -2,7 +2,7 @@
   "schema_version": 1,
   "work_id": "REBALL-RELEASE-20261124",
   "configured_on": "2026-11-24",
-  "configuration_status": "R04_BLOCKED",
+  "configuration_status": "R04_RUNNING",
   "repository": {
     "full_name": "snsrkarhskfdk/reballlostball",
     "url": "https://github.com/snsrkarhskfdk/reballlostball",
@@ -102,6 +102,29 @@
             "scheduler"
           ]
         }
+      },
+      {
+        "capability": "test_transactions",
+        "status": "APPROVED",
+        "source": "2026-11-25 user replied 승인했으니 진행해 immediately after the explicit notice that TEST cancellation/refund of the existing paid TEST order requires separate approval.",
+        "approved_by": "USER",
+        "approved_at": "2026-11-25T06:29:25.471Z",
+        "scope": {
+          "project_ref": "aohziyemqxfhpbbqpicx",
+          "code_sha": "7c0c9c46753e9ebcf97c388839d2e91cef038385",
+          "tasks": [
+            "R05"
+          ],
+          "max_orders": 1,
+          "max_amount_krw": 23500,
+          "existing_r04_synthetic_order_only": true,
+          "excludes": [
+            "new order",
+            "live payment",
+            "production",
+            "scheduler"
+          ]
+        }
       }
     ]
   },
@@ -116,7 +139,7 @@
     ],
     "run_id": "REBALL-RELEASE-20261124-R04-CODEX-01",
     "owner": "LOCAL_CODEX-REBALL-R04-20261124-01",
-    "heartbeat_at": "2026-11-25T06:18:18.466Z",
+    "heartbeat_at": "2026-11-25T06:30:43.587Z",
     "skill_observed": true,
     "actual_model": "GPT-6 (Codex; exact variant not exposed)",
     "actual_reasoning_level": "not exposed",
@@ -226,7 +249,7 @@
       "id": "R04",
       "title": "실제 Toss TEST 승인과 주문 복귀",
       "evidence_kind": "test",
-      "status": "BLOCKED",
+      "status": "RUNNING",
       "requires": [
         "R02",
         "R03"
@@ -243,7 +266,7 @@
       "evidence": [
         "receipts/R04_20261125_paid_partial.json"
       ],
-      "blocked_reason": "TEST 결제 1건 23,500원 승인·DB·새로고침 확인. 실제 payment-confirm 결과 불확실 복구 시나리오는 미실행이며 추가 주문 없이 안전한 검증 방법 확인 필요."
+      "blocked_reason": null
     },
     {
       "id": "R05",
@@ -262,7 +285,7 @@
         "cancel_replay_no_duplicate"
       ],
       "evidence": [],
-      "blocked_reason": "소유가 확인된 승인 TEST 주문과 별도의 취소·환불 승인 필요. R04 한 건 결제 승인은 취소·환불을 포함하지 않음."
+      "blocked_reason": "기존 R04 합성 TEST 주문 1건 취소·환불 검증은 사용자 승인됨. 선행 R04의 실제 결제 승인 결과 불확실 복구 검증을 먼저 충족해야 함."
     },
     {
       "id": "R06",
