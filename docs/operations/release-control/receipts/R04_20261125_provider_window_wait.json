@@ -1,0 +1,84 @@
+{
+  "schema_version": 1,
+  "task_id": "R04",
+  "run_id": "REBALL-RELEASE-20261124-R04-CODEX-01",
+  "status": "BLOCKED",
+  "observed_at": "2026-11-25T06:04:44.812Z",
+  "executor": "LOCAL_CODEX",
+  "code_sha": "7c0c9c46753e9ebcf97c388839d2e91cef038385",
+  "orchestration_sha": "e8272acd91abf1cc88c9574b153898240aa9d898",
+  "environment": {
+    "kind": "test",
+    "origin": "https://reballlostball-git-repair-mr-dr01-a7fa2f-thechangcnds-projects.vercel.app",
+    "supabase_project_ref": "aohziyemqxfhpbbqpicx",
+    "deployment_id": "dpl_9VZRGqUxpPRTyovRmyik8GhRJCyU",
+    "deployed_sha": "7c0c9c46753e9ebcf97c388839d2e91cef038385"
+  },
+  "actions": [
+    {
+      "action_id": "R04-WINDOW-01",
+      "kind": "mutation",
+      "summary": "Previously created one approved synthetic TEST order at KRW 23,500 and released the one explicitly approved expired test reservation.",
+      "outcome": "PASS"
+    },
+    {
+      "action_id": "R04-WINDOW-02",
+      "kind": "read",
+      "summary": "Opened the Toss iframe from that existing order and observed its actual TEST disclaimer and KRW 23,500 total.",
+      "outcome": "PASS"
+    },
+    {
+      "action_id": "R04-WINDOW-03",
+      "kind": "read",
+      "summary": "Stopped at card selection; user-owned payment credentials, provider terms and authentication require user action and no card was supplied.",
+      "outcome": "BLOCKED"
+    }
+  ],
+  "assertions": [
+    {
+      "id": "provider_test_mode_observed",
+      "result": "PASS",
+      "evidence_refs": [
+        "receipts/R04_20261125_provider_window_observations.json",
+        "receipts/R04_20261125_test_mode_observations.json"
+      ]
+    },
+    {
+      "id": "legitimate_provider_authorization",
+      "result": "NOT_RUN",
+      "evidence_refs": []
+    },
+    {
+      "id": "confirmation_matches_order_amount",
+      "result": "NOT_RUN",
+      "evidence_refs": []
+    },
+    {
+      "id": "approval_database_readback",
+      "result": "NOT_RUN",
+      "evidence_refs": []
+    },
+    {
+      "id": "return_refresh_lookup",
+      "result": "NOT_RUN",
+      "evidence_refs": []
+    },
+    {
+      "id": "uncertain_result_recovery",
+      "result": "NOT_RUN",
+      "evidence_refs": []
+    }
+  ],
+  "artifacts": [
+    {
+      "path": "receipts/R04_20261125_provider_window_observations.json",
+      "sha256": "dbb3f2aa7c9d72772b606e6d112a84d85e4c495b8ec3e84016df436f42dfbaf6",
+      "redacted": true
+    }
+  ],
+  "blocker": {
+    "owner": "USER",
+    "required_action": "If a suitable card is available and the cardholder chooses, personally select and complete the Toss TEST payment method, consent, and any authentication in ego Space 0. Do not send card details or codes in chat. If no card is available, say so.",
+    "resume_check": "After user reports the outcome, take over Space 0 and inspect the existing order and provider state before any retry. Do not create a new order, assume payment succeeded, or repeat an uncertain payment."
+  }
+}
