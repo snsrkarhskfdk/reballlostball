@@ -1,0 +1,16 @@
+{
+  "observed_at": "2026-11-25T01:01:34.565Z",
+  "run_id": "REBALL-RELEASE-20261124-R04-CODEX-01",
+  "space_id": 1,
+  "merchant": "리볼 로스트볼",
+  "provider": "toss_payments",
+  "mode": "TEST",
+  "method": "Compared SHA-256 of the currently selected merchant TEST API individual integration client and secret keys to current TEST Supabase TOSS_PAYMENTS_CLIENT_KEY and TOSS_SECRET_KEY digests locally; no key value or digest was printed or saved.",
+  "client_key_match": true,
+  "secret_key_match": true,
+  "trial_store_test_keys_match": false,
+  "source": "Actual signed-in merchant developer dashboard TEST API key view and TEST project Edge secrets dashboard",
+  "limitation": "Mode proof reflects current configuration, not payment authorization; recheck environment before order and verify provider window before authorizing.",
+  "r04_order_created": false,
+  "r04_payment_submitted": false
+}

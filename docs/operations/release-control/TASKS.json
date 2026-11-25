@@ -2,7 +2,7 @@
   "schema_version": 1,
   "work_id": "REBALL-RELEASE-20261124",
   "configured_on": "2026-11-24",
-  "configuration_status": "R04_WAITING_FOR_USER",
+  "configuration_status": "R04_RUNNING",
   "repository": {
     "full_name": "snsrkarhskfdk/reballlostball",
     "url": "https://github.com/snsrkarhskfdk/reballlostball",
@@ -112,11 +112,11 @@
     "space_id": 1,
     "page_labels": [
       "p1",
-      "p2"
+      "p3"
     ],
     "run_id": "REBALL-RELEASE-20261124-R04-CODEX-01",
     "owner": "LOCAL_CODEX-REBALL-R04-20261124-01",
-    "heartbeat_at": "2026-11-25T00:46:07.371Z",
+    "heartbeat_at": "2026-11-25T01:01:34.565Z",
     "skill_observed": true,
     "actual_model": "GPT-6 (Codex; exact variant not exposed)",
     "actual_reasoning_level": "not exposed",
@@ -226,7 +226,7 @@
       "id": "R04",
       "title": "실제 Toss TEST 승인과 주문 복귀",
       "evidence_kind": "test",
-      "status": "WAITING_FOR_USER",
+      "status": "RUNNING",
       "requires": [
         "R02",
         "R03"
@@ -241,9 +241,9 @@
         "uncertain_result_recovery"
       ],
       "evidence": [
-        "receipts/R04_20261125_reconnect_wait.json"
+        "receipts/R04_20261125_reopened_wait.json"
       ],
-      "blocked_reason": "기존 리볼 Space 1의 Toss 문자 인증 화면에서 명의자의 본인 인증과 이후 TEST 키 대조가 필요함. 주문·결제는 아직 실행하지 않음."
+      "blocked_reason": null
     },
     {
       "id": "R05",
@@ -337,5 +337,14 @@
       "from": "http://localhost:3000",
       "to": "https://reballlostball-git-repair-mr-dr01-a7fa2f-thechangcnds-projects.vercel.app"
     }
-  ]
+  ],
+  "r04_preflight": {
+    "observed_at": "2026-11-25T01:01:34.565Z",
+    "provider_test_mode": "VERIFIED_BY_MATCHING_CURRENT_MERCHANT_TEST_KEY_DIGESTS",
+    "evidence": "receipts/R04_20261125_test_mode_observations.json",
+    "evidence_sha256": "9ec4fe048294febca82a15c9aaa6486b3c4301c6ce06e2fec5f47aaf97ba023c",
+    "max_orders": 1,
+    "max_amount_krw": 23500,
+    "orders_created": 0
+  }
 }
