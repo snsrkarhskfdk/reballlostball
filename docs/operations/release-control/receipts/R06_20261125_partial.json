@@ -1,0 +1,91 @@
+{
+  "schema_version": 1,
+  "task_id": "R06",
+  "run_id": "REBALL-RELEASE-20261124-R06-CODEX-01",
+  "status": "BLOCKED",
+  "observed_at": "2026-11-25T10:44:21.960Z",
+  "executor": "LOCAL_CODEX",
+  "code_sha": "7c0c9c46753e9ebcf97c388839d2e91cef038385",
+  "orchestration_sha": "cc0bb0cf543b3d7c7932aa171c605731bb264f66",
+  "environment": {
+    "kind": "test",
+    "origin": "https://reballlostball-git-repair-mr-dr01-a7fa2f-thechangcnds-projects.vercel.app",
+    "supabase_project_ref": "aohziyemqxfhpbbqpicx",
+    "deployment_id": "dpl_9VZRGqUxpPRTyovRmyik8GhRJCyU",
+    "deployed_sha": "7c0c9c46753e9ebcf97c388839d2e91cef038385"
+  },
+  "actions": [
+    {
+      "action_id": "R06-FIXTURES-01",
+      "kind": "mutation",
+      "summary": "Created two approved unpaid synthetic TEST orders and scoped reservations with one expired and one unexpired.",
+      "outcome": "PASS"
+    },
+    {
+      "action_id": "R06-EXPIRY-02",
+      "kind": "mutation",
+      "summary": "A guarded temporary TEST cron released only the expired reservation, then was removed. Two additional expiry calls each returned zero.",
+      "outcome": "PASS"
+    },
+    {
+      "action_id": "R06-RECONCILE-03",
+      "kind": "mutation",
+      "summary": "Invoked the TEST reconciliation endpoint with an empty queue; HTTP 200 and zero counts do not demonstrate processing an actual payment job.",
+      "outcome": "BLOCKED"
+    }
+  ],
+  "assertions": [
+    {
+      "id": "scheduler_scope_authorized",
+      "result": "PASS",
+      "evidence_refs": [
+        "receipts/R06_20261125_observations.json"
+      ]
+    },
+    {
+      "id": "owned_expiry_fixture",
+      "result": "PASS",
+      "evidence_refs": [
+        "receipts/R06_20261125_observations.json"
+      ]
+    },
+    {
+      "id": "expired_stock_released_once",
+      "result": "PASS",
+      "evidence_refs": [
+        "receipts/R06_20261125_observations.json"
+      ]
+    },
+    {
+      "id": "unexpired_reservation_preserved",
+      "result": "PASS",
+      "evidence_refs": [
+        "receipts/R06_20261125_observations.json"
+      ]
+    },
+    {
+      "id": "reconciliation_readback",
+      "result": "NOT_RUN",
+      "evidence_refs": []
+    },
+    {
+      "id": "schedule_end_state_recorded",
+      "result": "PASS",
+      "evidence_refs": [
+        "receipts/R06_20261125_observations.json"
+      ]
+    }
+  ],
+  "artifacts": [
+    {
+      "path": "receipts/R06_20261125_observations.json",
+      "sha256": "04de0928bbc5258b00fc10cb531778ccb9139f2e7c1731c92683f73799862d54",
+      "redacted": true
+    }
+  ],
+  "blocker": {
+    "owner": "LOCAL_CODEX",
+    "required_action": "Design an owned provider-backed TEST reconciliation fixture within explicit user authorization; no due job was available in the approved unpaid fixture scope.",
+    "resume_check": "Re-read both fixture and queue states; do not mutate unrelated existing orders or initiate another payment without specific user approval."
+  }
+}
