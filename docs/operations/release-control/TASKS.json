@@ -139,7 +139,7 @@
     ],
     "run_id": "REBALL-RELEASE-20261124-R05-CODEX-01",
     "owner": "LOCAL_CODEX-REBALL-R05-20261124-01",
-    "heartbeat_at": "2026-11-25T06:37:36.819Z",
+    "heartbeat_at": "2026-11-25T06:40:04.269Z",
     "skill_observed": true,
     "actual_model": "GPT-6 (Codex; exact variant not exposed)",
     "actual_reasoning_level": "not exposed",
@@ -415,6 +415,8 @@
     "order_reservation_status": "consumed",
     "reservation_quantity": 1,
     "variant_stock_before": 9,
-    "idempotency": "One cancellation request; inspect actual result before any replay; replay only exact same key and body."
+    "idempotency": "One cancellation request; inspect actual result before any replay; replay only exact same key and body.",
+    "cancellation_state": "CANCELED_REFUND_COMPLETED_REPLAY_DUPLICATE",
+    "webhook_intent": "Synthetic payment status webhook for the same canceled TEST payment, then exact replay only if first succeeds. Server independently fetches provider status. Never claim simulated notification was sent by provider."
   }
 }
