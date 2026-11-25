@@ -2,7 +2,7 @@
   "schema_version": 1,
   "work_id": "REBALL-RELEASE-20261124",
   "configured_on": "2026-11-24",
-  "configuration_status": "R04_WAITING_FOR_USER",
+  "configuration_status": "R04_BLOCKED",
   "repository": {
     "full_name": "snsrkarhskfdk/reballlostball",
     "url": "https://github.com/snsrkarhskfdk/reballlostball",
@@ -116,7 +116,7 @@
     ],
     "run_id": "REBALL-RELEASE-20261124-R04-CODEX-01",
     "owner": "LOCAL_CODEX-REBALL-R04-20261124-01",
-    "heartbeat_at": "2026-11-25T06:04:44.812Z",
+    "heartbeat_at": "2026-11-25T06:18:18.466Z",
     "skill_observed": true,
     "actual_model": "GPT-6 (Codex; exact variant not exposed)",
     "actual_reasoning_level": "not exposed",
@@ -226,7 +226,7 @@
       "id": "R04",
       "title": "실제 Toss TEST 승인과 주문 복귀",
       "evidence_kind": "test",
-      "status": "WAITING_FOR_USER",
+      "status": "BLOCKED",
       "requires": [
         "R02",
         "R03"
@@ -241,9 +241,9 @@
         "uncertain_result_recovery"
       ],
       "evidence": [
-        "receipts/R04_20261125_provider_window_wait.json"
+        "receipts/R04_20261125_paid_partial.json"
       ],
-      "blocked_reason": "TEST 결제창과 23,500원 확인 완료. 카드 선택·결제수단 정보·제공자 동의 및 인증은 사용자가 직접 수행해야 하며, 카드 미보유 시 대체 검토가 필요함."
+      "blocked_reason": "TEST 결제 1건 23,500원 승인·DB·새로고침 확인. 실제 payment-confirm 결과 불확실 복구 시나리오는 미실행이며 추가 주문 없이 안전한 검증 방법 확인 필요."
     },
     {
       "id": "R05",
@@ -368,7 +368,7 @@
     },
     "order_intent": {
       "recorded_at": "2026-11-25T05:46:56.700Z",
-      "state": "EXISTING_ORDER_TEST_WINDOW_OPEN",
+      "state": "PAID_VERIFIED_RECOVERY_NOT_RUN",
       "max_orders": 1,
       "max_amount_krw": 23500,
       "synthetic_marker": "TEST ONLY R04 20261125",

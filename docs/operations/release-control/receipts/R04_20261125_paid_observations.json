@@ -1,0 +1,48 @@
+{
+  "observed_at": "2026-11-25T06:18:18.466Z",
+  "run_id": "REBALL-RELEASE-20261124-R04-CODEX-01",
+  "space_id": 0,
+  "environment": "TEST",
+  "provider_window": "Toss displayed TEST disclaimer before user payment",
+  "provider_confirmation_edge_log": {
+    "options_204": 1,
+    "post_200": 1,
+    "window_start": "2026-11-25T05:45:00Z"
+  },
+  "database": {
+    "matching_synthetic_orders": 1,
+    "order_status": "paid",
+    "order_payment_status": "done",
+    "provider": "toss_payments",
+    "payment_status": "done",
+    "order_amount_krw": 23500,
+    "requested_amount_krw": 23500,
+    "approved_amount_krw": 23500,
+    "approval_timestamp_present": true,
+    "provider_key_present": true,
+    "active_reserved_rows": 0,
+    "consumed_reservation_rows": 1
+  },
+  "browser": {
+    "page": "p2",
+    "before_reload": {
+      "order_route": true,
+      "completion": true,
+      "paid_labels": 2,
+      "amount_23500": true,
+      "guest_lookup_label": true
+    },
+    "after_reload": {
+      "order_route": true,
+      "completion": true,
+      "paid_labels": 2,
+      "amount_23500": true,
+      "guest_lookup_label": true
+    },
+    "sensitive_values_recorded": false
+  },
+  "limitations": [
+    "Actual payment-confirm uncertainty was not induced or observed. The earlier create-order timeout was independently checked and retried; it is not evidence of payment-confirm recovery.",
+    "Provider TEST cancellation and refund are outside the approved R04 scope."
+  ]
+}
