@@ -1,0 +1,20 @@
+{
+  "observed_at": "2026-11-25T00:46:07.371Z",
+  "run_id": "REBALL-RELEASE-20261124-R04-CODEX-01",
+  "previous_space_id": 2,
+  "current_space_id": 1,
+  "space_name": "리볼로스트볼 최종 검증",
+  "reason": "Space 2 absent from current ego inventory; exactly named existing Space 1 retained the same TEST Supabase secrets and Toss SMS verification tabs.",
+  "toss": {
+    "origin": "https://business.toss.im",
+    "path": "/account/two-factor/sms-verify",
+    "carrier_selection_visible": true,
+    "phone_verification_visible": true,
+    "explicit_expired_message_visible": false,
+    "next_disabled_at_observation": true
+  },
+  "handoff": "Existing Space 1 handed to user; no carrier selected and no authentication or SMS submission performed by agent.",
+  "test_mode": "UNVERIFIED",
+  "r04_order_created": false,
+  "r04_payment_submitted": false
+}

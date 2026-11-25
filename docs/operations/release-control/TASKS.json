@@ -109,14 +109,14 @@
     "executor": "LOCAL_CODEX",
     "browser": "ego-browser",
     "space_name": "리볼로스트볼 최종 검증",
-    "space_id": 2,
+    "space_id": 1,
     "page_labels": [
       "p1",
       "p2"
     ],
     "run_id": "REBALL-RELEASE-20261124-R04-CODEX-01",
     "owner": "LOCAL_CODEX-REBALL-R04-20261124-01",
-    "heartbeat_at": "2026-11-24T12:10:17.382Z",
+    "heartbeat_at": "2026-11-25T00:46:07.371Z",
     "skill_observed": true,
     "actual_model": "GPT-6 (Codex; exact variant not exposed)",
     "actual_reasoning_level": "not exposed",
@@ -241,9 +241,9 @@
         "uncertain_result_recovery"
       ],
       "evidence": [
-        "receipts/R04_20261124_toss_login_wait.json"
+        "receipts/R04_20261125_reconnect_wait.json"
       ],
-      "blocked_reason": "Toss 가맹점 계정 명의자의 동의·본인 인증 완료와 현재 TEST 키 대조가 필요함. 주문·결제는 아직 실행하지 않음."
+      "blocked_reason": "기존 리볼 Space 1의 Toss 문자 인증 화면에서 명의자의 본인 인증과 이후 TEST 키 대조가 필요함. 주문·결제는 아직 실행하지 않음."
     },
     {
       "id": "R05",
