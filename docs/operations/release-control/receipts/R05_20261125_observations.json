@@ -1,0 +1,50 @@
+{
+  "observed_at": "2026-11-25T06:44:43.501Z",
+  "run_id": "REBALL-RELEASE-20261124-R05-CODEX-01",
+  "space_id": 0,
+  "scope": "One previously paid and explicitly approved synthetic TEST order",
+  "cancel": {
+    "amount_krw": 23500,
+    "original_http": 200,
+    "replay_http": 200,
+    "replay_duplicate": true
+  },
+  "database": {
+    "order_status": "canceled",
+    "payment_status": "canceled",
+    "refund_status": "completed",
+    "refund_count": 1,
+    "refund_total_krw": 23500,
+    "final_cancel_event_count": 1,
+    "reservation_before": "consumed",
+    "reservation_after": "released",
+    "quantity": 1,
+    "stock_before": 9,
+    "stock_after": 10
+  },
+  "webhook": {
+    "event": "PAYMENT_STATUS_CHANGED",
+    "origin": "synthetic test notification, not a provider-sent event",
+    "verification": "TEST Edge re-queried Toss authoritative status",
+    "first_http": 200,
+    "authoritative_status": "canceled",
+    "replay_http": 200,
+    "replay_duplicate": true,
+    "processed_event_count": 1,
+    "browser_preflight_http": 405,
+    "browser_post_sent": false
+  },
+  "confirmation_after_cancel": {
+    "http": 409,
+    "code": "ORDER_PAYMENT_TERMINATED"
+  },
+  "browser_after_refresh": {
+    "order_canceled": true,
+    "payment_label": "결제 취소",
+    "cancel_button_absent": true
+  },
+  "limits": [
+    "Provider notification was simulated; provider re-query verified the authoritative canceled state.",
+    "This was TEST mode, not a live transaction."
+  ]
+}

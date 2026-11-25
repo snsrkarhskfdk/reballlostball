@@ -2,7 +2,7 @@
   "schema_version": 1,
   "work_id": "REBALL-RELEASE-20261124",
   "configured_on": "2026-11-24",
-  "configuration_status": "R05_RUNNING",
+  "configuration_status": "R05_VERIFIED_R06_APPROVAL_PENDING",
   "repository": {
     "full_name": "snsrkarhskfdk/reballlostball",
     "url": "https://github.com/snsrkarhskfdk/reballlostball",
@@ -139,7 +139,7 @@
     ],
     "run_id": "REBALL-RELEASE-20261124-R05-CODEX-01",
     "owner": "LOCAL_CODEX-REBALL-R05-20261124-01",
-    "heartbeat_at": "2026-11-25T06:40:04.269Z",
+    "heartbeat_at": "2026-11-25T06:44:43.501Z",
     "skill_observed": true,
     "actual_model": "GPT-6 (Codex; exact variant not exposed)",
     "actual_reasoning_level": "not exposed",
@@ -272,7 +272,7 @@
       "id": "R05",
       "title": "TEST 취소 및 중복 처리·재고 복구",
       "evidence_kind": "test",
-      "status": "RUNNING",
+      "status": "VERIFIED",
       "requires": [
         "R04"
       ],
@@ -284,7 +284,9 @@
         "confirm_webhook_replay",
         "cancel_replay_no_duplicate"
       ],
-      "evidence": [],
+      "evidence": [
+        "receipts/R05_20261125_final.json"
+      ],
       "blocked_reason": null
     },
     {
@@ -416,7 +418,17 @@
     "reservation_quantity": 1,
     "variant_stock_before": 9,
     "idempotency": "One cancellation request; inspect actual result before any replay; replay only exact same key and body.",
-    "cancellation_state": "CANCELED_REFUND_COMPLETED_REPLAY_DUPLICATE",
+    "cancellation_state": "VERIFIED_CANCELED_REFUND_AND_REPLAYS",
     "webhook_intent": "Synthetic payment status webhook for the same canceled TEST payment, then exact replay only if first succeeds. Server independently fetches provider status. Never claim simulated notification was sent by provider."
+  },
+  "r06_preflight": {
+    "observed_at": "2026-11-25T06:45:50.238Z",
+    "test_active_cron_jobs": 0,
+    "expired_reserved_count": 0,
+    "active_reserved_count": 0,
+    "due_reconciliation_jobs": 0,
+    "approval": "PENDING",
+    "proposal": "In TEST only, create up to two unpaid synthetic order/reservation fixtures; exercise expiry and preserve an unexpired fixture, check duplicate execution and reconciliation; temporarily create only the required TEST-targeted schedules and remove them after verification. Re-read eligibility and stop before acting on unrelated records. No provider payment, production operation or persistent schedule.",
+    "warning": "Source reconciliation cron migration contains a hard-coded production function URL. Do not run it unmodified against TEST."
   }
 }
