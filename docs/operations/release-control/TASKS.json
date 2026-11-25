@@ -2,7 +2,7 @@
   "schema_version": 1,
   "work_id": "REBALL-RELEASE-20261124",
   "configured_on": "2026-11-24",
-  "configuration_status": "R04_RUNNING",
+  "configuration_status": "R04_WAITING_FOR_USER",
   "repository": {
     "full_name": "snsrkarhskfdk/reballlostball",
     "url": "https://github.com/snsrkarhskfdk/reballlostball",
@@ -111,12 +111,11 @@
     "space_name": "리볼로스트볼 최종 검증",
     "space_id": 1,
     "page_labels": [
-      "p1",
       "p3"
     ],
     "run_id": "REBALL-RELEASE-20261124-R04-CODEX-01",
     "owner": "LOCAL_CODEX-REBALL-R04-20261124-01",
-    "heartbeat_at": "2026-11-25T01:01:34.565Z",
+    "heartbeat_at": "2026-11-25T01:13:19.744Z",
     "skill_observed": true,
     "actual_model": "GPT-6 (Codex; exact variant not exposed)",
     "actual_reasoning_level": "not exposed",
@@ -226,7 +225,7 @@
       "id": "R04",
       "title": "실제 Toss TEST 승인과 주문 복귀",
       "evidence_kind": "test",
-      "status": "RUNNING",
+      "status": "WAITING_FOR_USER",
       "requires": [
         "R02",
         "R03"
@@ -241,9 +240,9 @@
         "uncertain_result_recovery"
       ],
       "evidence": [
-        "receipts/R04_20261125_reopened_wait.json"
+        "receipts/R04_20261125_expiry_scope_wait.json"
       ],
-      "blocked_reason": null
+      "blocked_reason": "신규 주문 API가 과거 TEST 주문의 만료 예약 1건을 자동 해제할 수 있어 해당 기존 자료 변경 범위에 대한 사용자 결정 필요. 신규 주문·결제 0건."
     },
     {
       "id": "R05",
@@ -345,6 +344,9 @@
     "evidence_sha256": "9ec4fe048294febca82a15c9aaa6486b3c4301c6ce06e2fec5f47aaf97ba023c",
     "max_orders": 1,
     "max_amount_krw": 23500,
-    "orders_created": 0
+    "orders_created": 0,
+    "expired_existing_orders": 1,
+    "expired_existing_units": 1,
+    "existing_data_approval": "PENDING"
   }
 }

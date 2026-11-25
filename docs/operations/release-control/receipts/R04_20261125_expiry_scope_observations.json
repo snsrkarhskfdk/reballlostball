@@ -1,0 +1,30 @@
+{
+  "observed_at": "2026-11-25T01:13:19.744Z",
+  "run_id": "REBALL-RELEASE-20261124-R04-CODEX-01",
+  "space_id": 1,
+  "test_key_proof": "receipts/R04_20261125_test_mode_observations.json",
+  "checkout": {
+    "quantity": 1,
+    "product_price_krw": 20000,
+    "shipping_krw": 3500,
+    "displayed_total_krw": 23500,
+    "synthetic_recipient_prepared": true,
+    "submitted": false
+  },
+  "existing_expired_test_data": {
+    "affected_orders": 1,
+    "reserved_units": 1,
+    "order_status": "payment_ready",
+    "payment_status": "ready",
+    "reservation_expired_at": "2026-11-11T06:28:10.388669Z",
+    "approved_payment_amount_present": false,
+    "provider_payment_key_present": false,
+    "approval_timestamp_present": false,
+    "provider_independently_queried": false,
+    "variant_stock_before": 9,
+    "automatic_effect": "create-order calls expire_order_reservations_v1(25), which can release this reservation, return one unit to TEST stock, mark the prior order payment_failed and its payment/reservation expired, and append an event before creating the new order.",
+    "scope_warning": "The existing order belongs to earlier test work; prior blanket order-creation approval did not explicitly authorize altering it. If approved, recheck exactly this single eligible record before clicking; stop if any other expired reservation is eligible."
+  },
+  "r04_order_created": false,
+  "payment_submitted": false
+}
