@@ -2,7 +2,7 @@
   "schema_version": 1,
   "work_id": "REBALL-RELEASE-20261124",
   "configured_on": "2026-11-24",
-  "configuration_status": "R06_BLOCKED",
+  "configuration_status": "R06_RUNNING",
   "repository": {
     "full_name": "snsrkarhskfdk/reballlostball",
     "url": "https://github.com/snsrkarhskfdk/reballlostball",
@@ -147,6 +147,29 @@
             "persistent scheduler"
           ]
         }
+      },
+      {
+        "capability": "test_transactions",
+        "status": "APPROVED",
+        "source": "User explicitly replied 승인해 after the proposed one additional TEST order/payment, max KRW 23500, for R06 reconciliation.",
+        "approved_by": "USER",
+        "approved_at": "2026-11-27T11:24:11.322Z",
+        "scope": {
+          "project_ref": "aohziyemqxfhpbbqpicx",
+          "code_sha": "7c0c9c46753e9ebcf97c388839d2e91cef038385",
+          "tasks": [
+            "R06"
+          ],
+          "max_orders": 1,
+          "max_amount_krw": 23500,
+          "require_test_mode": true,
+          "excludes": [
+            "live payment",
+            "production",
+            "refund",
+            "other existing orders"
+          ]
+        }
       }
     ]
   },
@@ -160,7 +183,7 @@
     ],
     "run_id": "REBALL-RELEASE-20261124-R06-CODEX-01",
     "owner": "LOCAL_CODEX-REBALL-R06-20261124-01",
-    "heartbeat_at": "2026-11-27T11:20:59.452Z",
+    "heartbeat_at": "2026-11-27T11:24:11.322Z",
     "skill_observed": true,
     "actual_model": "GPT-6 (Codex; exact variant not exposed)",
     "actual_reasoning_level": "not exposed",
@@ -314,7 +337,7 @@
       "id": "R06",
       "title": "예약 만료와 결제 대사 실행 검증",
       "evidence_kind": "test",
-      "status": "BLOCKED",
+      "status": "RUNNING",
       "requires": [
         "R02"
       ],
@@ -330,7 +353,7 @@
       "evidence": [
         "receipts/R06_20261125_partial.json"
       ],
-      "blocked_reason": "합성 예약 만료·미만료 보존·반복 및 임시 cron 제거 완료. 대사 함수는 빈 대기열 200만 확인해 실제 제공자 연동 결제 건 대사는 미검증이다."
+      "blocked_reason": null
     },
     {
       "id": "R07",
@@ -458,6 +481,7 @@
     "remaining_unexpired_fixture_expires_at": null,
     "cleanup_intent": "Release only the owned formerly-unexpired R06 fixture after its observed expiry, with identity and unpaid status guards; no global sweep.",
     "cleanup_result": "OWNED_FIXTURE_EXPIRED_RELEASED_STOCK_10",
-    "reconciliation_proposal": "A further single TEST order/payment, maximum KRW 23500, may provide an owned provider-backed pending reconciliation job. Confirm actual TEST mode, preserve original completed orders, and require cardholder action in the existing ego Space. Exact controlled pending-state mechanism must be verified before charging; no additional order, payment, or refund authorized solely by this proposal."
+    "reconciliation_proposal": "A further single TEST order/payment, maximum KRW 23500, may provide an owned provider-backed pending reconciliation job. Confirm actual TEST mode, preserve original completed orders, and require cardholder action in the existing ego Space. Exact controlled pending-state mechanism must be verified before charging; no additional order, payment, or refund authorized solely by this proposal.",
+    "additional_test_payment": "USER_APPROVED_MAX_23500_NOT_CREATED"
   }
 }
