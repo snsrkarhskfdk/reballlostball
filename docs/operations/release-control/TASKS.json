@@ -183,7 +183,7 @@
     ],
     "run_id": "REBALL-RELEASE-20261124-R06-CODEX-01",
     "owner": "LOCAL_CODEX-REBALL-R06-20261124-01",
-    "heartbeat_at": "2026-11-27T11:24:11.322Z",
+    "heartbeat_at": "2026-11-27T11:27:45.532Z",
     "skill_observed": true,
     "actual_model": "GPT-6 (Codex; exact variant not exposed)",
     "actual_reasoning_level": "not exposed",
@@ -482,6 +482,7 @@
     "cleanup_intent": "Release only the owned formerly-unexpired R06 fixture after its observed expiry, with identity and unpaid status guards; no global sweep.",
     "cleanup_result": "OWNED_FIXTURE_EXPIRED_RELEASED_STOCK_10",
     "reconciliation_proposal": "A further single TEST order/payment, maximum KRW 23500, may provide an owned provider-backed pending reconciliation job. Confirm actual TEST mode, preserve original completed orders, and require cardholder action in the existing ego Space. Exact controlled pending-state mechanism must be verified before charging; no additional order, payment, or refund authorized solely by this proposal.",
-    "additional_test_payment": "USER_APPROVED_MAX_23500_NOT_CREATED"
+    "additional_test_payment": "ORDER_SUBMISSION_INTENT",
+    "recon_order_marker": "TEST ONLY R06 RECON"
   }
 }
