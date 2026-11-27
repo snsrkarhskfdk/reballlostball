@@ -2,7 +2,7 @@
   "schema_version": 1,
   "work_id": "REBALL-RELEASE-20261124",
   "configured_on": "2026-11-24",
-  "configuration_status": "R06_WAITING_FOR_USER",
+  "configuration_status": "R06_RUNNING",
   "repository": {
     "full_name": "snsrkarhskfdk/reballlostball",
     "url": "https://github.com/snsrkarhskfdk/reballlostball",
@@ -185,7 +185,7 @@
     ],
     "run_id": "REBALL-RELEASE-20261124-R06-CODEX-01",
     "owner": "LOCAL_CODEX-REBALL-R06-20261124-01",
-    "heartbeat_at": "2026-11-27T12:28:12.976Z",
+    "heartbeat_at": "2026-11-27T12:31:31.548Z",
     "skill_observed": true,
     "actual_model": "GPT-6 (Codex; exact variant not exposed)",
     "actual_reasoning_level": "not exposed",
@@ -339,7 +339,7 @@
       "id": "R06",
       "title": "예약 만료와 결제 대사 실행 검증",
       "evidence_kind": "test",
-      "status": "WAITING_FOR_USER",
+      "status": "RUNNING",
       "requires": [
         "R02"
       ],
@@ -355,7 +355,7 @@
       "evidence": [
         "receipts/R06_20261125_partial.json"
       ],
-      "blocked_reason": "기존 주문 예약 만료와 DB 승인 부재 확인, 브라우저 가드 해제 및 재로딩 검증 완료. 토스 TEST 거래 조회를 위해 기존 Space 23 p3에서 토스 로그인 필요."
+      "blocked_reason": null
     },
     {
       "id": "R07",
@@ -481,12 +481,12 @@
     "approved_at": "2026-11-25T10:38:19.816Z",
     "result": "EXPIRY_VERIFIED_RECONCILIATION_EMPTY_QUEUE",
     "remaining_unexpired_fixture_expires_at": null,
-    "cleanup_intent": "Release only the owned formerly-unexpired R06 fixture after its observed expiry, with identity and unpaid status guards; no global sweep.",
+    "cleanup_intent": "Release only the expired owned R06 RECON order after TEST provider expired and DB unpaid verification.",
     "cleanup_result": "OWNED_FIXTURE_EXPIRED_RELEASED_STOCK_10",
     "reconciliation_proposal": "A further single TEST order/payment, maximum KRW 23500, may provide an owned provider-backed pending reconciliation job. Confirm actual TEST mode, preserve original completed orders, and require cardholder action in the existing ego Space. Exact controlled pending-state mechanism must be verified before charging; no additional order, payment, or refund authorized solely by this proposal.",
     "additional_test_payment": "ORDER_EXPIRED_USER_WINDOW_STILL_OPEN",
     "recon_order_marker": "TEST ONLY R06 RECON",
     "guard_state": "REMOVED_VERIFIED_AFTER_RELOAD",
-    "provider_status": "NOT_VERIFIED_TOSS_LOGIN_REQUIRED"
+    "provider_status": "TOSS_TEST_EXPIRED"
   }
 }
