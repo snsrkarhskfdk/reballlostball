@@ -1,0 +1,18 @@
+{
+  "observed_at": "2026-11-27T12:24:14.701Z",
+  "space_id": 23,
+  "user_report": "Toss window says restart from order page",
+  "matching_test_orders": 1,
+  "order_status": "payment_ready",
+  "payment_status": "ready",
+  "amount_krw": 23500,
+  "provider_key_in_database": false,
+  "approval_timestamp_in_database": false,
+  "reservation": "reserved",
+  "reservation_expired": true,
+  "reservation_expired_at": "2026-11-27T12:08:35.591306Z",
+  "payment_confirm_server_posts_observed": 0,
+  "client_guard_active": true,
+  "provider_status": "NOT_INDEPENDENTLY_CHECKED",
+  "new_order_or_retry": "NOT_ATTEMPTED"
+}

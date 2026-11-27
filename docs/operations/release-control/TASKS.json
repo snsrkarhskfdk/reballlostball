@@ -183,7 +183,7 @@
     ],
     "run_id": "REBALL-RELEASE-20261124-R06-CODEX-01",
     "owner": "LOCAL_CODEX-REBALL-R06-20261124-01",
-    "heartbeat_at": "2026-11-27T11:29:57.745Z",
+    "heartbeat_at": "2026-11-27T12:24:14.701Z",
     "skill_observed": true,
     "actual_model": "GPT-6 (Codex; exact variant not exposed)",
     "actual_reasoning_level": "not exposed",
@@ -353,7 +353,7 @@
       "evidence": [
         "receipts/R06_20261125_partial.json"
       ],
-      "blocked_reason": "승인된 합성 TEST 주문 1건 23,500원 및 토스 TEST 표시 확인. 카드·본인 인증은 사용자 직접 수행 대기."
+      "blocked_reason": "기존 TEST 주문 예약 만료. 사용자의 토스 창에 주문서에서 다시 진행하라는 안내. DB 승인 기록은 없으나 토스 상태 미확인; 사용자 제어 반환 후 같은 주문과 브라우저 가드를 확인."
     },
     {
       "id": "R07",
@@ -482,7 +482,7 @@
     "cleanup_intent": "Release only the owned formerly-unexpired R06 fixture after its observed expiry, with identity and unpaid status guards; no global sweep.",
     "cleanup_result": "OWNED_FIXTURE_EXPIRED_RELEASED_STOCK_10",
     "reconciliation_proposal": "A further single TEST order/payment, maximum KRW 23500, may provide an owned provider-backed pending reconciliation job. Confirm actual TEST mode, preserve original completed orders, and require cardholder action in the existing ego Space. Exact controlled pending-state mechanism must be verified before charging; no additional order, payment, or refund authorized solely by this proposal.",
-    "additional_test_payment": "ONE_ORDER_CREATED_TEST_WINDOW_OPEN",
+    "additional_test_payment": "ORDER_EXPIRED_USER_WINDOW_STILL_OPEN",
     "recon_order_marker": "TEST ONLY R06 RECON"
   }
 }
