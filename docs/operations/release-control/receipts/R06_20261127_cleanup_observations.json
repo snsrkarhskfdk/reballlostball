@@ -1,0 +1,22 @@
+{
+  "observed_at": "2026-11-27T11:16:05.134Z",
+  "space_id": 23,
+  "scope": "Owned R06 formerly unexpired fixture only",
+  "before": {
+    "reservation": "reserved",
+    "due": true,
+    "stock": 9,
+    "payment": "ready",
+    "provider_key_present": false
+  },
+  "after": {
+    "reservation": "expired",
+    "order": "payment_failed",
+    "payment": "expired",
+    "stock": 10,
+    "fixture_expiry_events": 1,
+    "active_cron": 0
+  },
+  "reconciliation_due_jobs": 0,
+  "actual_reconciliation": "NOT_RUN"
+}
