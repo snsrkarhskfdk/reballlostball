@@ -2,7 +2,7 @@
   "schema_version": 1,
   "work_id": "REBALL-RELEASE-20261124",
   "configured_on": "2026-11-24",
-  "configuration_status": "R06_BLOCKED",
+  "configuration_status": "R06_VERIFIED",
   "repository": {
     "full_name": "snsrkarhskfdk/reballlostball",
     "url": "https://github.com/snsrkarhskfdk/reballlostball",
@@ -177,14 +177,13 @@
     "executor": "LOCAL_CODEX",
     "browser": "ego-browser",
     "space_name": "리볼로스트볼 최종 검증",
-    "space_id": 23,
+    "space_id": 24,
     "page_labels": [
-      "p1",
-      "p2"
+      "p1"
     ],
     "run_id": "REBALL-RELEASE-20261124-R06-CODEX-01",
     "owner": "LOCAL_CODEX-REBALL-R06-20261124-01",
-    "heartbeat_at": "2026-11-27T18:33:52.103Z",
+    "heartbeat_at": "2026-11-27T18:56:11.854Z",
     "skill_observed": true,
     "actual_model": "GPT-6 (Codex; exact variant not exposed)",
     "actual_reasoning_level": "not exposed",
@@ -338,7 +337,7 @@
       "id": "R06",
       "title": "예약 만료와 결제 대사 실행 검증",
       "evidence_kind": "test",
-      "status": "BLOCKED",
+      "status": "VERIFIED",
       "requires": [
         "R02"
       ],
@@ -352,10 +351,9 @@
         "schedule_end_state_recorded"
       ],
       "evidence": [
-        "receipts/R06_20261128_live_partial.json",
-        "receipts/R06_20261128_deployed_path_constraints.json"
+        "receipts/R06_20261128_deployed_final.json"
       ],
-      "blocked_reason": "실제 TEST DB의 주문번호·결제키 유일 제약으로 거래 복제 불가. 기존 취소 거래를 배포 대사에 투입하면 취소시각 등 메타데이터가 갱신되므로 별도 범위 확인 필요. 추가 결제 없음."
+      "blocked_reason": null
     },
     {
       "id": "R07",
@@ -377,7 +375,7 @@
         "owner_handover_prepared"
       ],
       "evidence": [],
-      "blocked_reason": "실제 TEST 검증 영수증을 검토한 뒤 운영 반영안만 작성함."
+      "blocked_reason": "TEST 영수증 검토와 운영 반영안 작성 필요. 도쿄 대사 접근 거부 및 도구 출력에 노출된 TEST 키 교체·TEST 설정 동기화를 출시 전 해결해야 함."
     },
     {
       "id": "R08",
@@ -420,6 +418,20 @@
       "max_eligible_orders": 1,
       "max_reservation_units": 1,
       "scope": "Only the pre-existing single eligible TEST reservation described in receipts/R04_20261125_expiry_scope_wait.json; stop if any other reservation is eligible."
+    },
+    {
+      "capability": "single_existing_canceled_test_order_reconciliation",
+      "approved_by": "USER",
+      "approved_at": "2026-11-27T18:56:11.854Z",
+      "source": "User explicitly approved queuing the existing canceled TEST transaction after being told metadata can be updated and a reconciliation audit event retained.",
+      "project_ref": "aohziyemqxfhpbbqpicx",
+      "max_orders": 1,
+      "excludes": [
+        "new payment",
+        "new order",
+        "production",
+        "provider cancellation"
+      ]
     }
   ],
   "r04_preflight": {
@@ -491,6 +503,9 @@
     "no_additional_payment_review": "NO_OWNED_ELIGIBLE_PROVIDER_JOB",
     "isolated_reconciliation": "SOURCE_HANDLER_PASS_PROVIDER_AND_DB_SIMULATED",
     "live_provider_isolation": "PASS_REAL_TEST_GET_MOCK_DB",
-    "test_database_rollback": "PASS_CLAIM_APPLY_ROLLED_BACK"
+    "test_database_rollback": "PASS_CLAIM_APPLY_ROLLED_BACK",
+    "deployed_reconciliation": "PASS_SEOUL_REGION_ACTUAL_PROVIDER_AND_DB",
+    "default_region": "FAILED_API_KEY_ACCESS_DENIED_TOKYO",
+    "test_key_security": "TEST_SECRET_EXPOSED_IN_TOOL_OUTPUT_ROTATION_AND_TEST_CONFIG_UPDATE_REQUIRED"
   }
 }

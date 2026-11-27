@@ -1,0 +1,134 @@
+{
+  "schema_version": 1,
+  "task_id": "R06",
+  "run_id": "REBALL-RELEASE-20261124-R06-CODEX-01",
+  "status": "PASS",
+  "observed_at": "2026-11-27T18:56:11.854Z",
+  "executor": "LOCAL_CODEX",
+  "code_sha": "7c0c9c46753e9ebcf97c388839d2e91cef038385",
+  "orchestration_sha": "03fb37eb2f09566834acba86597c137ae5ee1fc7",
+  "environment": {
+    "kind": "test",
+    "origin": "https://reballlostball-git-repair-mr-dr01-a7fa2f-thechangcnds-projects.vercel.app",
+    "supabase_project_ref": "aohziyemqxfhpbbqpicx",
+    "deployment_id": "dpl_9VZRGqUxpPRTyovRmyik8GhRJCyU",
+    "deployed_sha": "7c0c9c46753e9ebcf97c388839d2e91cef038385"
+  },
+  "actions": [
+    {
+      "action_id": "R06-FIXTURES-01",
+      "kind": "mutation",
+      "summary": "Created two approved unpaid synthetic TEST orders and scoped reservations with one expired and one unexpired.",
+      "outcome": "PASS"
+    },
+    {
+      "action_id": "R06-EXPIRY-02",
+      "kind": "mutation",
+      "summary": "A guarded temporary TEST cron released only the expired reservation, then was removed. Two additional expiry calls each returned zero.",
+      "outcome": "PASS"
+    },
+    {
+      "action_id": "R06-PROVIDER-EXPIRED-04",
+      "kind": "read",
+      "summary": "Matched the existing TEST order in the merchant dashboard and observed EXPIRED; removed and reload-verified the temporary browser guard.",
+      "outcome": "PASS"
+    },
+    {
+      "action_id": "R06-OWNED-CLEANUP-05",
+      "kind": "mutation",
+      "summary": "Released only the owned expired TEST reservation after provider and database preconditions matched; stock returned to 10.",
+      "outcome": "PASS"
+    },
+    {
+      "action_id": "R06-REAL-PROVIDER-06",
+      "kind": "read",
+      "summary": "Executed reviewed reconciliation handler with actual Toss TEST GET on owned canceled payment and isolated mocked RPC: claimed/reconciled 1, repeat 0, no provider mutation.",
+      "outcome": "PASS"
+    },
+    {
+      "action_id": "R06-DB-ROLLBACK-07",
+      "kind": "mutation",
+      "summary": "Exercised actual TEST DB claim and apply functions in a deliberately rolled-back subtransaction on the owned fixture; original state and counts were verified unchanged.",
+      "outcome": "PASS"
+    },
+    {
+      "action_id": "R06-DEPLOYED-08",
+      "kind": "mutation",
+      "summary": "User-approved owned canceled TEST order queued; default Tokyo Edge claimed 1 but failed API_KEY_ACCESS_DENIED and fixture was cleaned up; explicit Seoul deployed Edge then claimed/reconciled 1 via real Toss TEST and actual TEST DB.",
+      "outcome": "PASS"
+    },
+    {
+      "action_id": "R06-DEPLOYED-REPLAY-09",
+      "kind": "read",
+      "summary": "Repeated deployed Seoul Edge invocation returned claimed 0 and failed 0; canceled order, one refund, no active attempt, no queue, and no cron verified.",
+      "outcome": "PASS"
+    }
+  ],
+  "assertions": [
+    {
+      "id": "scheduler_scope_authorized",
+      "result": "PASS",
+      "evidence_refs": [
+        "receipts/R06_20261125_observations.json"
+      ]
+    },
+    {
+      "id": "owned_expiry_fixture",
+      "result": "PASS",
+      "evidence_refs": [
+        "receipts/R06_20261125_observations.json"
+      ]
+    },
+    {
+      "id": "expired_stock_released_once",
+      "result": "PASS",
+      "evidence_refs": [
+        "receipts/R06_20261125_observations.json"
+      ]
+    },
+    {
+      "id": "unexpired_reservation_preserved",
+      "result": "PASS",
+      "evidence_refs": [
+        "receipts/R06_20261125_observations.json"
+      ]
+    },
+    {
+      "id": "reconciliation_readback",
+      "result": "PASS",
+      "evidence_refs": [
+        "receipts/R06_20261128_deployed_e2e_observations.json"
+      ]
+    },
+    {
+      "id": "schedule_end_state_recorded",
+      "result": "PASS",
+      "evidence_refs": [
+        "receipts/R06_20261125_observations.json"
+      ]
+    }
+  ],
+  "artifacts": [
+    {
+      "path": "receipts/R06_20261125_observations.json",
+      "sha256": "04de0928bbc5258b00fc10cb531778ccb9139f2e7c1731c92683f73799862d54",
+      "redacted": true
+    },
+    {
+      "path": "receipts/R06_20261127_provider_expired_observations.json",
+      "sha256": "b022b6f9ff93fb3a9ecb144da3f79466b905bcac2f2b3769e841c20cc9eaa9a0",
+      "redacted": true
+    },
+    {
+      "path": "receipts/R06_20261128_live_reconciliation_observations.json",
+      "sha256": "6a10f48b60da5296e3d39c1b9a021bbf5cf406d7a39c89f6eaa5c55c864e8e56",
+      "redacted": true
+    },
+    {
+      "path": "receipts/R06_20261128_deployed_e2e_observations.json",
+      "sha256": "4c520a8f1a933f83a54edbfda3cccb1467f40365d548cb6a55b9fc9bc61ae25b",
+      "redacted": true
+    }
+  ],
+  "blocker": null
+}
