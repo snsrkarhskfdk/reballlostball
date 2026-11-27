@@ -2,7 +2,7 @@
   "schema_version": 1,
   "work_id": "REBALL-RELEASE-20261124",
   "configured_on": "2026-11-24",
-  "configuration_status": "R06_BLOCKED",
+  "configuration_status": "R06_WAITING_FOR_USER",
   "repository": {
     "full_name": "snsrkarhskfdk/reballlostball",
     "url": "https://github.com/snsrkarhskfdk/reballlostball",
@@ -180,12 +180,11 @@
     "space_id": 23,
     "page_labels": [
       "p1",
-      "p2",
-      "p3"
+      "p2"
     ],
     "run_id": "REBALL-RELEASE-20261124-R06-CODEX-01",
     "owner": "LOCAL_CODEX-REBALL-R06-20261124-01",
-    "heartbeat_at": "2026-11-27T16:29:52.414Z",
+    "heartbeat_at": "2026-11-27T18:06:47.907Z",
     "skill_observed": true,
     "actual_model": "GPT-6 (Codex; exact variant not exposed)",
     "actual_reasoning_level": "not exposed",
@@ -339,7 +338,7 @@
       "id": "R06",
       "title": "예약 만료와 결제 대사 실행 검증",
       "evidence_kind": "test",
-      "status": "BLOCKED",
+      "status": "WAITING_FOR_USER",
       "requires": [
         "R02"
       ],
@@ -355,7 +354,7 @@
       "evidence": [
         "receipts/R06_20261127_provider_expired.json"
       ],
-      "blocked_reason": "격리 합성 거래로 실제 대사 함수 코드의 1건 처리·재실행을 검증했지만 제공자와 DB는 모의여서 실제 TEST 제공자 연동 대사는 미검증."
+      "blocked_reason": "기존 취소 TEST 거래의 서버 웹훅 재조회는 실제 토스 조회 후 중복 처리됨. 실제 토스 GET과 격리 대사 코드 연결을 위해 Space 23 p2 토스 로그인 대기; DB는 모의임."
     },
     {
       "id": "R07",
@@ -489,6 +488,7 @@
     "guard_state": "REMOVED_VERIFIED_AFTER_RELOAD",
     "provider_status": "TOSS_TEST_EXPIRED_CONFIRMED",
     "no_additional_payment_review": "NO_OWNED_ELIGIBLE_PROVIDER_JOB",
-    "isolated_reconciliation": "SOURCE_HANDLER_PASS_PROVIDER_AND_DB_SIMULATED"
+    "isolated_reconciliation": "SOURCE_HANDLER_PASS_PROVIDER_AND_DB_SIMULATED",
+    "live_provider_isolation": "PREPARED_LOGIN_REQUIRED"
   }
 }
