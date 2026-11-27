@@ -154,14 +154,13 @@
     "executor": "LOCAL_CODEX",
     "browser": "ego-browser",
     "space_name": "리볼로스트볼 최종 검증",
-    "space_id": 0,
+    "space_id": 23,
     "page_labels": [
-      "p1",
-      "p2"
+      "p1"
     ],
     "run_id": "REBALL-RELEASE-20261124-R06-CODEX-01",
     "owner": "LOCAL_CODEX-REBALL-R06-20261124-01",
-    "heartbeat_at": "2026-11-25T10:44:21.960Z",
+    "heartbeat_at": "2026-11-27T11:15:01.821Z",
     "skill_observed": true,
     "actual_model": "GPT-6 (Codex; exact variant not exposed)",
     "actual_reasoning_level": "not exposed",
@@ -456,6 +455,7 @@
     "warning": "Source reconciliation cron migration contains a hard-coded production function URL. Do not run it unmodified against TEST.",
     "approved_at": "2026-11-25T10:38:19.816Z",
     "result": "EXPIRY_VERIFIED_RECONCILIATION_EMPTY_QUEUE",
-    "remaining_unexpired_fixture_expires_at": "2026-11-25T12:09:57.369807Z"
+    "remaining_unexpired_fixture_expires_at": "2026-11-25T12:09:57.369807Z",
+    "cleanup_intent": "Release only the owned formerly-unexpired R06 fixture after its observed expiry, with identity and unpaid status guards; no global sweep."
   }
 }
