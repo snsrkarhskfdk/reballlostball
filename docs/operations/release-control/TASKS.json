@@ -185,7 +185,7 @@
     ],
     "run_id": "REBALL-RELEASE-20261124-R06-CODEX-01",
     "owner": "LOCAL_CODEX-REBALL-R06-20261124-01",
-    "heartbeat_at": "2026-11-27T14:50:16.634Z",
+    "heartbeat_at": "2026-11-27T16:29:52.414Z",
     "skill_observed": true,
     "actual_model": "GPT-6 (Codex; exact variant not exposed)",
     "actual_reasoning_level": "not exposed",
@@ -355,7 +355,7 @@
       "evidence": [
         "receipts/R06_20261127_provider_expired.json"
       ],
-      "blocked_reason": "추가 결제 없는 대사 경로 검토 중. 현재 R06 TEST 주문에는 제공자 키·대기 대사 작업이 없고, 기존 3개 스케줄 정적 검사는 통과했으나 실제 대상 대사 증거는 아님."
+      "blocked_reason": "격리 합성 거래로 실제 대사 함수 코드의 1건 처리·재실행을 검증했지만 제공자와 DB는 모의여서 실제 TEST 제공자 연동 대사는 미검증."
     },
     {
       "id": "R07",
@@ -488,6 +488,7 @@
     "recon_order_marker": "TEST ONLY R06 RECON",
     "guard_state": "REMOVED_VERIFIED_AFTER_RELOAD",
     "provider_status": "TOSS_TEST_EXPIRED_CONFIRMED",
-    "no_additional_payment_review": "NO_OWNED_ELIGIBLE_PROVIDER_JOB"
+    "no_additional_payment_review": "NO_OWNED_ELIGIBLE_PROVIDER_JOB",
+    "isolated_reconciliation": "SOURCE_HANDLER_PASS_PROVIDER_AND_DB_SIMULATED"
   }
 }

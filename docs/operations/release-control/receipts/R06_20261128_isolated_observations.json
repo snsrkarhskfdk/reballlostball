@@ -1,0 +1,30 @@
+{
+  "observed_at": "2026-11-27T16:29:52.414Z",
+  "space_id": 23,
+  "source": "Actual repository reconcile-payments handler at reviewed code",
+  "fixture": "Synthetic canceled TEST-like transaction, based on observed status/amount only; no real keys or order IDs copied",
+  "provider": "simulated",
+  "database": "simulated",
+  "first": {
+    "claimed": 1,
+    "reconciled": 1,
+    "failed": 0
+  },
+  "second": {
+    "claimed": 0
+  },
+  "provider_gets": 1,
+  "provider_cancel_calls": 0,
+  "apply_calls": 1,
+  "stock_and_refund_database_logic": "NOT_TESTED",
+  "original_order_before_after": {
+    "order": "canceled",
+    "payment": "canceled",
+    "refund_rows": 1,
+    "active_cancel_attempts": 0,
+    "reconciliation_scheduled": false
+  },
+  "evidence_path": "evidence/r06-isolated-reconcile-test.ts",
+  "evidence_sha256": "1d2439eb919c17d358e84f503cf25cfcf368a74d07323fd504e8ddacc497bfb5",
+  "actual_test_provider_backed_reconciliation": "NOT_RUN"
+}
