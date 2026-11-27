@@ -179,11 +179,13 @@
     "space_name": "리볼로스트볼 최종 검증",
     "space_id": 23,
     "page_labels": [
-      "p1"
+      "p1",
+      "p2",
+      "p3"
     ],
     "run_id": "REBALL-RELEASE-20261124-R06-CODEX-01",
     "owner": "LOCAL_CODEX-REBALL-R06-20261124-01",
-    "heartbeat_at": "2026-11-27T12:24:14.701Z",
+    "heartbeat_at": "2026-11-27T12:28:12.976Z",
     "skill_observed": true,
     "actual_model": "GPT-6 (Codex; exact variant not exposed)",
     "actual_reasoning_level": "not exposed",
@@ -353,7 +355,7 @@
       "evidence": [
         "receipts/R06_20261125_partial.json"
       ],
-      "blocked_reason": "기존 TEST 주문 예약 만료. 사용자의 토스 창에 주문서에서 다시 진행하라는 안내. DB 승인 기록은 없으나 토스 상태 미확인; 사용자 제어 반환 후 같은 주문과 브라우저 가드를 확인."
+      "blocked_reason": "기존 주문 예약 만료와 DB 승인 부재 확인, 브라우저 가드 해제 및 재로딩 검증 완료. 토스 TEST 거래 조회를 위해 기존 Space 23 p3에서 토스 로그인 필요."
     },
     {
       "id": "R07",
@@ -483,6 +485,8 @@
     "cleanup_result": "OWNED_FIXTURE_EXPIRED_RELEASED_STOCK_10",
     "reconciliation_proposal": "A further single TEST order/payment, maximum KRW 23500, may provide an owned provider-backed pending reconciliation job. Confirm actual TEST mode, preserve original completed orders, and require cardholder action in the existing ego Space. Exact controlled pending-state mechanism must be verified before charging; no additional order, payment, or refund authorized solely by this proposal.",
     "additional_test_payment": "ORDER_EXPIRED_USER_WINDOW_STILL_OPEN",
-    "recon_order_marker": "TEST ONLY R06 RECON"
+    "recon_order_marker": "TEST ONLY R06 RECON",
+    "guard_state": "REMOVED_VERIFIED_AFTER_RELOAD",
+    "provider_status": "NOT_VERIFIED_TOSS_LOGIN_REQUIRED"
   }
 }

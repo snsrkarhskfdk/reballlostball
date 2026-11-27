@@ -1,0 +1,24 @@
+{
+  "observed_at": "2026-11-27T12:28:12.976Z",
+  "space_id": 23,
+  "order_page": "p1",
+  "provider_page": "p3",
+  "order": {
+    "db_status": "payment_ready",
+    "payment_status": "ready",
+    "reservation_expired": true,
+    "provider_key_present": false,
+    "approval_timestamp_present": false
+  },
+  "browser": {
+    "pending_confirmation_count": 0,
+    "guard_before": true,
+    "flag_cleared": true,
+    "cdp_remove_result": "Script not found",
+    "reload_completed": true,
+    "wrapper_after_reload": false,
+    "flag_after_reload": false
+  },
+  "provider_test_transaction_lookup": "NOT_RUN_LOGIN_REQUIRED",
+  "new_order_or_retry": "NOT_ATTEMPTED"
+}
