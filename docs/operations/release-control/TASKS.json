@@ -2,7 +2,7 @@
   "schema_version": 1,
   "work_id": "REBALL-RELEASE-20261124",
   "configured_on": "2026-11-24",
-  "configuration_status": "R06_RUNNING",
+  "configuration_status": "R06_BLOCKED",
   "repository": {
     "full_name": "snsrkarhskfdk/reballlostball",
     "url": "https://github.com/snsrkarhskfdk/reballlostball",
@@ -185,7 +185,7 @@
     ],
     "run_id": "REBALL-RELEASE-20261124-R06-CODEX-01",
     "owner": "LOCAL_CODEX-REBALL-R06-20261124-01",
-    "heartbeat_at": "2026-11-27T12:31:31.548Z",
+    "heartbeat_at": "2026-11-27T12:33:15.267Z",
     "skill_observed": true,
     "actual_model": "GPT-6 (Codex; exact variant not exposed)",
     "actual_reasoning_level": "not exposed",
@@ -339,7 +339,7 @@
       "id": "R06",
       "title": "예약 만료와 결제 대사 실행 검증",
       "evidence_kind": "test",
-      "status": "RUNNING",
+      "status": "BLOCKED",
       "requires": [
         "R02"
       ],
@@ -353,9 +353,9 @@
         "schedule_end_state_recorded"
       ],
       "evidence": [
-        "receipts/R06_20261125_partial.json"
+        "receipts/R06_20261127_provider_expired.json"
       ],
-      "blocked_reason": null
+      "blocked_reason": "소유 TEST 주문의 토스 만료 상태와 예약 해제를 확인했으나 실제 제공자 연동 대사 작업은 미실행. 추가 결제를 요청하기 전 유효한 검증 방법을 확인해야 함."
     },
     {
       "id": "R07",
@@ -484,9 +484,9 @@
     "cleanup_intent": "Release only the expired owned R06 RECON order after TEST provider expired and DB unpaid verification.",
     "cleanup_result": "OWNED_FIXTURE_EXPIRED_RELEASED_STOCK_10",
     "reconciliation_proposal": "A further single TEST order/payment, maximum KRW 23500, may provide an owned provider-backed pending reconciliation job. Confirm actual TEST mode, preserve original completed orders, and require cardholder action in the existing ego Space. Exact controlled pending-state mechanism must be verified before charging; no additional order, payment, or refund authorized solely by this proposal.",
-    "additional_test_payment": "ORDER_EXPIRED_USER_WINDOW_STILL_OPEN",
+    "additional_test_payment": "PROVIDER_EXPIRED_RESERVATION_RELEASED",
     "recon_order_marker": "TEST ONLY R06 RECON",
     "guard_state": "REMOVED_VERIFIED_AFTER_RELOAD",
-    "provider_status": "TOSS_TEST_EXPIRED"
+    "provider_status": "TOSS_TEST_EXPIRED_CONFIRMED"
   }
 }
