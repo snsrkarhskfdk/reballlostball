@@ -2,7 +2,7 @@
   "schema_version": 1,
   "work_id": "REBALL-RELEASE-20261124",
   "configured_on": "2026-11-24",
-  "configuration_status": "R06_WAITING_FOR_USER",
+  "configuration_status": "R06_BLOCKED",
   "repository": {
     "full_name": "snsrkarhskfdk/reballlostball",
     "url": "https://github.com/snsrkarhskfdk/reballlostball",
@@ -184,7 +184,7 @@
     ],
     "run_id": "REBALL-RELEASE-20261124-R06-CODEX-01",
     "owner": "LOCAL_CODEX-REBALL-R06-20261124-01",
-    "heartbeat_at": "2026-11-27T18:06:47.907Z",
+    "heartbeat_at": "2026-11-27T18:28:24.752Z",
     "skill_observed": true,
     "actual_model": "GPT-6 (Codex; exact variant not exposed)",
     "actual_reasoning_level": "not exposed",
@@ -338,7 +338,7 @@
       "id": "R06",
       "title": "예약 만료와 결제 대사 실행 검증",
       "evidence_kind": "test",
-      "status": "WAITING_FOR_USER",
+      "status": "BLOCKED",
       "requires": [
         "R02"
       ],
@@ -352,9 +352,9 @@
         "schedule_end_state_recorded"
       ],
       "evidence": [
-        "receipts/R06_20261127_provider_expired.json"
+        "receipts/R06_20261128_live_partial.json"
       ],
-      "blocked_reason": "기존 취소 TEST 거래의 서버 웹훅 재조회는 실제 토스 조회 후 중복 처리됨. 실제 토스 GET과 격리 대사 코드 연결을 위해 Space 23 p2 토스 로그인 대기; DB는 모의임."
+      "blocked_reason": "실제 Toss TEST 조회를 사용하는 대사 코드와 TEST DB claim/apply 롤백 검증은 각각 통과. 배포된 Edge가 실제 DB의 대기 1건을 연속 처리한 E2E는 미검증."
     },
     {
       "id": "R07",
@@ -489,6 +489,7 @@
     "provider_status": "TOSS_TEST_EXPIRED_CONFIRMED",
     "no_additional_payment_review": "NO_OWNED_ELIGIBLE_PROVIDER_JOB",
     "isolated_reconciliation": "SOURCE_HANDLER_PASS_PROVIDER_AND_DB_SIMULATED",
-    "live_provider_isolation": "PREPARED_LOGIN_REQUIRED"
+    "live_provider_isolation": "PASS_REAL_TEST_GET_MOCK_DB",
+    "test_database_rollback": "PASS_CLAIM_APPLY_ROLLED_BACK"
   }
 }

@@ -1,0 +1,41 @@
+{
+  "observed_at": "2026-11-27T18:28:24.752Z",
+  "space_id": 23,
+  "scope": "Existing owned canceled R04 TEST transaction; no new transaction",
+  "key_check": "Merchant TEST key digest matched TEST project configuration; key values not recorded",
+  "worker_probe": {
+    "handler": "reviewed repository source",
+    "provider": "actual Toss TEST payment GET",
+    "database": "isolated mocked RPC",
+    "claimed": 1,
+    "reconciled": 1,
+    "replay_claimed": 0,
+    "provider_gets": 1,
+    "provider_mutations": 0,
+    "apply_calls": 1
+  },
+  "database_probe": {
+    "environment": "actual TEST database",
+    "isolation": "uncommitted subtransaction with deliberate exception rollback",
+    "fixture": "previously canceled owned TEST order with temporary synthetic pending cancel attempt",
+    "claim_count": 1,
+    "provider_status_used": "CANCELED from immediately preceding real TEST GET",
+    "claim_and_apply": "PASS",
+    "duplicate_refund": "none",
+    "rollback_verified": true
+  },
+  "original_after": {
+    "order": "canceled",
+    "payment": "canceled",
+    "queued": false,
+    "refunds": 1,
+    "processed_events": 1,
+    "active_cancel_attempts": 0,
+    "active_cron": 0
+  },
+  "limitations": [
+    "Provider-linked worker probe used mocked DB; TEST database probe called database functions separately with provider status from the real GET.",
+    "Deployed reconcile-payments Edge function was not observed processing a nonempty live job end-to-end."
+  ],
+  "runner_sha256": "1d35da46e6562b9dc79f61f7b17bdd650470c999fc6a323f1b61616a4f2513a5"
+}
