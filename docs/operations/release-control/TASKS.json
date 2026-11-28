@@ -183,7 +183,7 @@
     ],
     "run_id": "REBALL-RELEASE-20261124-R06-CODEX-01",
     "owner": "LOCAL_CODEX-REBALL-R06-20261124-01",
-    "heartbeat_at": "2026-11-28T07:05:23.901Z",
+    "heartbeat_at": "2026-11-28T08:09:09.805Z",
     "skill_observed": true,
     "actual_model": "GPT-6 (Codex; exact variant not exposed)",
     "actual_reasoning_level": "not exposed",
@@ -375,9 +375,10 @@
         "owner_handover_prepared"
       ],
       "evidence": [
-        "receipts/R07_20261128_backup_investigation.json"
+        "receipts/R07_20261128_backup_investigation.json",
+        "receipts/R07_20261128_approved_backup_preflight.json"
       ],
-      "blocked_reason": "운영 FREE 프로젝트는 관리형 백업·PITR을 제공하지 않고 외부 백업 및 복원 성공 근거를 찾지 못함. 기존 백업 위치 확인 또는 암호화된 운영 데이터 내보내기·격리 복원 시험의 명시 승인과 안전한 보관 방식 필요."
+      "blocked_reason": "사용자가 읽기 전용 운영 백업·암호화·격리 복원을 승인했으나 기존 ego Space 명령이 응답하지 않아 안전한 비밀번호 입력 화면을 열지 못함. 기존 Space 연결 확인 후 재개. 실제 백업·복원 미실행."
     },
     {
       "id": "R08",
@@ -452,6 +453,19 @@
       "excludes": [
         "production",
         "new payment"
+      ]
+    },
+    {
+      "capability": "readonly_production_encrypted_backup_isolated_restore",
+      "approved_by": "USER",
+      "approved_at": "2026-11-28T07:47:55.456Z",
+      "source": "User explicitly approved read-only production DB export, encrypted storage and isolated restoration without changing production or the existing TEST environment.",
+      "project_ref": "qbftalhhyfcndanrcwpy",
+      "scope": "Read-only production export into encrypted backup; separate isolated restore test.",
+      "excludes": [
+        "production writes",
+        "overwriting existing TEST",
+        "paid upgrade"
       ]
     }
   ],
@@ -540,6 +554,9 @@
     "production_provider_access": "NOT_VERIFIED_EMPTY_QUEUE",
     "release_plan": "R07_RELEASE_PREPARATION_KO.md",
     "production_backup": "FREE_NO_MANAGED_BACKUP_EXTERNAL_UNKNOWN_RESTORE_NOT_VERIFIED",
-    "backup_investigation": "receipts/R07_20261128_backup_investigation.json"
+    "backup_investigation": "receipts/R07_20261128_backup_investigation.json",
+    "backup_approval": "APPROVED",
+    "backup_status": "APPROVED_PREFLIGHT_BLOCKED_EGO_NO_EXPORT",
+    "backup_preflight_evidence": "receipts/R07_20261128_approved_backup_preflight.json"
   }
 }

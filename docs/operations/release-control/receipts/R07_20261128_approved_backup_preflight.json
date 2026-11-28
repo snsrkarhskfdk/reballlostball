@@ -1,0 +1,25 @@
+{
+  "observed_at": "2026-11-28T08:09:09.805Z",
+  "space_id": 24,
+  "user_approval": "Read-only production export, encrypted storage and isolated restore were explicitly approved.",
+  "user_password_availability": "User says they know the database password; its value was not provided or requested in chat.",
+  "production_data_exported": false,
+  "encrypted_backup_created": false,
+  "production_restore_attempted": false,
+  "environment": {
+    "docker_engine": "Started; cached PostgreSQL 17.6 image used for synthetic tests",
+    "test_connectivity": "Production session-pooler TCP reachable; no DB authentication performed",
+    "private_directory": "NTFS directory with inherited ACL disabled and one explicit current-user allow rule; reviewed tool files only, no backup data",
+    "restore_test": "Synthetic 2-row orders/1-row payments; network none, read-only container root, tmpfs and cgroup swap 0",
+    "synthetic_checks": "10 pg_dump streams, AES-GCM authentication and tamper rejection, isolated partial restore, size and cleanup failure guards",
+    "host_swap_hibernation": "NOT_VERIFIED",
+    "production_db_password": "NOT_OBTAINED"
+  },
+  "browser_blocker": {
+    "space": 24,
+    "observed": "Existing taskSpace and a pure ego-browser nodejs readiness command did not return output and remained running beyond the 10-second command yield; the stuck command helpers were stopped. No alternate space was created.",
+    "resume": "User opens or activates existing Reball Space 24 and confirms; retry the installed ego-browser connection before any secure input. If it still does not respond, diagnose without opening a replacement Space."
+  },
+  "security": "Reviewed engine and recovery tools staged under current-user-only NTFS ACL with verified hashes; gateway has pinned engine digest but was not started. Host paging and complete recovery remain unverified.",
+  "status": "BLOCKED"
+}
