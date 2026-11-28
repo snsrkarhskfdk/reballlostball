@@ -183,7 +183,7 @@
     ],
     "run_id": "REBALL-RELEASE-20261124-R06-CODEX-01",
     "owner": "LOCAL_CODEX-REBALL-R06-20261124-01",
-    "heartbeat_at": "2026-11-28T04:23:19.037Z",
+    "heartbeat_at": "2026-11-28T05:02:51.953Z",
     "skill_observed": true,
     "actual_model": "GPT-6 (Codex; exact variant not exposed)",
     "actual_reasoning_level": "not exposed",
@@ -375,7 +375,7 @@
         "owner_handover_prepared"
       ],
       "evidence": [],
-      "blocked_reason": "TEST 영수증 검토와 운영 반영안 작성 필요. 도쿄 대사 접근 거부 및 도구 출력에 노출된 TEST 키 교체·TEST 설정 동기화를 출시 전 해결해야 함."
+      "blocked_reason": "도쿄 기본 대사 접근 거부 및 노출된 기존 TEST 키의 유효기간 잔여 문제 해결과 운영 반영안 준비가 필요함. 기존 TEST 키 삭제는 짝 보안 키도 삭제되며 외부 사용 여부 미확인."
     },
     {
       "id": "R08",
@@ -514,6 +514,7 @@
     "test_database_rollback": "PASS_CLAIM_APPLY_ROLLED_BACK",
     "deployed_reconciliation": "PASS_SEOUL_REGION_ACTUAL_PROVIDER_AND_DB",
     "default_region": "FAILED_API_KEY_ACCESS_DENIED_TOKYO",
-    "test_key_security": "ROTATION_APPROVED_WAIT_TOSS_LOGIN"
+    "test_key_security": "NEW_TEST_KEY_ACTIVE_AND_VERIFIED_OLD_EXPOSED_PAIR_STILL_VALID",
+    "test_key_rotation_evidence": "receipts/R06_20261128_test_key_rotation_observations.json"
   }
 }
