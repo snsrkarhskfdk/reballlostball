@@ -1,0 +1,93 @@
+{
+  "observed_at": "2026-11-28T06:55:27.960Z",
+  "space_id": 24,
+  "scope": "R07 read-only production inspection and approved temporary TEST-only scheduler checks; no payment or production mutation.",
+  "projects": {
+    "test": {
+      "ref": "aohziyemqxfhpbbqpicx",
+      "database_region": "ap-northeast-1",
+      "existing_reconciliation_cron": {
+        "active": false,
+        "target": "production URL",
+        "region_explicit": false
+      }
+    },
+    "production": {
+      "ref": "qbftalhhyfcndanrcwpy",
+      "database_region": "ap-northeast-1",
+      "existing_reconciliation_cron": {
+        "active": true,
+        "schedule": "*/2 * * * *",
+        "target": "production URL",
+        "region_explicit": false,
+        "vault_reference": true
+      },
+      "recent_thirty_minutes": {
+        "http_200": 15,
+        "edge_region": "ap-northeast-1",
+        "claimed": 0,
+        "reconciled": 0,
+        "failed": 0,
+        "deferred": 0,
+        "scope": "15 reconciliation-shaped pg_net responses; no request-ID link to individual cron invocation was observed."
+      },
+      "payment_queue_aggregate": {
+        "scheduled": 0,
+        "due": 0,
+        "leased": 0,
+        "last_error_count": 0
+      },
+      "live_secret_name_present": true
+    }
+  },
+  "toss_policy": {
+    "merchant": "Reball Lostball",
+    "test_policy_rows": 5,
+    "test_policy_countries": "South Korea",
+    "live_policy_rows": 2,
+    "live_policy_countries": "South Korea",
+    "production_secret_policy_match": "NOT_VERIFIED",
+    "egress_country": "NOT_VERIFIED"
+  },
+  "test_scheduler_checks": [
+    {
+      "temporary_job_id": 4,
+      "type": "no-auth route guard",
+      "cron_status": "succeeded",
+      "response_status": 403,
+      "response_code": "RECONCILE_DENIED",
+      "edge_region": "ap-northeast-2",
+      "response_correlation": "unique TEST response in job execution time window",
+      "job_removed": true
+    },
+    {
+      "temporary_job_id": 5,
+      "type": "vault-auth oversized-body pre-claim guard",
+      "cron_status": "succeeded",
+      "response_status": 413,
+      "response_code": "REQUEST_TOO_LARGE",
+      "edge_region": "ap-northeast-2",
+      "response_correlation": "unique TEST response in job execution time window",
+      "job_removed": true
+    }
+  ],
+  "test_final": {
+    "temporary_jobs": 0,
+    "active_cron": 0,
+    "queued_payments": 0,
+    "unresolved_cancels": 0
+  },
+  "limitations": [
+    "413 confirms authorization and request-size rejection using deployed source order, not successful processing of a queued job.",
+    "Production empty-queue responses do not show LIVE provider access.",
+    "The Tokyo access-denial cause is consistent with country restriction, but provider egress geolocation and exact LIVE key policy association are unverified.",
+    "An explicitly pinned Seoul region disables automatic region failover during an outage.",
+    "Automatic provider-backed processing via cron has not been tested; only manual deployed worker processing was tested in R06."
+  ],
+  "production_backup_ui": {
+    "plan": "FREE",
+    "displayed": "Free Plan does not include project backups",
+    "external_backup": "NOT_VERIFIED",
+    "restore_test": "NOT_RUN"
+  }
+}

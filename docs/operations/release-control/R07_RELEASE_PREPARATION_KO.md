@@ -22,6 +22,23 @@
 2. `20260828060000_payment_reconcile_scheduler.sql`에는 운영 함수 URL이 포함되어 있다. TEST에 원문을 실행하지 않으며, 운영 실행 전 실제 대상과 현재 cron·Vault 상태를 검토한다.
 3. TEST 회원가입 메일의 429 대응 및 셀프 복구 기능은 미해결이다. 이전 프런트 수정은 메일 발송을 단정하는 문구만 바꿨다.
 4. 구 TEST 보안 키 폐기가 영향을 주는 다른 TEST 연동이 있는지 확인한다. 운영 키 노출이나 교체를 추정하지 않는다.
+5. 운영 Supabase 백업 화면은 현재 FREE 플랜에 프로젝트 백업이 포함되지 않는다고 표시한다. 별도 외부 백업은 존재 여부와 복원 가능성을 확인하지 못했다. 운영 변경 전에 복구 수단과 담당자를 확보해야 한다.
+
+### 2026-11-28 스케줄·리전 실측
+
+- TEST와 운영 DB는 모두 도쿄 리전이다. TEST의 기존 대사 cron은 비활성이지만 명령에는 **운영 함수 URL**이 들어 있다. 그대로 활성화해서는 안 된다.
+- 운영 대사 cron은 활성 상태로 2분마다 운영 함수를 호출하며 Vault 비밀을 참조한다. 명시적 리전은 없다. 최근 30분의 대사 형태 응답 15건은 도쿄 리전, HTTP 200, 대기·처리·실패 각 0이었다. 빈 대기열이므로 LIVE 결제사 조회 성공을 증명하지 않는다. cron 기록의 `succeeded`는 요청 제출 성공이지 대사 성공의 증거가 아니다.
+- 리볼 상점의 TEST와 LIVE 접근 정책 화면에서는 확인된 정책이 각각 대한민국 국가 허용으로 표시됐다. 운영 서버 키가 어느 LIVE 정책에 연결되는지와 실제 Edge 외부 IP의 국가 판정은 확인하지 못했다. 도쿄 TEST의 `API_KEY_ACCESS_DENIED`와 서울 TEST 성공은 국가 제한을 강하게 시사하지만 원인 확정은 아니다.
+- 별도의 임시 TEST cron 두 건이 서울의 TEST 함수로 연결된 후 자동 제거됐다. 첫 요청은 인증을 의도적으로 생략해 `403 RECONCILE_DENIED`, 둘째는 Vault 인증 후 4KB 초과 요청으로 `413 REQUEST_TOO_LARGE`를 받았다. 함수 소스에서 인증은 본문 크기 검사보다 먼저이고, 대사 작업 수집은 그 뒤이므로 인증 경로를 시험하면서 대기열 처리를 피했다. 두 응답은 실행 시각과 TEST 내 유일한 해당 시간대 응답을 대조했다. 최종 TEST 임시 cron·활성 cron·대기 대사·미해결 취소 시도는 모두 0이다. 이는 자동 스케줄을 통한 실제 결제건 처리나 운영 검증이 아니다. `receipts/R07_20261128_scheduler_observations.json`.
+- 후보와 운영의 차이도 확인됐다. 운영 migration 이력에는 후보의 9월 9~14일 migration 8개 이름이 없고 일부 후보 관리자 함수·인덱스가 catalog에서 발견되지 않았다. 운영 Edge 19개는 ACTIVE이나 대사·결제 승인 등 여러 함수의 코드가 후보와 다르다. 이력 누락은 개별 정의가 수동 적용되지 않았다는 증거는 아니며, 파일 차이만으로 동작을 판정하지 않는다.
+
+  이력에서 확인되지 않은 파일은 `20260909061000_admin_order_notes_per_order.sql`, `20260909210500_admin_latest_payment_per_order.sql`, `20260909211500_orders_pagination_indexes.sql`, `20260911000000_edge_rate_limit_insert_race.sql`, `20260911001000_guest_token_rotation_settled_states.sql`, `20260911002000_payment_cancel_null_authorization.sql`, `20260911003000_finalize_confirmation_after_fulfilment.sql`, `20260914000000_payment_cancel_refund_account_null.sql`이다. 운영 catalog에서 `admin_order_notes_page_v1`, `admin_order_latest_payments_v1` 함수와 `orders_created_at_desc_idx`, `orders_status_created_at_desc_idx`, `orders_profile_created_at_desc_idx` 인덱스도 발견되지 않았다. 나머지 정의는 개별 비교가 필요하다.
+
+### 검토용 대사 수정안
+
+현재 운영 cron의 대상 URL과 Vault 인증은 유지하면서 요청 헤더에 `x-region: ap-northeast-2`를 명시하는 방안을 우선 검토한다. [Supabase 리전 호출 문서](https://supabase.com/docs/guides/functions/regional-invocation)에 따르면 응답 헤더로 실행 리전을 확인할 수 있고, 리전을 강제하면 장애 시 다른 리전으로 자동 전환되지 않는다. LIVE 키 정책·서버 키의 연관성, 서비스 지역·장애 대응, 실제 운영 배포 코드와 권한을 확인하기 전에는 이 방안을 운영에 적용하지 않는다.
+
+자동 대사 모니터링은 cron 성공 및 HTTP 200 외에 응답의 `claimed`, `reconciled`, `failed`, `deferred`, DB 대기열·리스·마지막 오류와 최근 성공 처리 시각을 함께 확인해야 한다. TEST의 합성 중복 이벤트 실험에서는 `reconciled=1` 이후 합성 취소 시도가 열린 채 남아 별도로 정리했다. 정상 고객 경로에서 같은 상태가 가능한지는 미확인으로, 결함이라고 단정하지 않고 재현 가능성을 검토한다.
 
 ## 반영·복구안의 작성 조건
 

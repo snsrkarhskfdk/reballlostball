@@ -183,7 +183,7 @@
     ],
     "run_id": "REBALL-RELEASE-20261124-R06-CODEX-01",
     "owner": "LOCAL_CODEX-REBALL-R06-20261124-01",
-    "heartbeat_at": "2026-11-28T05:38:03.050Z",
+    "heartbeat_at": "2026-11-28T06:55:27.960Z",
     "skill_observed": true,
     "actual_model": "GPT-6 (Codex; exact variant not exposed)",
     "actual_reasoning_level": "not exposed",
@@ -375,7 +375,7 @@
         "owner_handover_prepared"
       ],
       "evidence": [],
-      "blocked_reason": "운영 반영안과 복구·인계 준비 필요. 기본 도쿄 대사 접근 거부와 자동 스케줄러 라우팅을 검토하고, 폐기된 TEST 보안 키를 사용하는 다른 TEST 연동이 있으면 확인해야 함."
+      "blocked_reason": "운영 무료 플랜에는 프로젝트 백업 미포함(별도 백업 미확인). 활성 도쿄 대사 cron의 LIVE 키 정책 연계·제공자 접근, 운영자 인계와 복구 준비 미검증."
     },
     {
       "id": "R08",
@@ -528,5 +528,15 @@
     "test_key_security": "OLD_TEST_KEY_PAIR_REVOKED_NEW_KEY_SERVER_MATCH_AND_PROVIDER_GET_PASS",
     "test_key_rotation_evidence": "receipts/R06_20261128_test_key_rotation_observations.json",
     "test_key_revocation_evidence": "receipts/R06_20261128_test_key_revocation_observations.json"
+  },
+  "r07_preflight": {
+    "observed_at": "2026-11-28T06:55:27.960Z",
+    "scheduler_evidence": "receipts/R07_20261128_scheduler_observations.json",
+    "production_cron": "ACTIVE_PROD_URL_TOKYO_NO_REGION_PIN",
+    "test_cron": "INACTIVE_POINTS_PROD_DO_NOT_ENABLE",
+    "test_route": "SEOUL_AUTH_GUARDS_PASS_TEMP_JOBS_REMOVED",
+    "production_provider_access": "NOT_VERIFIED_EMPTY_QUEUE",
+    "release_plan": "R07_RELEASE_PREPARATION_KO.md",
+    "production_backup": "FREE_PLAN_NO_PROJECT_BACKUPS_EXTERNAL_NOT_VERIFIED"
   }
 }
