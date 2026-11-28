@@ -1,0 +1,39 @@
+{
+  "observed_at": "2026-11-28T07:05:23.901Z",
+  "space_id": 24,
+  "scope": "Production backup and restore capability read-only investigation; no export, restore, paid upgrade or production modification.",
+  "production_project_ref": "qbftalhhyfcndanrcwpy",
+  "dashboard": {
+    "plan": "FREE",
+    "scheduled": "Free Plan does not include project backups",
+    "pitr": "Pro Plan add-on",
+    "restore_to_new_project": "Requires Pro or above and physical backups enabled",
+    "restorable_backup_selected": false
+  },
+  "search": {
+    "local_scope": "Four known Reball project/work folders searched for dump/backup filenames; none found.",
+    "google_drive_scope": "Project-name and project-ref metadata search; no results.",
+    "basic_memory": "No project-ref hit in available projects.",
+    "external_backups": "NOT_VERIFIED",
+    "historical_disposable_rehearsal": "Local test database only; not a production-data restore."
+  },
+  "production_metadata": {
+    "database_bytes": 71748755,
+    "storage_buckets": 1,
+    "storage_objects": 0
+  },
+  "local_tools": {
+    "docker_cli": "present",
+    "docker_daemon": "unavailable: Docker Desktop Linux engine named pipe not found",
+    "supabase_cli_on_path": false,
+    "pg_dump_on_path": false,
+    "pg_restore_on_path": false,
+    "psql_on_path": false,
+    "d_drive_filesystem": "exFAT",
+    "c_drive_filesystem": "NTFS",
+    "c_drive_encryption": "NOT_VERIFIED: BitLocker status query access denied"
+  },
+  "restoration": "NOT_VERIFIED",
+  "required_action": "Identify any existing production backup and its access details, or obtain explicit scoped authorization and secure destination for encrypted production export and isolated restore test.",
+  "plan": "R07_BACKUP_RESTORE_PLAN_KO.md"
+}

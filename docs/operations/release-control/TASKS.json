@@ -183,7 +183,7 @@
     ],
     "run_id": "REBALL-RELEASE-20261124-R06-CODEX-01",
     "owner": "LOCAL_CODEX-REBALL-R06-20261124-01",
-    "heartbeat_at": "2026-11-28T06:55:27.960Z",
+    "heartbeat_at": "2026-11-28T07:05:23.901Z",
     "skill_observed": true,
     "actual_model": "GPT-6 (Codex; exact variant not exposed)",
     "actual_reasoning_level": "not exposed",
@@ -359,7 +359,7 @@
       "id": "R07",
       "title": "운영 반영안과 복구·인계 준비",
       "evidence_kind": "test",
-      "status": "PENDING",
+      "status": "BLOCKED",
       "requires": [
         "R03",
         "R05",
@@ -374,8 +374,10 @@
         "merchant_readiness_checked",
         "owner_handover_prepared"
       ],
-      "evidence": [],
-      "blocked_reason": "운영 무료 플랜에는 프로젝트 백업 미포함(별도 백업 미확인). 활성 도쿄 대사 cron의 LIVE 키 정책 연계·제공자 접근, 운영자 인계와 복구 준비 미검증."
+      "evidence": [
+        "receipts/R07_20261128_backup_investigation.json"
+      ],
+      "blocked_reason": "운영 FREE 프로젝트는 관리형 백업·PITR을 제공하지 않고 외부 백업 및 복원 성공 근거를 찾지 못함. 기존 백업 위치 확인 또는 암호화된 운영 데이터 내보내기·격리 복원 시험의 명시 승인과 안전한 보관 방식 필요."
     },
     {
       "id": "R08",
@@ -537,6 +539,7 @@
     "test_route": "SEOUL_AUTH_GUARDS_PASS_TEMP_JOBS_REMOVED",
     "production_provider_access": "NOT_VERIFIED_EMPTY_QUEUE",
     "release_plan": "R07_RELEASE_PREPARATION_KO.md",
-    "production_backup": "FREE_PLAN_NO_PROJECT_BACKUPS_EXTERNAL_NOT_VERIFIED"
+    "production_backup": "FREE_NO_MANAGED_BACKUP_EXTERNAL_UNKNOWN_RESTORE_NOT_VERIFIED",
+    "backup_investigation": "receipts/R07_20261128_backup_investigation.json"
   }
 }
