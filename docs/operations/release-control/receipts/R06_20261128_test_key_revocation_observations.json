@@ -1,0 +1,36 @@
+{
+  "observed_at": "2026-11-28T05:38:03.050Z",
+  "space_id": 24,
+  "scope": "User explicitly approved immediate removal of the old exposed TEST secret and paired TEST security key.",
+  "merchant_environment": "TEST",
+  "test_project": "aohziyemqxfhpbbqpicx",
+  "revocation": {
+    "provider_ui": "Deletion submitted and old expiring key pair no longer listed after page reload.",
+    "old_expiring_rows": 0,
+    "active_secret_rows": 1,
+    "old_key_api_call": "NOT_RUN"
+  },
+  "post_revocation": {
+    "test_server_digest_matches_active_key": true,
+    "provider_get_http": 200,
+    "provider_status": "CANCELED",
+    "provider_order_and_key_match": true,
+    "amount_krw": 23500,
+    "balance_krw": 0,
+    "db_order": "canceled",
+    "db_payment": "canceled",
+    "refunds": 1,
+    "active_cancel_attempts": 0,
+    "queue_cleared": true,
+    "lease_cleared": true,
+    "active_cron": 0,
+    "due_jobs": 0
+  },
+  "limitations": [
+    "The old pair is no longer shown in the merchant UI; no direct old-key API request was made.",
+    "Other TEST systems that depended on the removed old security key were not inventoried and may need the new key configured.",
+    "Default Tokyo Edge invocation remains denied; the prior successful actual worker recheck specified Seoul."
+  ],
+  "new_payment": false,
+  "production_changed": false
+}

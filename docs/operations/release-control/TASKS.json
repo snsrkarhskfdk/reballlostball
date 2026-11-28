@@ -183,7 +183,7 @@
     ],
     "run_id": "REBALL-RELEASE-20261124-R06-CODEX-01",
     "owner": "LOCAL_CODEX-REBALL-R06-20261124-01",
-    "heartbeat_at": "2026-11-28T05:02:51.953Z",
+    "heartbeat_at": "2026-11-28T05:38:03.050Z",
     "skill_observed": true,
     "actual_model": "GPT-6 (Codex; exact variant not exposed)",
     "actual_reasoning_level": "not exposed",
@@ -375,7 +375,7 @@
         "owner_handover_prepared"
       ],
       "evidence": [],
-      "blocked_reason": "도쿄 기본 대사 접근 거부 및 노출된 기존 TEST 키의 유효기간 잔여 문제 해결과 운영 반영안 준비가 필요함. 기존 TEST 키 삭제는 짝 보안 키도 삭제되며 외부 사용 여부 미확인."
+      "blocked_reason": "운영 반영안과 복구·인계 준비 필요. 기본 도쿄 대사 접근 거부와 자동 스케줄러 라우팅을 검토하고, 폐기된 TEST 보안 키를 사용하는 다른 TEST 연동이 있으면 확인해야 함."
     },
     {
       "id": "R08",
@@ -440,6 +440,17 @@
       "source": "User explicitly approved reissuing the exposed Toss TEST key, synchronizing TEST server configuration and reverifying without additional payment.",
       "project_ref": "aohziyemqxfhpbbqpicx",
       "scope": "Affected merchant individual TEST secret; synchronize TEST Edge; no new payment or production changes."
+    },
+    {
+      "capability": "revoke_exposed_toss_test_key_pair",
+      "approved_by": "USER",
+      "approved_at": "2026-11-28T05:38:03.050Z",
+      "source": "User explicitly approved immediate deletion of the old TEST secret and its paired security key after being advised other TEST integrations might be interrupted.",
+      "project_ref": "aohziyemqxfhpbbqpicx",
+      "excludes": [
+        "production",
+        "new payment"
+      ]
     }
   ],
   "r04_preflight": {
@@ -514,7 +525,8 @@
     "test_database_rollback": "PASS_CLAIM_APPLY_ROLLED_BACK",
     "deployed_reconciliation": "PASS_SEOUL_REGION_ACTUAL_PROVIDER_AND_DB",
     "default_region": "FAILED_API_KEY_ACCESS_DENIED_TOKYO",
-    "test_key_security": "NEW_TEST_KEY_ACTIVE_AND_VERIFIED_OLD_EXPOSED_PAIR_STILL_VALID",
-    "test_key_rotation_evidence": "receipts/R06_20261128_test_key_rotation_observations.json"
+    "test_key_security": "OLD_TEST_KEY_PAIR_REVOKED_NEW_KEY_SERVER_MATCH_AND_PROVIDER_GET_PASS",
+    "test_key_rotation_evidence": "receipts/R06_20261128_test_key_rotation_observations.json",
+    "test_key_revocation_evidence": "receipts/R06_20261128_test_key_revocation_observations.json"
   }
 }
