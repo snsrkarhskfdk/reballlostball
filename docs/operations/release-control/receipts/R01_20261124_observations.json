@@ -1,0 +1,22 @@
+{
+  "observed_at": "2026-11-23T21:36:13.312Z",
+  "run_id": "REBALL-RELEASE-20261124-R01-CODEX-01",
+  "registration_head": "a3bb979bed5f0604a2dfefaf5875dcbde4db8081",
+  "browser": {
+    "tool": "ego-browser 2.2.1",
+    "space_id": 2,
+    "page_label": "p1",
+    "origin": "https://reballlostball-git-repair-mr-dr01-a7fa2f-thechangcnds-projects.vercel.app",
+    "meta_backend": "https://aohziyemqxfhpbbqpicx.supabase.co",
+    "observed_resource_host": "aohziyemqxfhpbbqpicx.supabase.co",
+    "account_state": "logged out; sign-up and login buttons displayed"
+  },
+  "deployment": {
+    "source": "Vercel get_alias followed by get_deployment, team thechangcnds-projects",
+    "id": "dpl_D2Lvz1sXBSVSCfuBFsYUKPwnh7Va",
+    "state": "READY",
+    "deployed_sha": "41684cf8592aafc64ad6b9556aa1ba51e82b891f",
+    "target": "staging"
+  },
+  "sequence_note": "Initial read-only browser observation preceded remote ownership registration; same Space and deployment observations repeated after registration."
+}

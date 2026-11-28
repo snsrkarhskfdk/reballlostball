@@ -1,0 +1,95 @@
+{
+  "schema_version": 1,
+  "task_id": "R04",
+  "run_id": "REBALL-RELEASE-20261124-R04-CODEX-01",
+  "status": "PASS",
+  "observed_at": "2026-11-25T06:35:59.088Z",
+  "executor": "LOCAL_CODEX",
+  "code_sha": "7c0c9c46753e9ebcf97c388839d2e91cef038385",
+  "orchestration_sha": "2efffccdbff4c42c34b8a1494e268260b2fa5b3e",
+  "environment": {
+    "kind": "test",
+    "origin": "https://reballlostball-git-repair-mr-dr01-a7fa2f-thechangcnds-projects.vercel.app",
+    "supabase_project_ref": "aohziyemqxfhpbbqpicx",
+    "deployment_id": "dpl_9VZRGqUxpPRTyovRmyik8GhRJCyU",
+    "deployed_sha": "7c0c9c46753e9ebcf97c388839d2e91cef038385"
+  },
+  "actions": [
+    {
+      "action_id": "R04-PAID-01",
+      "kind": "read",
+      "summary": "Read the successful provider TEST payment and matching amounts in TEST DB and payment-confirm logs.",
+      "outcome": "PASS"
+    },
+    {
+      "action_id": "R04-PAID-02",
+      "kind": "read",
+      "summary": "Refreshed the paid guest order in the same ego Space and verified the status, amount and lookup display persisted.",
+      "outcome": "PASS"
+    },
+    {
+      "action_id": "R04-RECOVER-01",
+      "kind": "mutation",
+      "summary": "Simulated client loss after an actual settled-order duplicate response and rechecked the exact confirmation against the TEST backend; both were duplicate HTTP 200 and pending state cleared.",
+      "outcome": "PASS"
+    }
+  ],
+  "assertions": [
+    {
+      "id": "provider_test_mode_observed",
+      "result": "PASS",
+      "evidence_refs": [
+        "receipts/R04_20261125_provider_window_observations.json",
+        "receipts/R04_20261125_test_mode_observations.json"
+      ]
+    },
+    {
+      "id": "legitimate_provider_authorization",
+      "result": "PASS",
+      "evidence_refs": [
+        "receipts/R04_20261125_paid_observations.json"
+      ]
+    },
+    {
+      "id": "confirmation_matches_order_amount",
+      "result": "PASS",
+      "evidence_refs": [
+        "receipts/R04_20261125_paid_observations.json"
+      ]
+    },
+    {
+      "id": "approval_database_readback",
+      "result": "PASS",
+      "evidence_refs": [
+        "receipts/R04_20261125_paid_observations.json"
+      ]
+    },
+    {
+      "id": "return_refresh_lookup",
+      "result": "PASS",
+      "evidence_refs": [
+        "receipts/R04_20261125_paid_observations.json"
+      ]
+    },
+    {
+      "id": "uncertain_result_recovery",
+      "result": "PASS",
+      "evidence_refs": [
+        "receipts/R04_20261125_recovery_observations.json"
+      ]
+    }
+  ],
+  "artifacts": [
+    {
+      "path": "receipts/R04_20261125_paid_observations.json",
+      "sha256": "0a9db1680c4fe4ef3cf0d8342afc13f145ff5f097efcc842785bfcd95c7e88a1",
+      "redacted": true
+    },
+    {
+      "path": "receipts/R04_20261125_recovery_observations.json",
+      "sha256": "4e67f1dd5443704e856fbd5505202e794634f58159b5e8a58aa23a32c61f5c58",
+      "redacted": true
+    }
+  ],
+  "blocker": null
+}

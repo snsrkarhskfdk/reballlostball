@@ -32,6 +32,17 @@ export function normalizeRefundReceiveAccount(value: unknown): RefundReceiveAcco
 
 export type ProviderPayment = Record<string, unknown>;
 
+// The Edge-returned key takes precedence over the HTML key at checkout.
+// Enforce the runtime boundary on that actual value, before loading the SDK.
+export function tossClientKey(): string {
+  const key = (Deno.env.get("TOSS_PAYMENTS_CLIENT_KEY") || "").trim();
+  const valid = isExplicitNonProductionRuntime()
+    ? /^(test|live)_(?:g?ck)_/.test(key)
+    : /^live_(?:g?ck)_/.test(key);
+  if (!valid) throw new HttpError(503, "PAYMENT_CONFIG_MISSING", "결제 설정을 확인할 수 없습니다.");
+  return key;
+}
+
 export function assertMockPaymentProviderAllowed(): void {
   if (!isExplicitNonProductionRuntime()) {
     throw new HttpError(503, "MOCK_PROVIDER_DISABLED", "Mock payments are disabled outside explicit non-production runtimes");
@@ -98,7 +109,11 @@ class TossPaymentsProvider implements PaymentProvider {
 
   constructor() {
     this.baseUrl = (Deno.env.get("TOSS_PAYMENTS_API_URL") || "https://api.tosspayments.com").replace(/\/$/, "");
-    this.authorization = tossAuthorizationHeader(Deno.env.get("TOSS_SECRET_KEY") || Deno.env.get("TOSS_PAYMENTS_SECRET_KEY") || "");
+    const secretKey = Deno.env.get("TOSS_SECRET_KEY") || Deno.env.get("TOSS_PAYMENTS_SECRET_KEY") || "";
+    if (!isExplicitNonProductionRuntime() && !/^live_(?:g?sk)_/.test(secretKey)) {
+      throw new HttpError(503, "PAYMENT_CONFIG_MISSING", "운영 결제에는 Toss LIVE secret key가 필요합니다.");
+    }
+    this.authorization = tossAuthorizationHeader(secretKey);
   }
 
   private headers(idempotencyKey?: string): Headers {

@@ -1,0 +1,74 @@
+{
+  "schema_version": 1,
+  "task_id": "R03",
+  "run_id": "REBALL-RELEASE-20261124-R03-CODEX-01",
+  "status": "BLOCKED",
+  "observed_at": "2026-11-24T09:05:49.865Z",
+  "executor": "LOCAL_CODEX",
+  "code_sha": "b2e17ad1351834028dfadd53f1dac7ad485bb883",
+  "orchestration_sha": "9a7ef2ac8ba329db3cc62c28dc1e1563aba14f02",
+  "environment": {
+    "kind": "test",
+    "origin": "https://reballlostball-git-repair-mr-dr01-a7fa2f-thechangcnds-projects.vercel.app",
+    "supabase_project_ref": "aohziyemqxfhpbbqpicx",
+    "deployment_id": "dpl_4Y7UgDo1MRu6f7bZAQVPtctvVryn",
+    "deployed_sha": "b2e17ad1351834028dfadd53f1dac7ad485bb883"
+  },
+  "actions": [
+    {
+      "action_id": "R03-A01",
+      "kind": "read",
+      "summary": "Verified user approval, current TEST deployment, backend and baseline aggregate counts: zero auth users and seven existing orders.",
+      "outcome": "PASS"
+    },
+    {
+      "action_id": "R03-A02",
+      "kind": "read",
+      "summary": "Prepared first synthetic account form locally with marketing opt-outs; actual Turnstile requested human verification. Signup has not been submitted.",
+      "outcome": "BLOCKED"
+    }
+  ],
+  "assertions": [
+    {
+      "id": "synthetic_accounts_owned",
+      "result": "NOT_RUN",
+      "evidence_refs": []
+    },
+    {
+      "id": "signup_and_auth_verified",
+      "result": "NOT_RUN",
+      "evidence_refs": []
+    },
+    {
+      "id": "address_persistence",
+      "result": "NOT_RUN",
+      "evidence_refs": []
+    },
+    {
+      "id": "own_order_access",
+      "result": "NOT_RUN",
+      "evidence_refs": []
+    },
+    {
+      "id": "cross_account_denied",
+      "result": "NOT_RUN",
+      "evidence_refs": []
+    },
+    {
+      "id": "admin_role_login",
+      "result": "NOT_RUN",
+      "evidence_refs": []
+    },
+    {
+      "id": "admin_search_and_shipping",
+      "result": "NOT_RUN",
+      "evidence_refs": []
+    }
+  ],
+  "artifacts": [],
+  "blocker": {
+    "owner": "USER",
+    "required_action": "In ego Space 2 complete the Turnstile check, click ID duplicate check, and complete any second Turnstile check; do not submit signup yet.",
+    "resume_check": "After user confirms take over the same Space, inspect duplicate-check and CAPTCHA state, and submit once only if ready."
+  }
+}

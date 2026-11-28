@@ -1,0 +1,102 @@
+{
+  "schema_version": 1,
+  "task_id": "R03",
+  "run_id": "REBALL-RELEASE-20261124-R03-CODEX-01",
+  "status": "PASS",
+  "observed_at": "2026-11-24T11:01:43.168Z",
+  "executor": "LOCAL_CODEX",
+  "code_sha": "b2e17ad1351834028dfadd53f1dac7ad485bb883",
+  "orchestration_sha": "f415128dbbd87012f51233ebd20672e75f58b5f1",
+  "environment": {
+    "kind": "test",
+    "origin": "https://reballlostball-git-repair-mr-dr01-a7fa2f-thechangcnds-projects.vercel.app",
+    "supabase_project_ref": "aohziyemqxfhpbbqpicx",
+    "deployment_id": "dpl_4Y7UgDo1MRu6f7bZAQVPtctvVryn",
+    "deployed_sha": "b2e17ad1351834028dfadd53f1dac7ad485bb883"
+  },
+  "actions": [
+    {
+      "action_id": "R03-A01",
+      "kind": "mutation",
+      "summary": "Approved TEST-only Site URL correction, three synthetic accounts and one manager role; confirmed all accounts.",
+      "outcome": "PASS"
+    },
+    {
+      "action_id": "R03-A02",
+      "kind": "read",
+      "summary": "Verified customer address persistence and own-order success versus cross-account 404.",
+      "outcome": "PASS"
+    },
+    {
+      "action_id": "R03-A03",
+      "kind": "mutation",
+      "summary": "Admin searched owned synthetic fixture and submitted synthetic tracking; database readback showed shipped with one event and zero fixture payments or reservations.",
+      "outcome": "PASS"
+    },
+    {
+      "action_id": "R03-A04",
+      "kind": "read",
+      "summary": "Observed signup email 429 and misleading completion; recovery succeeded after one later resend. Failure handling remains an open release issue.",
+      "outcome": "PASS"
+    }
+  ],
+  "assertions": [
+    {
+      "id": "synthetic_accounts_owned",
+      "result": "PASS",
+      "evidence_refs": [
+        "receipts/R03_20261124_final_observations.json"
+      ]
+    },
+    {
+      "id": "signup_and_auth_verified",
+      "result": "PASS",
+      "evidence_refs": [
+        "receipts/R03_20261124_final_observations.json"
+      ]
+    },
+    {
+      "id": "address_persistence",
+      "result": "PASS",
+      "evidence_refs": [
+        "receipts/R03_20261124_final_observations.json"
+      ]
+    },
+    {
+      "id": "own_order_access",
+      "result": "PASS",
+      "evidence_refs": [
+        "receipts/R03_20261124_final_observations.json"
+      ]
+    },
+    {
+      "id": "cross_account_denied",
+      "result": "PASS",
+      "evidence_refs": [
+        "receipts/R03_20261124_final_observations.json"
+      ]
+    },
+    {
+      "id": "admin_role_login",
+      "result": "PASS",
+      "evidence_refs": [
+        "receipts/R03_20261124_final_observations.json"
+      ]
+    },
+    {
+      "id": "admin_search_and_shipping",
+      "result": "PASS",
+      "evidence_refs": [
+        "receipts/R03_20261124_final_observations.json"
+      ]
+    }
+  ],
+  "artifacts": [
+    {
+      "path": "receipts/R03_20261124_final_observations.json",
+      "sha256": "d413a8b749b74b1c30d4cd46eda181fef1878ee541edc6e5065d2ce1552e55a0",
+      "redacted": true
+    }
+  ],
+  "blocker": null
+}

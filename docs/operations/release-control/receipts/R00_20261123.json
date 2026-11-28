@@ -1,0 +1,36 @@
+{
+  "schema_version": 1,
+  "task_id": "R00",
+  "run_id": "github-actions-45170818242",
+  "status": "PASS",
+  "observed_at": "2026-11-23T21:06:08+09:00",
+  "executor": "GITHUB_ACTIONS",
+  "source_kind": "HISTORICAL_CI_IMPORT",
+  "imported_on": "2026-11-24",
+  "code_sha": "b2e17ad1351834028dfadd53f1dac7ad485bb883",
+  "orchestration_sha": null,
+  "environment": {
+    "kind": "ci",
+    "origin": null,
+    "supabase_project_ref": null,
+    "deployment_id": null,
+    "deployed_sha": null
+  },
+  "actions": [
+    {
+      "action_id": "full-qa-183",
+      "kind": "read",
+      "summary": "기존 PR 업데이트로 자동 실행된 GitHub Actions의 head_sha와 실제 로그를 확인했다. Node 22.23.5에서 frontend 240, backend 54, Deno 17, contracts 57, E2E 74, a11y 10개가 통과했다.",
+      "outcome": "PASS"
+    }
+  ],
+  "assertions": [
+    { "id": "full_qa", "result": "PASS", "evidence_refs": ["https://github.com/snsrkarhskfdk/reballlostball/actions/runs/45170818242"] },
+    { "id": "browser_e2e", "result": "PASS", "evidence_refs": ["https://github.com/snsrkarhskfdk/reballlostball/actions/runs/45170818242/job/137679570285"] },
+    { "id": "accessibility", "result": "PASS", "evidence_refs": ["https://github.com/snsrkarhskfdk/reballlostball/actions/runs/45170818242/job/137679570285"] },
+    { "id": "windows_portability", "result": "PASS", "evidence_refs": ["https://github.com/snsrkarhskfdk/reballlostball/actions/runs/45170818242/job/137679569846"] },
+    { "id": "db_grants", "result": "PASS", "evidence_refs": ["https://github.com/snsrkarhskfdk/reballlostball/actions/runs/45170818150"] }
+  ],
+  "artifacts": [],
+  "blocker": null
+}

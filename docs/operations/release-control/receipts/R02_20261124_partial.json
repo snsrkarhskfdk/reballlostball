@@ -1,0 +1,105 @@
+{
+  "schema_version": 1,
+  "task_id": "R02",
+  "run_id": "REBALL-RELEASE-20261124-R02-CODEX-01",
+  "status": "BLOCKED",
+  "observed_at": "2026-11-24T07:11:40.242Z",
+  "executor": "LOCAL_CODEX",
+  "code_sha": "b2e17ad1351834028dfadd53f1dac7ad485bb883",
+  "orchestration_sha": "5811595dee7573d2347b714b16723188c95e7b68",
+  "environment": {
+    "kind": "test",
+    "origin": "https://reballlostball-git-repair-mr-dr01-a7fa2f-thechangcnds-projects.vercel.app",
+    "supabase_project_ref": "aohziyemqxfhpbbqpicx",
+    "deployment_id": "dpl_4Y7UgDo1MRu6f7bZAQVPtctvVryn",
+    "deployed_sha": "b2e17ad1351834028dfadd53f1dac7ad485bb883"
+  },
+  "actions": [
+    {
+      "action_id": "R02-A01",
+      "kind": "read",
+      "summary": "Verified explicit user approval, exact SHA CI, isolated TEST project, branch-specific preview backend configuration, and existing state.",
+      "outcome": "PASS"
+    },
+    {
+      "action_id": "R02-A02",
+      "kind": "mutation",
+      "summary": "Deployed only TEST admin-orders-page function using reviewed sources; retained previous verify_jwt setting; read back version 20 and all five files.",
+      "outcome": "PASS"
+    },
+    {
+      "action_id": "R02-A03",
+      "kind": "mutation",
+      "summary": "Created one Preview deployment for approved SHA and branch; verified READY and stable preview alias.",
+      "outcome": "PASS"
+    },
+    {
+      "action_id": "R02-A04",
+      "kind": "read",
+      "summary": "Verified deployed frontend backend, public CAPTCHA indicators, Edge preflight and unchanged production frontend deployment.",
+      "outcome": "PASS"
+    },
+    {
+      "action_id": "R02-A05",
+      "kind": "read",
+      "summary": "Current backend TEST runtime, payment/CAPTCHA secrets and callback settings remain unverified; Supabase dashboard requested sign-in.",
+      "outcome": "BLOCKED"
+    }
+  ],
+  "assertions": [
+    {
+      "id": "explicit_test_deploy_approval",
+      "result": "PASS",
+      "evidence_refs": [
+        "TASKS.json",
+        "CONTROL_KO.md"
+      ]
+    },
+    {
+      "id": "exact_source_ci",
+      "result": "PASS",
+      "evidence_refs": [
+        "https://github.com/snsrkarhskfdk/reballlostball/actions/runs/45170818242",
+        "https://github.com/snsrkarhskfdk/reballlostball/actions/runs/45170818150"
+      ]
+    },
+    {
+      "id": "frontend_deployed_sha",
+      "result": "PASS",
+      "evidence_refs": [
+        "receipts/R02_20261124_partial_observations.json"
+      ]
+    },
+    {
+      "id": "edge_versions_aligned",
+      "result": "PASS",
+      "evidence_refs": [
+        "receipts/R02_20261124_partial_observations.json"
+      ]
+    },
+    {
+      "id": "test_configuration_verified",
+      "result": "NOT_RUN",
+      "evidence_refs": []
+    },
+    {
+      "id": "production_unchanged",
+      "result": "PASS",
+      "evidence_refs": [
+        "receipts/R02_20261124_partial_observations.json"
+      ]
+    }
+  ],
+  "artifacts": [
+    {
+      "path": "receipts/R02_20261124_partial_observations.json",
+      "sha256": "5a1b15d3d6e7459641b5a787c30cd1677589473f217ae12572830b4a07d1ded1",
+      "redacted": true
+    }
+  ],
+  "blocker": {
+    "owner": "USER",
+    "required_action": "Sign in to Supabase in ego lite Space 2 p2 for the isolated TEST project, without sending credentials in chat.",
+    "resume_check": "After user confirms, take over same Space and inspect TEST runtime/secret presence and callback/allowlist configuration without exposing sensitive values; recheck current deployment before marking R02 VERIFIED."
+  }
+}

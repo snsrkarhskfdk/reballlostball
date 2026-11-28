@@ -60,6 +60,19 @@ async function parseResponse(response: Response): Promise<unknown> {
   }
 }
 
+// Postgres/PostgREST conditions that mean "try again", not "your request was wrong".
+// Collapsing these into a definitive 4xx told the browser a payment confirmation had
+// failed for good, so it discarded the stored confirmation tuple even though the
+// provider may already have charged the customer. Anything transient must surface as
+// 5xx so retry/recovery paths stay available.
+const TRANSIENT_DATABASE_CODES = new Set([
+  "08000", "08003", "08006",          // connection exception
+  "40001", "40P01",                    // serialization failure, deadlock detected
+  "53100", "53200", "53300", "53400",  // insufficient resources
+  "55006", "55P03",                    // object in use, lock not available
+  "57014", "57P01", "57P02", "57P03",  // canceled, shutdown, cannot connect now
+]);
+
 export async function rpc<T = unknown>(name: string, body: Record<string, unknown>): Promise<T> {
   if (!/^[a-z0-9_]+$/.test(name)) throw new HttpError(500, "INVALID_RPC", "서비스 요청을 구성하지 못했습니다.");
   const response = await fetch(`${supabaseUrl()}/rest/v1/rpc/${name}`, {
@@ -71,8 +84,19 @@ export async function rpc<T = unknown>(name: string, body: Record<string, unknow
   if (!response.ok) {
     const error = payload as Record<string, unknown> | null;
     const upstreamCode = cleanString(error?.code, 40);
-    const status = upstreamCode === "42501" ? 403 : upstreamCode === "23505" ? 409 : upstreamCode === "22023" ? 400 : 422;
-    throw new HttpError(status, upstreamCode || "DATABASE_REJECTED", "요청을 안전하게 처리할 수 없습니다.");
+    const transient = response.status >= 500 || TRANSIENT_DATABASE_CODES.has(upstreamCode);
+    const status = upstreamCode === "42501" ? 403
+      : upstreamCode === "23505" ? 409
+      : upstreamCode === "22023" ? 400
+      : transient ? 503
+      : 422;
+    throw new HttpError(
+      status,
+      upstreamCode || (transient ? "DATABASE_UNAVAILABLE" : "DATABASE_REJECTED"),
+      transient
+        ? "일시적인 오류로 요청을 완료하지 못했습니다. 잠시 후 다시 시도해 주세요."
+        : "요청을 안전하게 처리할 수 없습니다.",
+    );
   }
   return payload as T;
 }

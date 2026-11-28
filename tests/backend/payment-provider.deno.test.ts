@@ -1,6 +1,7 @@
 import {
   decryptSensitiveJson,
   encryptSensitiveJson,
+  hmacSha256Hex,
   ProviderError,
   sanitizeProviderPayload,
   sha256Hex,
@@ -10,6 +11,7 @@ import {
   normalizeRefundReceiveAccount,
   paymentConfirmationDisposition,
   paymentProvider,
+  tossClientKey,
   providerFailureIsDefinitive,
 } from "../../supabase/functions/_shared/payments.ts";
 import {
@@ -22,6 +24,7 @@ import {
   withFetchMock,
 } from "./edge-handler-harness.ts";
 import { rpc } from "../../supabase/functions/_shared/supabase.ts";
+import { verifyCaptcha } from "../../supabase/functions/_shared/security.ts";
 import { handler as adminMembersHandler } from "./edge-handlers/admin-members.ts";
 import { handler as authAssistHandler } from "./edge-handlers/auth-assist.ts";
 import { handler as getOrderHandler } from "./edge-handlers/get-order.ts";
@@ -914,11 +917,15 @@ Deno.test("admin members HTTP boundary denies customer/inventory/payments and pe
   );
 });
 
-Deno.test("signup, login, and account-assist HTTP endpoints surface DB rate limits before auth work", async () => {
+Deno.test("auth endpoints throttle caller IP before CAPTCHA and protect subjects only after verification", async () => {
   const cases = [
     {
       edge: "signup-with-login-id",
       scope: "auth_signup",
+      subject: "rate.user:rate@example.test",
+      limit: 5,
+      window: 3600,
+      block: 3600,
       body: {
         loginId: "rate.user",
         email: "rate@example.test",
@@ -930,6 +937,10 @@ Deno.test("signup, login, and account-assist HTTP endpoints surface DB rate limi
     {
       edge: "login-with-identifier",
       scope: "auth_login_request",
+      subject: "rate@example.test",
+      limit: 30,
+      window: 900,
+      block: 900,
       body: {
         identifier: "rate@example.test",
         password: "not-a-real-password",
@@ -939,6 +950,10 @@ Deno.test("signup, login, and account-assist HTTP endpoints surface DB rate limi
     {
       edge: "auth-assist",
       scope: "auth_assist",
+      subject: "find-id:rate@example.test:01012345678",
+      limit: 5,
+      window: 3600,
+      block: 3600,
       body: {
         mode: "find-id",
         name: "테스트",
@@ -947,41 +962,222 @@ Deno.test("signup, login, and account-assist HTTP endpoints surface DB rate limi
         captchaToken: "captcha-token-not-evaluated",
       },
     },
+    {
+      edge: "auth-assist",
+      scope: "auth_assist",
+      subject: "password-reset:rate@example.test:01012345678",
+      limit: 5,
+      window: 3600,
+      block: 3600,
+      body: {
+        mode: "password-reset",
+        name: "테스트",
+        phone: "01012345678",
+        identifier: "rate@example.test",
+        captchaToken: "captcha-token-not-evaluated",
+      },
+    },
   ] as const;
 
   for (const scenario of cases) {
-    const scopes: string[] = [];
+    const preScope = `${scenario.scope}_pre`;
+    const callerIp = "203.0.113.10";
+    const expectedPreKeys = await Promise.all(["ip", "subject"].map((kind) =>
+      hmacSha256Hex(EDGE_ENV.AUTH_RATE_LIMIT_PEPPER, `${preScope}:${kind}:${callerIp}`)
+    ));
+    const expectedSubjectKeys = await Promise.all([
+      hmacSha256Hex(EDGE_ENV.AUTH_RATE_LIMIT_PEPPER, `${scenario.scope}:ip:${callerIp}`),
+      hmacSha256Hex(EDGE_ENV.AUTH_RATE_LIMIT_PEPPER, `${scenario.scope}:subject:${scenario.subject}`),
+    ]);
+    const events: string[] = [];
+    let blockPreLimit = true;
     const responder = rpcOnlyResponder(async (name, body) => {
       if (name !== "consume_edge_rate_limit_v1") {
         throw new Error(`Auth work continued to RPC ${name}`);
       }
-      scopes.push(String(body.p_scope));
-      return { allowed: false, retryAfter: 37, remaining: 0 };
-    }, async (request) => {
-      throw new Error(
-        `Auth work continued to HTTP ${request.method} ${request.url}`,
+      assertEqual(
+        [body.p_limit, body.p_window_seconds, body.p_block_seconds],
+        [scenario.limit, scenario.window, scenario.block],
+        `${scenario.edge} weakened its existing rate limit`,
       );
+      const scope = String(body.p_scope);
+      events.push(`${scope}:${body.p_key_hash}`);
+      return {
+        allowed: scope === preScope && !blockPreLimit,
+        retryAfter: 37,
+        remaining: 0,
+      };
+    }, async (request) => {
+      assertEqual(
+        request.url,
+        "https://challenges.cloudflare.com/turnstile/v0/siteverify",
+        `${scenario.edge} continued to auth HTTP work`,
+      );
+      const form = await request.formData();
+      assertEqual(form.get("remoteip"), callerIp, "CAPTCHA lost caller IP");
+      events.push("captcha");
+      return jsonResult({ success: form.get("response") === "verified-captcha-token" });
     });
     const handler = await edgeHandler(scenario.edge);
     await withEdgeMocks(responder, async () => {
-      const result = await invokeJson(handler, scenario.edge, scenario.body);
-      assert(
-        result.response.status === 429,
-        `${scenario.edge} returned ${result.response.status}`,
+      const preEvents = expectedPreKeys.map((key) => `${preScope}:${key}`);
+      const postEvents = expectedSubjectKeys.map((key) => `${scenario.scope}:${key}`);
+      const assertRateLimited = (result: Awaited<ReturnType<typeof invokeJson>>) => {
+        assertEqual(result.response.status, 429, `${scenario.edge} lost rate limiting`);
+        assertEqual(result.response.headers.get("retry-after"), "37", `${scenario.edge} lost Retry-After`);
+        assertEqual(result.payload.code, "RATE_LIMITED", `${scenario.edge} changed its rate error code`);
+        assertEqual(result.payload.message, "요청이 너무 많습니다. 잠시 후 다시 시도해 주세요.", `${scenario.edge} changed its rate error message`);
+      };
+
+      assertRateLimited(await invokeJson(handler, scenario.edge, scenario.body));
+      assertEqual(events, preEvents, `${scenario.edge} did not block only caller IP before CAPTCHA`);
+      blockPreLimit = false;
+
+      // A full victim quota of invalid solves must never consume the victim's bucket.
+      for (let attempt = 0; attempt < scenario.limit; attempt += 1) {
+        const start = events.length;
+        const result = await invokeJson(handler, scenario.edge, scenario.body);
+        assertEqual(result.response.status, 403, `${scenario.edge} did not reject invalid CAPTCHA`);
+        assertEqual(result.payload.code, "CAPTCHA_FAILED", `${scenario.edge} changed its CAPTCHA error`);
+        assertEqual(
+          events.slice(start),
+          [...preEvents, "captcha"],
+          `${scenario.edge} consumed a victim bucket before CAPTCHA succeeded`,
+        );
+      }
+
+      const start = events.length;
+      assertRateLimited(await invokeJson(handler, scenario.edge, {
+        ...scenario.body,
+        captchaToken: "verified-captcha-token",
+      }));
+      assertEqual(
+        events.slice(start),
+        [...preEvents, "captcha", ...postEvents],
+        `${scenario.edge} did not enforce its existing subject limit after CAPTCHA`,
       );
-      assert(
-        result.response.headers.get("retry-after") === "37",
-        `${scenario.edge} lost Retry-After`,
-      );
-      assert(
-        result.payload.code === "RATE_LIMITED",
-        `${scenario.edge} exposed the wrong rate error`,
-      );
+    }, {
+      AUTH_CAPTCHA_MODE: "enforced",
+      AUTH_CAPTCHA_PROVIDER: "turnstile",
+      AUTH_CAPTCHA_SECRET_KEY: "test-captcha-secret",
+      AUTH_CAPTCHA_EXPECTED_HOSTNAMES: "",
     });
-    assertEqual(
-      scopes,
-      [scenario.scope, scenario.scope],
-      `${scenario.edge} did not guard IP and subject`,
-    );
   }
+});
+
+Deno.test("transient database failures surface as retryable 5xx, not a definitive 4xx", async () => {
+  // A confirmation tuple is only discarded by the browser when the failure looks
+  // definitive (toss-client treats >=500 as retryable). Mapping a transient
+  // Postgres condition to 422 destroyed the customer's recovery path after the
+  // provider had already approved the payment.
+  const transient = [
+    { code: "55P03", label: "lock_not_available" },
+    { code: "40001", label: "serialization_failure" },
+    { code: "40P01", label: "deadlock_detected" },
+    { code: "57014", label: "query_canceled" },
+    { code: "08006", label: "connection_failure" },
+    { code: "53300", label: "too_many_connections" },
+  ];
+  for (const { code, label } of transient) {
+    const status = await withEnvironment(EDGE_ENV, () =>
+      withFetchMock(
+        () => new Response(JSON.stringify({ code, message: label }), { status: 400 }),
+        async () => {
+          try {
+            await rpc("finalize_payment_confirmation_v1", {});
+            return 0;
+          } catch (error) {
+            return Number((error as { status?: number }).status) || 0;
+          }
+        },
+      ));
+    assert(status >= 500, `${label} (${code}) must surface as 5xx so the confirmation tuple survives, got ${status}.`);
+  }
+
+  // A PostgREST server error carries no Postgres code at all.
+  const upstream5xx = await withEnvironment(EDGE_ENV, () =>
+    withFetchMock(
+      () => new Response("", { status: 503 }),
+      async () => {
+        try {
+          await rpc("finalize_payment_confirmation_v1", {});
+          return 0;
+        } catch (error) {
+          return Number((error as { status?: number }).status) || 0;
+        }
+      },
+    ));
+  assert(upstream5xx >= 500, `An upstream PostgREST 5xx must stay retryable, got ${upstream5xx}.`);
+
+  // Genuine client errors must stay definitive, or a real rejection would retry forever.
+  const definitive: Array<[string, number]> = [
+    ["42501", 403],
+    ["23505", 409],
+    ["22023", 400],
+    ["23514", 422],
+  ];
+  for (const [code, expected] of definitive) {
+    const status = await withEnvironment(EDGE_ENV, () =>
+      withFetchMock(
+        () => new Response(JSON.stringify({ code, message: code }), { status: 400 }),
+        async () => {
+          try {
+            await rpc("finalize_payment_confirmation_v1", {});
+            return 0;
+          } catch (error) {
+            return Number((error as { status?: number }).status) || 0;
+          }
+        },
+      ));
+    assertEqual(status, expected, `Definitive condition ${code} must keep its status.`);
+  }
+});
+
+Deno.test("production cannot use sandbox Toss secrets or Cloudflare dummy secrets", async () => {
+  for (const environment of ["", "production"]) {
+    for (const key of ["", "test_sk_fixture", "test_gsk_fixture"]) {
+      await withEnvironment({ DENO_ENV: environment, PAYMENT_PROVIDER: "toss_payments", TOSS_SECRET_KEY: key, TOSS_PAYMENTS_SECRET_KEY: "" }, () => {
+        let rejected = false;
+        try { paymentProvider(); } catch (error) { rejected = (error as { code?: string }).code === "PAYMENT_CONFIG_MISSING"; }
+        assert(rejected, "production must reject empty/sandbox secrets before payment traffic");
+        return Promise.resolve();
+      });
+    }
+    for (const secret of ["1x0000000000000000000000000000000AA", "2x0000000000000000000000000000000AA", "3x0000000000000000000000000000000AA"]) {
+      await withEnvironment({ DENO_ENV: environment, AUTH_CAPTCHA_PROVIDER: "turnstile", AUTH_CAPTCHA_SECRET_KEY: secret }, async () => {
+        let rejected = false;
+        await withFetchMock(() => { throw new Error("dummy credential reached network"); }, async () => {
+          try { await verifyCaptcha(new Request("https://reballlostball.com"), "XXXX.DUMMY.TOKEN.XXXX"); }
+          catch (error) { rejected = (error as { code?: string }).code === "CAPTCHA_NOT_CONFIGURED"; }
+        });
+        assert(rejected, "production must reject Cloudflare dummy secrets before verification traffic");
+      });
+    }
+  }
+  await withEnvironment({ DENO_ENV: "test", PAYMENT_PROVIDER: "toss_payments", TOSS_SECRET_KEY: "test_sk_fixture" }, () => {
+    assert(paymentProvider().name === "toss_payments", "sandbox adapter remains available in isolated test runtime");
+    return Promise.resolve();
+  });
+});
+
+
+Deno.test("Edge-returned Toss client key enforces production LIVE boundary", async () => {
+  for (const environment of ["", "production"]) {
+    for (const key of ["", "test_ck_fixture", "test_gck_fixture"]) {
+      await withEnvironment({ DENO_ENV: environment, TOSS_PAYMENTS_CLIENT_KEY: key }, () => {
+        let code = "";
+        try { tossClientKey(); } catch (error) { code = (error as {code:string}).code; }
+        assertEqual(code, "PAYMENT_CONFIG_MISSING", "production must reject a returned TEST key");
+        return Promise.resolve();
+      });
+    }
+    await withEnvironment({ DENO_ENV: environment, TOSS_PAYMENTS_CLIENT_KEY: "live_ck_fixture" }, () => {
+      assertEqual(tossClientKey(), "live_ck_fixture", "LIVE key accepted");
+      return Promise.resolve();
+    });
+  }
+  await withEnvironment({ DENO_ENV: "test", TOSS_PAYMENTS_CLIENT_KEY: "test_ck_fixture" }, () => {
+    assertEqual(tossClientKey(), "test_ck_fixture", "isolated sandbox key remains accepted");
+    return Promise.resolve();
+  });
 });

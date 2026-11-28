@@ -52,6 +52,9 @@ export async function verifyCaptcha(req: Request, tokenValue: unknown): Promise<
   const provider = cleanString(Deno.env.get("AUTH_CAPTCHA_PROVIDER"), 20).toLowerCase();
   const secret = Deno.env.get("AUTH_CAPTCHA_SECRET_KEY") || "";
   const mode = cleanString(Deno.env.get("AUTH_CAPTCHA_MODE") || "enforced", 20).toLowerCase();
+  if (!isExplicitNonProductionRuntime() && /^[123]x0{31}AA$/.test(secret)) {
+    throw new HttpError(503, "CAPTCHA_NOT_CONFIGURED", "운영 환경에서는 CAPTCHA test secret을 사용할 수 없습니다.");
+  }
 
   if (mode === "test" && isExplicitNonProductionRuntime()) {
     const expected = Deno.env.get("AUTH_CAPTCHA_TEST_TOKEN") || "";

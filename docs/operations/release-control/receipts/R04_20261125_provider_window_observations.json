@@ -1,0 +1,20 @@
+{
+  "observed_at": "2026-11-25T06:04:44.812Z",
+  "run_id": "REBALL-RELEASE-20261124-R04-CODEX-01",
+  "space_id": 0,
+  "source": "Actual Toss payment iframe opened from the one owned synthetic TEST order",
+  "provider_test_message": "실제 결제가 안되는 테스트입니다",
+  "displayed_amount_krw": 23500,
+  "payment_choice": "card selection",
+  "checkout_state": "Existing order payment_ready, payment ready; no provider authorization observed",
+  "reservation": {
+    "status": "reserved",
+    "expires_at": "2026-11-25T06:36:11.168789Z"
+  },
+  "user_action": "If a suitable card is available and the owner chooses to continue, user personally selects payment method, enters any sensitive information, and completes provider consent/authentication. Never send card details or codes in chat. If no card is available, report that and do not invent one.",
+  "limitations": [
+    "No card information was entered and no provider terms were accepted by the agent.",
+    "No provider authorization or payment completion has been verified.",
+    "Official Toss FAQ states there are no domestic test card numbers."
+  ]
+}

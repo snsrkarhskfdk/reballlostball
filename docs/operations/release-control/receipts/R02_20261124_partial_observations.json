@@ -1,0 +1,37 @@
+{
+  "observed_at": "2026-11-24T07:11:40.242Z",
+  "run_id": "REBALL-RELEASE-20261124-R02-CODEX-01",
+  "reviewed_sha": "b2e17ad1351834028dfadd53f1dac7ad485bb883",
+  "preview": {
+    "origin": "https://reballlostball-git-repair-mr-dr01-a7fa2f-thechangcnds-projects.vercel.app",
+    "deployment_id": "dpl_4Y7UgDo1MRu6f7bZAQVPtctvVryn",
+    "state": "READY",
+    "git_branch": "repair/mr-dr01-harness-declare-scope",
+    "deployed_sha": "b2e17ad1351834028dfadd53f1dac7ad485bb883",
+    "backend_ref": "aohziyemqxfhpbbqpicx",
+    "public_key_present": true,
+    "captcha_provider": "turnstile",
+    "captcha_site_key_present": true,
+    "toss_frontend_key_present": false,
+    "account_state": "logged out"
+  },
+  "edge": {
+    "project_ref": "aohziyemqxfhpbbqpicx",
+    "total": 17,
+    "unchanged_source_matches": 16,
+    "updated_function": "admin-orders-page",
+    "version_before": 19,
+    "version_after": 20,
+    "verify_jwt": false,
+    "post_deploy_five_files_match": true,
+    "bundle_sha256": "f02f49d8c904fa9fb5784a870a7dc41fdd03b490f34096347316dd3947cb11a2",
+    "cors_preflight_status": 204,
+    "cors_matches_preview_origin": true
+  },
+  "production": {
+    "deployment_id_before": "dpl_6VBFnUd9GyFTCoxsGdJRCVymCXmV",
+    "deployment_id_after": "dpl_6VBFnUd9GyFTCoxsGdJRCVymCXmV",
+    "sha": "9f26f27a8b8833236618db9c0e72bdf415e7f161"
+  },
+  "remaining": "Current TEST server-side runtime, payment/CAPTCHA configuration and callback settings not yet verified; Supabase dashboard requires sign in."
+}

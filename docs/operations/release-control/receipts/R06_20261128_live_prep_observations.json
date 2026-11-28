@@ -1,0 +1,27 @@
+{
+  "observed_at": "2026-11-27T18:06:47.907Z",
+  "space_id": 23,
+  "scope": "Previously canceled owned TEST payment; no additional payment",
+  "test_webhook_replay": {
+    "http": 200,
+    "received": true,
+    "duplicate": true,
+    "provider_lookup": "TEST webhook re-queries Toss before deduplication"
+  },
+  "original_after": {
+    "order": "canceled",
+    "payment": "canceled",
+    "processed_events": 1,
+    "refunds": 1,
+    "active_cancel_attempts": 0
+  },
+  "prepared_runner": {
+    "path": "evidence/r06-live-provider-isolated.ts",
+    "sha256": "1d35da46e6562b9dc79f61f7b17bdd650470c999fc6a323f1b61616a4f2513a5",
+    "deno_check": "PASS",
+    "provider": "real Toss TEST GET only; execution pending login",
+    "database": "isolated mock",
+    "actual_deployed_worker": "NOT_TESTED"
+  },
+  "toss_login": "required"
+}

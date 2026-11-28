@@ -1,0 +1,82 @@
+{
+  "schema_version": 1,
+  "task_id": "R05",
+  "run_id": "REBALL-RELEASE-20261124-R05-CODEX-01",
+  "status": "PASS",
+  "observed_at": "2026-11-25T06:44:43.501Z",
+  "executor": "LOCAL_CODEX",
+  "code_sha": "7c0c9c46753e9ebcf97c388839d2e91cef038385",
+  "orchestration_sha": "cccbe1cde32bd77cc88e1b3051066a6faca323bd",
+  "environment": {
+    "kind": "test",
+    "origin": "https://reballlostball-git-repair-mr-dr01-a7fa2f-thechangcnds-projects.vercel.app",
+    "supabase_project_ref": "aohziyemqxfhpbbqpicx",
+    "deployment_id": "dpl_9VZRGqUxpPRTyovRmyik8GhRJCyU",
+    "deployed_sha": "7c0c9c46753e9ebcf97c388839d2e91cef038385"
+  },
+  "actions": [
+    {
+      "action_id": "R05-CANCEL-01",
+      "kind": "mutation",
+      "summary": "With explicit approval, canceled the existing synthetic TEST payment once and verified the provider-authoritative canceled status.",
+      "outcome": "PASS"
+    },
+    {
+      "action_id": "R05-REPLAY-02",
+      "kind": "mutation",
+      "summary": "Replayed the same cancellation; the TEST backend returned duplicate and only one completed refund and one stock restoration remain.",
+      "outcome": "PASS"
+    },
+    {
+      "action_id": "R05-WEBHOOK-03",
+      "kind": "mutation",
+      "summary": "Sent one synthetic TEST status notification and its duplicate; the Edge independently re-queried Toss. After cancellation, confirmation replay was rejected.",
+      "outcome": "PASS"
+    }
+  ],
+  "assertions": [
+    {
+      "id": "provider_cancel_confirmed",
+      "result": "PASS",
+      "evidence_refs": [
+        "receipts/R05_20261125_observations.json"
+      ]
+    },
+    {
+      "id": "refund_order_database_match",
+      "result": "PASS",
+      "evidence_refs": [
+        "receipts/R05_20261125_observations.json"
+      ]
+    },
+    {
+      "id": "stock_restored_once",
+      "result": "PASS",
+      "evidence_refs": [
+        "receipts/R05_20261125_observations.json"
+      ]
+    },
+    {
+      "id": "confirm_webhook_replay",
+      "result": "PASS",
+      "evidence_refs": [
+        "receipts/R05_20261125_observations.json"
+      ]
+    },
+    {
+      "id": "cancel_replay_no_duplicate",
+      "result": "PASS",
+      "evidence_refs": [
+        "receipts/R05_20261125_observations.json"
+      ]
+    }
+  ],
+  "artifacts": [
+    {
+      "path": "receipts/R05_20261125_observations.json",
+      "sha256": "4996a9d21d14c3a31873412d97fbb82cc88af4de8bf1266a69d036548c28aef1",
+      "redacted": true
+    }
+  ],
+  "blocker": null
+}

@@ -1,0 +1,46 @@
+{
+  "observed_at": "2026-11-24T11:52:02.129Z",
+  "space_id": 2,
+  "run_id": "REBALL-RELEASE-20261124-R02-CANDIDATE-01",
+  "previous_reviewed_sha": "b2e17ad1351834028dfadd53f1dac7ad485bb883",
+  "candidate_sha": "7c0c9c46753e9ebcf97c388839d2e91cef038385",
+  "source_delta": "app.js signup completion/toast wording and e2e tests; other changed files are release governance documents/scripts/tests; no Edge source delta",
+  "test": {
+    "deployment_id": "dpl_9VZRGqUxpPRTyovRmyik8GhRJCyU",
+    "deployment_state": "READY",
+    "branch": "repair/mr-dr01-harness-declare-scope",
+    "alias_matches_deployment": true,
+    "backend_ref": "aohziyemqxfhpbbqpicx",
+    "captcha_provider": "turnstile",
+    "captcha_site_key_present": true,
+    "toss_frontend_key_present": false,
+    "signup_completion_anonymous": {
+      "check_mail_guidance": true,
+      "no_sent_claim": true,
+      "support_link_visible": true,
+      "support_route_works": true,
+      "footer_phone_link_visible": true
+    }
+  },
+  "edge": {
+    "active_count": 17,
+    "versions": "16 at 19; admin-orders-page at 20",
+    "admin_orders_bundle_sha256": "f02f49d8c904fa9fb5784a870a7dc41fdd03b490f34096347316dd3947cb11a2",
+    "note": "No Edge source changed between reviewed code commits; current active versions and admin-orders bundle observed; prior full file comparison retained in R02 final receipt."
+  },
+  "production": {
+    "deployment_before": "dpl_6VBFnUd9GyFTCoxsGdJRCVymCXmV",
+    "deployment_after": "dpl_6VBFnUd9GyFTCoxsGdJRCVymCXmV",
+    "deployed_sha": "9f26f27a8b8833236618db9c0e72bdf415e7f161"
+  },
+  "r03_provenance": {
+    "retested": "Changed anonymous signup completion guidance and customer support route on new deployment.",
+    "carried_forward": "Prior synthetic account creation, actual email confirmation, owner/cross-account access, manager search and synthetic shipping on old deployed SHA; corresponding application and Edge logic unchanged, and old receipt is linked. These were not repeated on the new deployment.",
+    "reference": "receipts/R03_20261124_final.json"
+  },
+  "limitations": [
+    "The original 429 resend handling and self-service resend absence are unresolved; wording does not repair mail delivery.",
+    "Current provider TEST mode and any provider authorization or cancellation remain unverified and separately approval-gated.",
+    "Customer support page presents contact details in an image; common footer telephone link was visible."
+  ]
+}

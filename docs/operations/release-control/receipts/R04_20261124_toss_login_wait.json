@@ -1,0 +1,75 @@
+{
+  "schema_version": 1,
+  "task_id": "R04",
+  "run_id": "REBALL-RELEASE-20261124-R04-CODEX-01",
+  "status": "BLOCKED",
+  "observed_at": "2026-11-24T12:07:33.070Z",
+  "executor": "LOCAL_CODEX",
+  "code_sha": "7c0c9c46753e9ebcf97c388839d2e91cef038385",
+  "orchestration_sha": "93dd384f5fab9ca40461868ea42110481562563d",
+  "environment": {
+    "kind": "test",
+    "origin": "https://reballlostball-git-repair-mr-dr01-a7fa2f-thechangcnds-projects.vercel.app",
+    "supabase_project_ref": "aohziyemqxfhpbbqpicx",
+    "deployment_id": "dpl_9VZRGqUxpPRTyovRmyik8GhRJCyU",
+    "deployed_sha": "7c0c9c46753e9ebcf97c388839d2e91cef038385"
+  },
+  "actions": [
+    {
+      "action_id": "R04-A01",
+      "kind": "read",
+      "summary": "Verified one-order and 23,500 KRW approval conditional on prior TEST mode confirmation, checked deployed frontend and TEST project secret metadata, and read baseline counts.",
+      "outcome": "PASS"
+    },
+    {
+      "action_id": "R04-A02",
+      "kind": "read",
+      "summary": "Current server key values are not revealed by the Supabase dashboard and non-production runtime accepts both test and live keys; existing Toss developer session requires login before comparing TEST key digests.",
+      "outcome": "BLOCKED"
+    }
+  ],
+  "assertions": [
+    {
+      "id": "provider_test_mode_observed",
+      "result": "NOT_RUN",
+      "evidence_refs": []
+    },
+    {
+      "id": "legitimate_provider_authorization",
+      "result": "NOT_RUN",
+      "evidence_refs": []
+    },
+    {
+      "id": "confirmation_matches_order_amount",
+      "result": "NOT_RUN",
+      "evidence_refs": []
+    },
+    {
+      "id": "approval_database_readback",
+      "result": "NOT_RUN",
+      "evidence_refs": []
+    },
+    {
+      "id": "return_refresh_lookup",
+      "result": "NOT_RUN",
+      "evidence_refs": []
+    },
+    {
+      "id": "uncertain_result_recovery",
+      "result": "NOT_RUN",
+      "evidence_refs": []
+    }
+  ],
+  "artifacts": [
+    {
+      "path": "receipts/R04_20261124_toss_login_observations.json",
+      "sha256": "4f2df00ac499164fc5b4962402fa4f931623b503775199b8f792b85e6b4630b6",
+      "redacted": true
+    }
+  ],
+  "blocker": {
+    "owner": "USER",
+    "required_action": "The account owner must consent and personally complete Toss login and identity verification in ego Space 2. Do not send personal identity data, credentials, or codes in chat.",
+    "resume_check": "After owner verification and user notification, take over the same Space and compare merchant TEST key hashes with current TEST project secret hashes without exposing values; confirm TEST mode before creating any order."
+  }
+}

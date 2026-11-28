@@ -1,0 +1,33 @@
+{
+  "observed_at": "2026-11-27T12:33:15.267Z",
+  "space_id": 23,
+  "provider": {
+    "merchant": "Reball Lostball",
+    "phase": "TEST",
+    "matching_order_count": 1,
+    "status": "expired",
+    "amount_krw": 23500,
+    "displayed_rows": 10,
+    "next_page_disabled": true
+  },
+  "database": {
+    "order_status": "payment_failed",
+    "payment_status": "expired",
+    "reservation_status": "expired",
+    "expiry_events": 1,
+    "stock_after": 10,
+    "approval_timestamp_present": false,
+    "active_cron": 0
+  },
+  "guard": {
+    "fetch_restored": true,
+    "session_flag_removed": true,
+    "registration_removal": "Script not found",
+    "wrapper_absent_after_reload": true,
+    "pending_confirmation_count": 0
+  },
+  "reconciliation": {
+    "actual_provider_backed_job": "NOT_RUN",
+    "note": "The worker defers READY/IN_PROGRESS provider statuses; the prior 503 browser interception did not create a server-side reconciliation job. No new payment or order was created during this continuation."
+  }
+}

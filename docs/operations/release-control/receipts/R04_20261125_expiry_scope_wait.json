@@ -1,0 +1,83 @@
+{
+  "schema_version": 1,
+  "task_id": "R04",
+  "run_id": "REBALL-RELEASE-20261124-R04-CODEX-01",
+  "status": "BLOCKED",
+  "observed_at": "2026-11-25T01:13:19.744Z",
+  "executor": "LOCAL_CODEX",
+  "code_sha": "7c0c9c46753e9ebcf97c388839d2e91cef038385",
+  "orchestration_sha": "d1c5c09f2707b0ca11579c07c2533a176cb21c10",
+  "environment": {
+    "kind": "test",
+    "origin": "https://reballlostball-git-repair-mr-dr01-a7fa2f-thechangcnds-projects.vercel.app",
+    "supabase_project_ref": "aohziyemqxfhpbbqpicx",
+    "deployment_id": "dpl_9VZRGqUxpPRTyovRmyik8GhRJCyU",
+    "deployed_sha": "7c0c9c46753e9ebcf97c388839d2e91cef038385"
+  },
+  "actions": [
+    {
+      "action_id": "R04-PREFLIGHT-01",
+      "kind": "read",
+      "summary": "Matched current Reball merchant TEST client and secret key digests against current TEST project, without retaining or printing key values.",
+      "outcome": "PASS"
+    },
+    {
+      "action_id": "R04-PREFLIGHT-02",
+      "kind": "read",
+      "summary": "Prepared a single synthetic checkout totaling KRW 23,500 and observed one pre-existing expired TEST reservation which actual create-order can automatically release.",
+      "outcome": "PASS"
+    },
+    {
+      "action_id": "R04-PREFLIGHT-03",
+      "kind": "read",
+      "summary": "Stopped before submitting the order because the previous TEST record is outside the explicitly approved one-order scope.",
+      "outcome": "BLOCKED"
+    }
+  ],
+  "assertions": [
+    {
+      "id": "provider_test_mode_observed",
+      "result": "PASS",
+      "evidence_refs": [
+        "receipts/R04_20261125_test_mode_observations.json"
+      ]
+    },
+    {
+      "id": "legitimate_provider_authorization",
+      "result": "NOT_RUN",
+      "evidence_refs": []
+    },
+    {
+      "id": "confirmation_matches_order_amount",
+      "result": "NOT_RUN",
+      "evidence_refs": []
+    },
+    {
+      "id": "approval_database_readback",
+      "result": "NOT_RUN",
+      "evidence_refs": []
+    },
+    {
+      "id": "return_refresh_lookup",
+      "result": "NOT_RUN",
+      "evidence_refs": []
+    },
+    {
+      "id": "uncertain_result_recovery",
+      "result": "NOT_RUN",
+      "evidence_refs": []
+    }
+  ],
+  "artifacts": [
+    {
+      "path": "receipts/R04_20261125_expiry_scope_observations.json",
+      "sha256": "be1122a2f668e3a130d8d106fc1d0ee4ea1d39dc9f7ddcf3fb30bd95f6e6b38c",
+      "redacted": true
+    }
+  ],
+  "blocker": {
+    "owner": "USER",
+    "required_action": "Decide whether to allow the actual TEST checkout to automatically expire and release the one identified existing old TEST reservation as described, before creating the approved new order.",
+    "resume_check": "Recheck exact eligibility and ensure no additional existing reservations would be affected; if approved, submit only one synthetic TEST order up to KRW 23,500 and verify the provider TEST window before any authorization."
+  }
+}

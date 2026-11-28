@@ -1,0 +1,69 @@
+{
+  "schema_version": 1,
+  "task_id": "R00",
+  "run_id": "github-actions-45381714310",
+  "status": "PASS",
+  "observed_at": "2026-11-24T11:52:02.129Z",
+  "executor": "GITHUB_ACTIONS",
+  "code_sha": "7c0c9c46753e9ebcf97c388839d2e91cef038385",
+  "orchestration_sha": "daf3d55cd6a583e1776875cd2fb6c6840ec77dc9",
+  "environment": {
+    "kind": "ci",
+    "origin": null,
+    "supabase_project_ref": null,
+    "deployment_id": null,
+    "deployed_sha": null
+  },
+  "actions": [
+    {
+      "action_id": "R00-C01",
+      "kind": "read",
+      "summary": "Inspected completed Full QA, E2E, accessibility, Windows portability and Data API grants CI runs for exact candidate SHA.",
+      "outcome": "PASS"
+    }
+  ],
+  "assertions": [
+    {
+      "id": "full_qa",
+      "result": "PASS",
+      "evidence_refs": [
+        "https://github.com/snsrkarhskfdk/reballlostball/actions/runs/45381714310",
+        "https://github.com/snsrkarhskfdk/reballlostball/actions/runs/45381714434"
+      ]
+    },
+    {
+      "id": "browser_e2e",
+      "result": "PASS",
+      "evidence_refs": [
+        "https://github.com/snsrkarhskfdk/reballlostball/actions/runs/45381714310",
+        "https://github.com/snsrkarhskfdk/reballlostball/actions/runs/45381714434"
+      ]
+    },
+    {
+      "id": "accessibility",
+      "result": "PASS",
+      "evidence_refs": [
+        "https://github.com/snsrkarhskfdk/reballlostball/actions/runs/45381714310",
+        "https://github.com/snsrkarhskfdk/reballlostball/actions/runs/45381714434"
+      ]
+    },
+    {
+      "id": "windows_portability",
+      "result": "PASS",
+      "evidence_refs": [
+        "https://github.com/snsrkarhskfdk/reballlostball/actions/runs/45381714310",
+        "https://github.com/snsrkarhskfdk/reballlostball/actions/runs/45381714434"
+      ]
+    },
+    {
+      "id": "db_grants",
+      "result": "PASS",
+      "evidence_refs": [
+        "https://github.com/snsrkarhskfdk/reballlostball/actions/runs/45381714310",
+        "https://github.com/snsrkarhskfdk/reballlostball/actions/runs/45381714434"
+      ]
+    }
+  ],
+  "artifacts": [],
+  "blocker": null
+}

@@ -1,0 +1,20 @@
+# Stable repository bytes on Windows (including core.autocrlf=true).
+* text=auto
+*.js text eol=lf
+*.mjs text eol=lf
+*.ts text eol=lf
+*.css text eol=lf
+*.html text eol=lf
+*.json text eol=lf
+*.sql text eol=lf
+*.yml text eol=lf
+*.yaml text eol=lf
+*.md text eol=lf
+.env.example text eol=lf
+*.ps1 text eol=crlf
+*.bat text eol=crlf
+*.png binary
+*.webp binary
+*.jpg binary
+*.mp4 binary
+*.woff2 binary

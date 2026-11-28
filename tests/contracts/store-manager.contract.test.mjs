@@ -59,8 +59,12 @@ test("payments and refunds are visible only to payments_manager or owner_admin",
 test("shipping remains mediated by server role checks and service-only RPC", () => {
   assert.match(legacyMigration, /admin_update_shipping_v1/);
   assert.match(legacyMigration, /revoke all on function public\.admin_update_shipping_v1[\s\S]*from public, anon, authenticated/i);
-  assert.match(shipping, /owner_admin,cs_manager,store_manager/);
+  const roleDeclaration = shipping.match(/const SHIPPING_ROLES = new Set<Role>\(\[([^\]]+)\]\)/);
+  assert.ok(roleDeclaration, "SHIPPING_ROLES declaration is required");
+  const shippingRoles = [...roleDeclaration[1].matchAll(/"([a-z_]+)"/g)].map((match) => match[1]).sort();
+  assert.deepEqual(shippingRoles, ["cs_manager", "owner_admin", "store_manager"]);
   assert.match(shipping, /admin_update_shipping_v1/);
+  assert.match(shipping, /enforceRateLimit\(req, "admin_shipping_update"/);
   assert.match(managerJs, /functions\/v1\/admin-shipping/);
 });
 

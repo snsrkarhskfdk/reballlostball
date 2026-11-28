@@ -1,0 +1,81 @@
+{
+  "observed_at": "2026-11-27T18:56:11.854Z",
+  "run_id": "REBALL-RELEASE-20261124-R06-CODEX-01",
+  "space_id": 24,
+  "previous_space": 23,
+  "space_note": "Space 23 disappeared after previous finish closed its last tab; same installed ego login reused in recreated Space 24.",
+  "project_ref": "aohziyemqxfhpbbqpicx",
+  "scope": "User-approved existing owned canceled R04 TEST transaction only; no new payment, order, provider cancellation, production change, or policy change.",
+  "preflight": {
+    "toss_test_get_http": 200,
+    "provider_status": "CANCELED",
+    "provider_amount_krw": 23500,
+    "provider_balance_krw": 0,
+    "order_and_key_match": true,
+    "db_order": "canceled",
+    "db_payment": "canceled",
+    "refunds": 1,
+    "active_cancels": 0,
+    "active_reservations": 0,
+    "active_cron": 0,
+    "due_jobs": 0,
+    "deployed_edge_version": 19,
+    "source_files_match_reviewed": true
+  },
+  "default_region_attempt": {
+    "http": 200,
+    "claimed": 1,
+    "reconciled": 0,
+    "failed": 1,
+    "edge_region": "ap-northeast-1",
+    "error": "API_KEY_ACCESS_DENIED",
+    "fixture_cleanup": "failed fixture retained as audit, queue cleared"
+  },
+  "seoul_attempt": {
+    "http": 200,
+    "claimed": 1,
+    "reconciled": 1,
+    "failed": 0,
+    "deferred": 0,
+    "edge_region": "ap-northeast-2",
+    "provider": "actual Toss TEST",
+    "database": "actual TEST database",
+    "worker": "deployed reconcile-payments v19",
+    "synthetic_cancel_attempt_status": "succeeded"
+  },
+  "replay": {
+    "http": 200,
+    "claimed": 0,
+    "reconciled": 0,
+    "failed": 0,
+    "edge_region": "ap-northeast-2"
+  },
+  "after": {
+    "order": "canceled",
+    "payment": "canceled",
+    "amount_krw": 23500,
+    "refunded_amount_krw": 23500,
+    "refunds": 1,
+    "processed_reconciliation_events": 1,
+    "active_cancel_attempts": 0,
+    "active_reservations": 0,
+    "queued": false,
+    "leased": false,
+    "active_cron": 0,
+    "due_jobs": 0,
+    "original_canceled_at": "2026-11-25T06:41:54.352063Z",
+    "new_canceled_at": "2026-11-27T18:54:52.382829Z"
+  },
+  "limitations": [
+    "Actual deployed path was verified with explicit Seoul invocation; default Tokyo invocation failed API_KEY_ACCESS_DENIED.",
+    "TEST key policy observed country allowlist South Korea; region mismatch is strongly supported by Seoul success but provider egress geolocation was not independently measured.",
+    "No persistent reconciliation scheduler was installed or verified; production scheduler migration contains production URL and must not be run in TEST unchanged.",
+    "The test directly scheduled a synthetic unknown cancellation attempt on an already canceled TEST transaction; it did not reproduce a naturally failed cancellation request."
+  ],
+  "security_incident": {
+    "scope": "Toss TEST secret only",
+    "cause": "A browser snapshot printed a revealed TEST key to tool output during investigation.",
+    "secret_in_repository": false,
+    "required_action": "Rotate the affected TEST key, update only the TEST Edge secret and retest after explicit scoped authorization; do not assume the production credential is affected."
+  }
+}

@@ -1,0 +1,89 @@
+{
+  "schema_version": 1,
+  "task_id": "R02",
+  "run_id": "REBALL-RELEASE-20261124-R02-CANDIDATE-01",
+  "status": "PASS",
+  "observed_at": "2026-11-24T11:52:02.129Z",
+  "executor": "LOCAL_CODEX",
+  "code_sha": "7c0c9c46753e9ebcf97c388839d2e91cef038385",
+  "orchestration_sha": "daf3d55cd6a583e1776875cd2fb6c6840ec77dc9",
+  "environment": {
+    "kind": "test",
+    "origin": "https://reballlostball-git-repair-mr-dr01-a7fa2f-thechangcnds-projects.vercel.app",
+    "supabase_project_ref": "aohziyemqxfhpbbqpicx",
+    "deployment_id": "dpl_9VZRGqUxpPRTyovRmyik8GhRJCyU",
+    "deployed_sha": "7c0c9c46753e9ebcf97c388839d2e91cef038385"
+  },
+  "actions": [
+    {
+      "action_id": "R02-C01",
+      "kind": "mutation",
+      "summary": "With explicit approval deployed one exact-SHA TEST frontend Preview; verified READY, branch alias and actual TEST backend.",
+      "outcome": "PASS"
+    },
+    {
+      "action_id": "R02-C02",
+      "kind": "read",
+      "summary": "Rechecked unchanged Edge version metadata and prior bundle digest, browser configuration and unchanged production alias.",
+      "outcome": "PASS"
+    }
+  ],
+  "assertions": [
+    {
+      "id": "explicit_test_deploy_approval",
+      "result": "PASS",
+      "evidence_refs": [
+        "receipts/R02_R03_20261124_candidate_observations.json",
+        "receipts/R02_20261124_final.json"
+      ]
+    },
+    {
+      "id": "exact_source_ci",
+      "result": "PASS",
+      "evidence_refs": [
+        "receipts/R02_R03_20261124_candidate_observations.json",
+        "receipts/R02_20261124_final.json"
+      ]
+    },
+    {
+      "id": "frontend_deployed_sha",
+      "result": "PASS",
+      "evidence_refs": [
+        "receipts/R02_R03_20261124_candidate_observations.json",
+        "receipts/R02_20261124_final.json"
+      ]
+    },
+    {
+      "id": "edge_versions_aligned",
+      "result": "PASS",
+      "evidence_refs": [
+        "receipts/R02_R03_20261124_candidate_observations.json",
+        "receipts/R02_20261124_final.json"
+      ]
+    },
+    {
+      "id": "test_configuration_verified",
+      "result": "PASS",
+      "evidence_refs": [
+        "receipts/R02_R03_20261124_candidate_observations.json",
+        "receipts/R02_20261124_final.json"
+      ]
+    },
+    {
+      "id": "production_unchanged",
+      "result": "PASS",
+      "evidence_refs": [
+        "receipts/R02_R03_20261124_candidate_observations.json",
+        "receipts/R02_20261124_final.json"
+      ]
+    }
+  ],
+  "artifacts": [
+    {
+      "path": "receipts/R02_R03_20261124_candidate_observations.json",
+      "sha256": "81c5ff790cbb676f651daec718c44cbf8ec4b21c162c12ecb7b488e4d2d7d1f9",
+      "redacted": true
+    }
+  ],
+  "blocker": null
+}

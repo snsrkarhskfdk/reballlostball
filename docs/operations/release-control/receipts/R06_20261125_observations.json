@@ -1,0 +1,57 @@
+{
+  "observed_at": "2026-11-25T10:44:21.960Z",
+  "run_id": "REBALL-RELEASE-20261124-R06-CODEX-01",
+  "space_id": 0,
+  "scope": "Two explicitly approved unpaid synthetic TEST orders and their reservations",
+  "before": {
+    "active_cron": 0,
+    "reserved": 0,
+    "potential_reconciliation_jobs": 0,
+    "stock": 10
+  },
+  "fixtures": {
+    "count": 2,
+    "provider_keys": 0,
+    "expired": {
+      "status": "payment_failed",
+      "payment_status": "expired",
+      "reservation": "expired",
+      "quantity": 1,
+      "expiry_events": 1
+    },
+    "unexpired": {
+      "status": "payment_ready",
+      "payment_status": "ready",
+      "reservation": "reserved",
+      "quantity": 1,
+      "expires_at": "2026-11-25T12:09:57.369807Z",
+      "expiry_events": 0
+    },
+    "stock_after_expiry": 9
+  },
+  "expiry": {
+    "temporary_test_cron_succeeded": 1,
+    "temporary_test_cron_failed": 0,
+    "repeat_calls": 2,
+    "repeat_released_each": 0,
+    "unrelated_records_guarded": true
+  },
+  "reconciliation": {
+    "endpoint": "TEST reconcile-payments",
+    "http": 200,
+    "claimed": 0,
+    "reconciled": 0,
+    "deferred": 0,
+    "failed": 0,
+    "limitation": "Empty queue verifies invocation and response only; actual provider-backed reconciliation of an owned job was not performed."
+  },
+  "after": {
+    "active_cron": 0,
+    "temporary_jobs": 0,
+    "unexpired_owned_reservations": 1
+  },
+  "limitations": [
+    "Unexpired synthetic reservation remains reserved; it expires at the recorded time and active TEST cron remains zero.",
+    "Source scheduler migration contains a production URL and was not executed."
+  ]
+}

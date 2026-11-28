@@ -17,6 +17,7 @@ export function paymentReturnKind(locationLike) {
   const pathname = String(location.pathname || "").replace(/\/+$/, "");
   if (route === "/payment/success" || pathname.endsWith("/payment/success")) return "success";
   if (route === "/payment/fail" || pathname.endsWith("/payment/fail")) return "fail";
+  if (route === "/payment/recovery" || pathname.endsWith("/payment/recovery")) return "recovery";
   return "";
 }
 
@@ -61,15 +62,15 @@ export function replacePaymentReturnUrl(
   const basePath = new URL(".", documentRef.baseURI).pathname;
   let safeRoute = String(route || "/");
 
-  // A failed Toss return must drop provider-sensitive query values such as
+  // Failed and unresolved Toss returns must drop provider-sensitive values such as
   // paymentKey/code/message/paymentReturnToken, while keeping the non-secret order
-  // number so a refresh can render the correct retry surface. Preserve only the
+  // number so a refresh can render the correct retry or recovery surface. Preserve only the
   // scoped payment capability in sessionStorage before scrubbing the URL.
-  if (safeRoute === "/payment/fail") {
+  if (safeRoute === "/payment/fail" || safeRoute === "/payment/recovery") {
     capturePaymentReturnCapability(locationRef, storageRef);
     const orderId = String(paymentReturnParams(locationRef).get("orderId") || "").trim().toUpperCase();
     if (/^[A-Z0-9_-]{6,64}$/.test(orderId)) {
-      safeRoute = `/payment/fail?orderId=${encodeURIComponent(orderId)}`;
+      safeRoute = `${safeRoute}?orderId=${encodeURIComponent(orderId)}`;
     }
   }
 

@@ -88,18 +88,30 @@ async function recover(orderId, card, lookup) {
   const heading = card.querySelector("h1");
   if (heading) heading.textContent = "주문 정보를 다시 불러오는 중입니다.";
 
+  function activeCard() {
+    if (currentOrderId() !== orderId) return null;
+    const currentLookup = loadGuestLookupSession(globalThis.sessionStorage);
+    if (String(currentLookup?.orderId || "").toUpperCase() !== orderId
+        || currentLookup?.lookupToken !== lookup.lookupToken) return null;
+    // Auth initialization may redraw the route while this lookup is pending.
+    // Publish to the current card for the same capability, never the detached one.
+    return card?.isConnected ? card : missingOrderCard(orderId);
+  }
+
   const promise = lookupGuestOrderRequest(
     { baseUrl: SUPABASE_URL || location.origin, anonKey: SUPABASE_KEY },
     { orderId, lookupToken: lookup.lookupToken }
   ).then((payload) => {
-    if (currentOrderId() !== orderId) return;
+    const target = activeCard();
+    if (!target) return;
     const order = normalizeServerOrder(payload);
     if (!order || order.id !== orderId) throw new Error("주문 정보를 확인할 수 없습니다.");
-    if (card?.isConnected) renderRecoveredOrder(card, order, lookup.lookupToken);
+    renderRecoveredOrder(target, order, lookup.lookupToken);
   }).catch(() => {
-    if (!card.isConnected) return;
-    card.dataset.guestOrderRecovery = "failed";
-    const currentHeading = card.querySelector("h1");
+    const target = activeCard();
+    if (!target) return;
+    target.dataset.guestOrderRecovery = "failed";
+    const currentHeading = target.querySelector("h1");
     if (currentHeading) currentHeading.textContent = "주문을 찾을 수 없습니다.";
   }).finally(() => inFlight.delete(orderId));
 

@@ -1,0 +1,50 @@
+{
+  "observed_at": "2026-11-28T05:02:51.953Z",
+  "space_id": 24,
+  "scope": "User-approved affected merchant TEST secret reissue, TEST Edge synchronization and no-additional-payment verification",
+  "test_project_ref": "aohziyemqxfhpbbqpicx",
+  "rotation": {
+    "new_test_individual_secret": "ISSUED",
+    "old_test_pair": "EXPIRING_NOT_REVOKED",
+    "old_pair_expiry_kst": "2026-12-01 13:56",
+    "reason_not_revoked": "Toss deletion confirmation explicitly says both the old secret key and paired security key will be removed. Other uses of the paired TEST security key have not been inventoried; do not attest it is unused."
+  },
+  "server": {
+    "secret_name": "TOSS_SECRET_KEY",
+    "test_project_only": true,
+    "new_key_digest_matches_server": true
+  },
+  "provider_recheck": {
+    "http": 200,
+    "status": "CANCELED",
+    "identity_match": true,
+    "amount_krw": 23500,
+    "balance_krw": 0
+  },
+  "deployed_recheck": {
+    "edge_region": "ap-northeast-2",
+    "http": 200,
+    "claimed": 1,
+    "reconciled": 1,
+    "failed": 0,
+    "processing": "Existing event was already processed; duplicate branch returned success after real provider GET and claim. The synthetic TEST attempt was then explicitly closed as succeeded to remove active status."
+  },
+  "final": {
+    "order": "canceled",
+    "payment": "canceled",
+    "refunds": 1,
+    "refund_amount_krw": 23500,
+    "active_cancel_attempts": 0,
+    "queued": false,
+    "leased": false,
+    "active_cron": 0,
+    "due_jobs": 0
+  },
+  "limits": [
+    "Old exposed TEST key remains usable until revoked or expiration; reissue does not immediately revoke it.",
+    "The old paired TEST security key will also be removed on old-key deletion; usage beyond this repository and TEST Supabase has not been established.",
+    "Default Tokyo Edge invocation was not remediated; this verification explicitly targeted Seoul."
+  ],
+  "new_payment": false,
+  "production_changed": false
+}

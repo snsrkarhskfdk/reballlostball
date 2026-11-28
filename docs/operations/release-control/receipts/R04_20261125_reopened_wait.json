@@ -1,0 +1,63 @@
+{
+  "schema_version": 1,
+  "task_id": "R04",
+  "run_id": "REBALL-RELEASE-20261124-R04-CODEX-01",
+  "status": "BLOCKED",
+  "observed_at": "2026-11-25T00:53:04.434Z",
+  "executor": "LOCAL_CODEX",
+  "code_sha": "7c0c9c46753e9ebcf97c388839d2e91cef038385",
+  "orchestration_sha": "525da8ba43f4ec322c63ddc4c1b58dd7a863812d",
+  "environment": {
+    "kind": "test",
+    "origin": "https://reballlostball-git-repair-mr-dr01-a7fa2f-thechangcnds-projects.vercel.app",
+    "supabase_project_ref": "aohziyemqxfhpbbqpicx",
+    "deployment_id": null,
+    "deployed_sha": null
+  },
+  "actions": [
+    {
+      "action_id": "R04-LOGIN-REOPEN",
+      "kind": "read",
+      "summary": "User reported the prior SMS verification session expired. In the same Reball Space 1 the former Toss tab was absent, so an observed official Toss sign-in page was opened in p3; the user then took control.",
+      "outcome": "BLOCKED"
+    }
+  ],
+  "assertions": [
+    {
+      "id": "provider_test_mode_observed",
+      "result": "NOT_RUN",
+      "evidence_refs": []
+    },
+    {
+      "id": "legitimate_provider_authorization",
+      "result": "NOT_RUN",
+      "evidence_refs": []
+    },
+    {
+      "id": "confirmation_matches_order_amount",
+      "result": "NOT_RUN",
+      "evidence_refs": []
+    },
+    {
+      "id": "approval_database_readback",
+      "result": "NOT_RUN",
+      "evidence_refs": []
+    },
+    {
+      "id": "return_refresh_lookup",
+      "result": "NOT_RUN",
+      "evidence_refs": []
+    },
+    {
+      "id": "uncertain_result_recovery",
+      "result": "NOT_RUN",
+      "evidence_refs": []
+    }
+  ],
+  "artifacts": [],
+  "blocker": {
+    "owner": "USER",
+    "required_action": "Log in and complete account owner identity verification in the reopened Toss page in Reball Space 1. Do not send credentials or codes in chat.",
+    "resume_check": "Once user confirms completion, take over Space 1, verify the merchant and compare current TEST key digests to TEST project secret digests without exposing values; confirm TEST mode before creating an order."
+  }
+}

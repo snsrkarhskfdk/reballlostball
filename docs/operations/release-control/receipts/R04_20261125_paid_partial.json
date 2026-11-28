@@ -1,0 +1,92 @@
+{
+  "schema_version": 1,
+  "task_id": "R04",
+  "run_id": "REBALL-RELEASE-20261124-R04-CODEX-01",
+  "status": "BLOCKED",
+  "observed_at": "2026-11-25T06:18:18.466Z",
+  "executor": "LOCAL_CODEX",
+  "code_sha": "7c0c9c46753e9ebcf97c388839d2e91cef038385",
+  "orchestration_sha": "7d77914422ab07a12ef004b0a213480f5bd5cbe4",
+  "environment": {
+    "kind": "test",
+    "origin": "https://reballlostball-git-repair-mr-dr01-a7fa2f-thechangcnds-projects.vercel.app",
+    "supabase_project_ref": "aohziyemqxfhpbbqpicx",
+    "deployment_id": "dpl_9VZRGqUxpPRTyovRmyik8GhRJCyU",
+    "deployed_sha": "7c0c9c46753e9ebcf97c388839d2e91cef038385"
+  },
+  "actions": [
+    {
+      "action_id": "R04-PAID-01",
+      "kind": "read",
+      "summary": "After the user completed the existing provider TEST payment, read the same synthetic order and provider confirmation log; amounts and paid states match.",
+      "outcome": "PASS"
+    },
+    {
+      "action_id": "R04-PAID-02",
+      "kind": "read",
+      "summary": "In ego Space 0, refreshed the existing guest order page and observed paid status, amount and lookup continuity.",
+      "outcome": "PASS"
+    },
+    {
+      "action_id": "R04-PAID-03",
+      "kind": "read",
+      "summary": "Actual ambiguous payment-confirm recovery has not been exercised. Prior create-order timeout recovery is distinct.",
+      "outcome": "BLOCKED"
+    }
+  ],
+  "assertions": [
+    {
+      "id": "provider_test_mode_observed",
+      "result": "PASS",
+      "evidence_refs": [
+        "receipts/R04_20261125_provider_window_observations.json",
+        "receipts/R04_20261125_test_mode_observations.json"
+      ]
+    },
+    {
+      "id": "legitimate_provider_authorization",
+      "result": "PASS",
+      "evidence_refs": [
+        "receipts/R04_20261125_paid_observations.json"
+      ]
+    },
+    {
+      "id": "confirmation_matches_order_amount",
+      "result": "PASS",
+      "evidence_refs": [
+        "receipts/R04_20261125_paid_observations.json"
+      ]
+    },
+    {
+      "id": "approval_database_readback",
+      "result": "PASS",
+      "evidence_refs": [
+        "receipts/R04_20261125_paid_observations.json"
+      ]
+    },
+    {
+      "id": "return_refresh_lookup",
+      "result": "PASS",
+      "evidence_refs": [
+        "receipts/R04_20261125_paid_observations.json"
+      ]
+    },
+    {
+      "id": "uncertain_result_recovery",
+      "result": "NOT_RUN",
+      "evidence_refs": []
+    }
+  ],
+  "artifacts": [
+    {
+      "path": "receipts/R04_20261125_paid_observations.json",
+      "sha256": "0a9db1680c4fe4ef3cf0d8342afc13f145ff5f097efcc842785bfcd95c7e88a1",
+      "redacted": true
+    }
+  ],
+  "blocker": {
+    "owner": "LOCAL_CODEX",
+    "required_action": "Determine and execute a safe, scoped way to verify actual ambiguous payment-confirm recovery without creating a second order or repeating an uncertain charge; otherwise keep the criterion NOT_RUN.",
+    "resume_check": "Read the existing paid order first; preserve its guest lookup capability and do not initiate another payment. Separate explicit user approval is required before TEST cancellation or refund."
+  }
+}

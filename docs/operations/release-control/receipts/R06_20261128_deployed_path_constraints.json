@@ -1,0 +1,24 @@
+{
+  "observed_at": "2026-11-27T18:33:52.103Z",
+  "space_id": 23,
+  "environment": "TEST aohziyemqxfhpbbqpicx",
+  "check": "read-only database constraint and queue preflight",
+  "results": {
+    "unique_order_number": true,
+    "unique_provider_payment_key": true,
+    "active_cron": 0,
+    "due_payments": 0,
+    "owned_canceled_order_matches": 1,
+    "owned_canceled_order_eligible": 1
+  },
+  "findings": [
+    "An exact clone cannot coexist in the actual public tables because both provider order number and payment key are unique.",
+    "The deployed handler verifies both order number and payment key against the provider response.",
+    "The actual webhook apply function rewrites the canceled timestamp and other metadata even when reapplying CANCELED; a committed test of the original order is not equivalent to rollback isolation.",
+    "An uncommitted fixture is invisible to the separately deployed Edge function."
+  ],
+  "proposed_next": "For a nonempty deployed end-to-end test without another payment, request a narrowly scoped decision on temporarily queuing the owned canceled TEST transaction, preserving business state, retaining the generated reconciliation audit record, and safely accounting for metadata updates. Recheck provider CANCELED and empty queue before any mutation.",
+  "status": "BLOCKED",
+  "new_payment": false,
+  "mutation": false
+}

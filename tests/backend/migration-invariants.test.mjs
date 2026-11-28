@@ -399,3 +399,146 @@ test("the payment return page boots from a path redirect and reads the settled p
   assert.match(hardening, /=== "paid" && String\(order\?\.paymentStatus \|\| ""\) === "done"/);
   assert.doesNotMatch(hardening, /paymentStatus \|\| ""\) === "paid"/);
 });
+
+const rateLimitRepair = readFileSync(
+  new URL("../../supabase/migrations/20260911000000_edge_rate_limit_insert_race.sql", import.meta.url),
+  "utf8",
+);
+
+test("creating a rate-limit bucket survives a concurrent first request", () => {
+  // `select ... for update` cannot lock a row that does not exist yet, so two
+  // simultaneous first requests for one bucket both reach the insert. Without
+  // conflict handling the loser raises 23505, which the Edge layer maps to HTTP 409
+  // and the caller is rejected before CAPTCHA despite the bucket having quota.
+  assert.match(rateLimitRepair, /create or replace function public\.consume_edge_rate_limit_v1/i);
+  assert.match(rateLimitRepair, /on conflict \(scope, key_hash\) do update/i);
+  assert.match(rateLimitRepair, /set hit_count = r\.hit_count \+ 1/i);
+
+  // Losing the race must still count the hit and still be able to block, otherwise
+  // the race would silently hand out a free request.
+  assert.match(rateLimitRepair, /when r\.hit_count \+ 1 > p_limit then v_now \+ make_interval/i);
+  assert.match(rateLimitRepair, /if v_row\.hit_count > p_limit then[\s\S]{0,200}v_allowed := false/i);
+
+  // The original argument validation must survive the replacement.
+  assert.match(rateLimitRepair, /errcode = '22023'/);
+  assert.match(rateLimitRepair, /security definer/i);
+  assert.match(rateLimitRepair, /set search_path = ''/);
+});
+
+test("the guest token rotation gate agrees across the Edge Function and the RPC", () => {
+  // The Edge gate is advisory; rotate_guest_lookup_token_after_payment_v2 is the
+  // authority. Widening only the TypeScript side is a silent no-op, which is exactly
+  // how the first attempt at this fix shipped. Compare the two lists directly.
+  const edgeSource = readFileSync(
+    new URL("../../supabase/functions/payment-confirm/index.ts", import.meta.url),
+    "utf8",
+  );
+  const rotationSql = readFileSync(
+    new URL("../../supabase/migrations/20260911001000_guest_token_rotation_settled_states.sql", import.meta.url),
+    "utf8",
+  );
+
+  const edgeBlock = edgeSource.match(/const SETTLED_ORDER_STATUSES = new Set\(\[([\s\S]*?)\]\)/);
+  assert.ok(edgeBlock, "payment-confirm must declare SETTLED_ORDER_STATUSES.");
+  const edgeStatuses = [...edgeBlock[1].matchAll(/"([a-z_]+)"/g)].map((match) => match[1]).sort();
+
+  const sqlBlock = rotationSql.match(/v_order\.status not in \(([^)]*)\)/);
+  assert.ok(sqlBlock, "The rotation RPC must gate on an order status list.");
+  const sqlStatuses = [...sqlBlock[1].matchAll(/'([a-z_]+)'/g)].map((match) => match[1]).sort();
+
+  assert.deepEqual(
+    sqlStatuses,
+    edgeStatuses,
+    "The RPC status list and SETTLED_ORDER_STATUSES must match, or one layer silently overrides the other.",
+  );
+  assert.ok(edgeStatuses.includes("shipped"), "Fulfilment states must be rotatable.");
+  for (const terminal of ["canceled", "partially_canceled", "refunded"]) {
+    assert.ok(!sqlStatuses.includes(terminal), `${terminal} must not be rotatable.`);
+  }
+});
+
+test("cancellation authorization cannot evaluate to NULL for a guest order", () => {
+  // PL/pgSQL `if not NULL then` does not take its branch, so an authorization
+  // expression that yields NULL fails open. A guest order has profile_id NULL, which
+  // is exactly how `v_order.profile_id = p_actor_user_id` produced NULL for an
+  // unrelated signed-in member and let them cancel someone else's order.
+  //
+  // Limitation: this reads SQL text. Without a live PostgreSQL the three-valued
+  // evaluation itself is not executed here; a concurrent/DB-level test is still owed.
+  const cancelRepair = readFileSync(
+    new URL("../../supabase/migrations/20260911002000_payment_cancel_null_authorization.sql", import.meta.url),
+    "utf8",
+  );
+
+  assert.match(cancelRepair, /create or replace function public\.claim_payment_cancellation_v1/i);
+
+  const assignment = cancelRepair.match(/v_allowed := ([\s\S]*?);\s*\n\s*if not/);
+  assert.ok(assignment, "The authorization assignment must be present.");
+  const expression = assignment[1];
+
+  // The member branch must not compare a possibly-NULL profile_id bare.
+  assert.match(
+    expression,
+    /v_order\.profile_id is not null\s*\n?\s*and v_order\.profile_id = p_actor_user_id/i,
+    "The member branch must establish profile_id is not null before comparing it.",
+  );
+  // And the whole expression must collapse to a definite boolean.
+  assert.match(expression, /^\s*coalesce\(/i, "The authorization expression must be wrapped in coalesce.");
+  assert.match(expression, /,\s*false\)\s*$/i, "The coalesce fallback must be false, never true.");
+
+  // The test itself must be definite too.
+  assert.match(cancelRepair, /if not coalesce\(v_allowed, false\) then/i);
+  assert.match(cancelRepair, /errcode = '42501'/, "The deny path must still raise 42501.");
+
+  // The exact vulnerable shape must not reappear.
+  assert.doesNotMatch(
+    cancelRepair,
+    /v_allowed := \(\s*\n\s*p_actor_user_id is not null and v_order\.profile_id = p_actor_user_id/i,
+    "The original NULL-producing assignment must not return.",
+  );
+});
+
+test("a confirmation finalizing after fulfilment advanced reports success, not failure", () => {
+  // The payment is already authoritative at that point. Targeting 'paid' from
+  // shipping_ready is a backwards transition, which raised P0001 -> 422 and made the
+  // browser discard the confirmation tuple for a payment that had succeeded.
+  const finalizeRepair = readFileSync(
+    new URL("../../supabase/migrations/20260911003000_finalize_confirmation_after_fulfilment.sql", import.meta.url),
+    "utf8",
+  );
+
+  assert.match(finalizeRepair, /create or replace function public\.finalize_payment_confirmation_v1/i);
+
+  const guard = finalizeRepair.match(
+    /if v_payment\.status in \('done', 'partial_canceled'\) and upper\(p_provider_status\) = 'DONE'[\s\S]{0,420}?end if;/i,
+  );
+  assert.ok(guard, "The already-done DONE guard must be present.");
+  assert.match(guard[0], /v_order\.status in \('shipping_ready', 'shipped', 'delivered'\)/i);
+  assert.match(guard[0], /not v_blocking_cancel/i, "An unresolved cancellation must still win.");
+  assert.match(guard[0], /v_target_order := v_order\.status;/i, "Fulfilment state must be preserved, not rewritten.");
+
+  // The duplicate short-circuit is what turns the preserved state into a success
+  // response, so it must still be reachable.
+  assert.match(finalizeRepair, /if v_order\.status = v_target_order and v_payment\.status = v_target_payment then/i);
+  assert.match(finalizeRepair, /'duplicate', true/);
+
+  // The pre-existing stale-WAITING_FOR_DEPOSIT protection must survive the replacement.
+  assert.match(finalizeRepair, /if v_payment\.status = 'done' and upper\(p_provider_status\) = 'WAITING_FOR_DEPOSIT' then/i);
+  assert.match(finalizeRepair, /errcode = 'P0001'/, "Genuinely invalid transitions must still raise.");
+});
+
+test("a partially cancelled order shipped before confirmation keeps its ledger", () => {
+  // An administrator can partially cancel and then ship between the provider's DONE
+  // and this finalizer. Rewriting payments.status back to 'done' would erase the
+  // partial cancellation, and targeting 'paid' would raise P0001 as before.
+  const finalizeRepair = readFileSync(
+    new URL("../../supabase/migrations/20260911003000_finalize_confirmation_after_fulfilment.sql", import.meta.url),
+    "utf8",
+  );
+  const guard = finalizeRepair.match(
+    /if v_payment\.status in \('done', 'partial_canceled'\)[\s\S]{0,420}?end if;/i,
+  );
+  assert.ok(guard, "The already-settled guard must accept a partially cancelled ledger.");
+  assert.match(guard[0], /v_target_payment := v_payment\.status;/i, "The existing ledger must be preserved, not rewritten.");
+  assert.match(guard[0], /not v_blocking_cancel/i);
+});

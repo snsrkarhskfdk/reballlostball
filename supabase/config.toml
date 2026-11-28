@@ -13,6 +13,9 @@ verify_jwt = false
 [functions.auth-assist]
 verify_jwt = false
 
+[functions.check-login-id]
+verify_jwt = false
+
 [functions.admin-members]
 verify_jwt = false
 
@@ -44,6 +47,9 @@ verify_jwt = false
 verify_jwt = false
 
 [functions.admin-console]
+verify_jwt = false
+
+[functions.admin-orders-page]
 verify_jwt = false
 
 [functions.admin-ops-extra]

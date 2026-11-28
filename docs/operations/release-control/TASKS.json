@@ -1,0 +1,562 @@
+{
+  "schema_version": 1,
+  "work_id": "REBALL-RELEASE-20261124",
+  "configured_on": "2026-11-24",
+  "configuration_status": "R06_VERIFIED",
+  "repository": {
+    "full_name": "snsrkarhskfdk/reballlostball",
+    "url": "https://github.com/snsrkarhskfdk/reballlostball",
+    "branch": "repair/mr-dr01-harness-declare-scope",
+    "pr": 37
+  },
+  "code": {
+    "reviewed_sha": "7c0c9c46753e9ebcf97c388839d2e91cef038385",
+    "ci_url": "https://github.com/snsrkarhskfdk/reballlostball/actions/runs/45381714310",
+    "db_grants_ci_url": "https://github.com/snsrkarhskfdk/reballlostball/actions/runs/45381714434",
+    "note": "배포할 검증 코드와 실행 관리파일의 커밋은 별개다. 실제 코드 수정 시 새 커밋의 CI를 확인한 뒤 이 기준을 갱신한다.",
+    "candidate": {
+      "sha": "7c0c9c46753e9ebcf97c388839d2e91cef038385",
+      "description": "Signup email delivery wording; frontend only",
+      "qa_url": "https://github.com/snsrkarhskfdk/reballlostball/actions/runs/45381714310",
+      "db_grants_url": "https://github.com/snsrkarhskfdk/reballlostball/actions/runs/45381714434",
+      "qa_status": "PASS",
+      "test_deploy_approval": "APPROVED",
+      "deployed": true,
+      "limitations": "Backend resend 429 handling and no self-service recovery remain open; successful R03 evidence applies to prior deployed SHA.",
+      "deployment_id": "dpl_9VZRGqUxpPRTyovRmyik8GhRJCyU",
+      "deployment_state": "READY"
+    }
+  },
+  "environment": {
+    "test_origin": "https://reballlostball-git-repair-mr-dr01-a7fa2f-thechangcnds-projects.vercel.app",
+    "expected_test_project_ref": "aohziyemqxfhpbbqpicx",
+    "production_origin": "https://reballlostball.com",
+    "production_project_ref": "qbftalhhyfcndanrcwpy",
+    "last_observed_test_deployment_id": "dpl_9VZRGqUxpPRTyovRmyik8GhRJCyU",
+    "last_observed_test_deployed_sha": "7c0c9c46753e9ebcf97c388839d2e91cef038385",
+    "last_observed_production_deployed_sha": "9f26f27a8b8833236618db9c0e72bdf415e7f161",
+    "last_observed_at": "2026-11-24T11:52:02.129Z",
+    "fresh_observation_required_before_mutation": true
+  },
+  "authorization": {
+    "test_deploy": "APPROVED",
+    "test_account_setup": "APPROVED",
+    "test_transactions": "APPROVED",
+    "test_scheduler": "APPROVED",
+    "production": "DENIED",
+    "source": "2026-11-07 CHECKOUT_EXECUTION: PR updates permitted; deployments prohibited. 2026-11-24 user requested orchestration setup, not deployment.",
+    "records": [
+      {
+        "capability": "test_deploy",
+        "status": "APPROVED",
+        "source": "2026-11-24 user replied 승인해 to the immediately preceding explicit R02 TEST frontend and required TEST Edge deployment question",
+        "approved_by": "USER",
+        "approved_at": "2026-11-24T06:45:30.020Z",
+        "scope": {
+          "project_ref": "aohziyemqxfhpbbqpicx",
+          "code_sha": "b2e17ad1351834028dfadd53f1dac7ad485bb883"
+        }
+      },
+      {
+        "capability": "test_account_setup",
+        "status": "APPROVED",
+        "source": "2026-11-24 user approved synthetic-order access/search/shipping verification and separately approved two synthetic customer accounts plus one separate store_manager account in the TEST project",
+        "approved_by": "USER",
+        "approved_at": "2026-11-24T09:02:25.333Z",
+        "scope": {
+          "project_ref": "aohziyemqxfhpbbqpicx",
+          "code_sha": null
+        }
+      },
+      {
+        "capability": "test_deploy",
+        "status": "APPROVED",
+        "source": "User explicitly approved the immediately preceding proposed frontend-only TEST deployment of candidate 7c0c9c4 and requested revalidation in the existing ego Space.",
+        "approved_by": "USER",
+        "approved_at": "2026-11-24T11:31:55.331Z",
+        "scope": {
+          "project_ref": "aohziyemqxfhpbbqpicx",
+          "code_sha": "7c0c9c46753e9ebcf97c388839d2e91cef038385"
+        }
+      },
+      {
+        "capability": "test_transactions",
+        "status": "APPROVED",
+        "source": "User explicitly approved one TEST order and one TEST payment verification up to 23,500 KRW, conditional on confirming TEST mode before creating the order.",
+        "approved_by": "USER",
+        "approved_at": "2026-11-24T12:00:41.872Z",
+        "scope": {
+          "project_ref": "aohziyemqxfhpbbqpicx",
+          "code_sha": "7c0c9c46753e9ebcf97c388839d2e91cef038385",
+          "tasks": [
+            "R04"
+          ],
+          "max_orders": 1,
+          "max_amount_krw": 23500,
+          "require_test_mode_before_order": true,
+          "excludes": [
+            "provider cancellation",
+            "refund",
+            "production",
+            "live payment",
+            "scheduler"
+          ]
+        }
+      },
+      {
+        "capability": "test_transactions",
+        "status": "APPROVED",
+        "source": "2026-11-25 user replied 승인했으니 진행해 immediately after the explicit notice that TEST cancellation/refund of the existing paid TEST order requires separate approval.",
+        "approved_by": "USER",
+        "approved_at": "2026-11-25T06:29:25.471Z",
+        "scope": {
+          "project_ref": "aohziyemqxfhpbbqpicx",
+          "code_sha": "7c0c9c46753e9ebcf97c388839d2e91cef038385",
+          "tasks": [
+            "R05"
+          ],
+          "max_orders": 1,
+          "max_amount_krw": 23500,
+          "existing_r04_synthetic_order_only": true,
+          "excludes": [
+            "new order",
+            "live payment",
+            "production",
+            "scheduler"
+          ]
+        }
+      },
+      {
+        "capability": "test_scheduler",
+        "status": "APPROVED",
+        "source": "2026-11-25 user approved the immediately preceding proposal for at most two unpaid synthetic TEST orders/reservations, expiry/unexpired/replay checks and removal of temporary TEST schedules.",
+        "approved_by": "USER",
+        "approved_at": "2026-11-25T10:38:19.816Z",
+        "scope": {
+          "project_ref": "aohziyemqxfhpbbqpicx",
+          "code_sha": "7c0c9c46753e9ebcf97c388839d2e91cef038385",
+          "tasks": [
+            "R06"
+          ],
+          "max_synthetic_unpaid_orders": 2,
+          "remove_temporary_schedules": true,
+          "stop_for_unrelated_records": true,
+          "excludes": [
+            "provider payment",
+            "production",
+            "persistent scheduler"
+          ]
+        }
+      },
+      {
+        "capability": "test_transactions",
+        "status": "APPROVED",
+        "source": "User explicitly replied 승인해 after the proposed one additional TEST order/payment, max KRW 23500, for R06 reconciliation.",
+        "approved_by": "USER",
+        "approved_at": "2026-11-27T11:24:11.322Z",
+        "scope": {
+          "project_ref": "aohziyemqxfhpbbqpicx",
+          "code_sha": "7c0c9c46753e9ebcf97c388839d2e91cef038385",
+          "tasks": [
+            "R06"
+          ],
+          "max_orders": 1,
+          "max_amount_krw": 23500,
+          "require_test_mode": true,
+          "excludes": [
+            "live payment",
+            "production",
+            "refund",
+            "other existing orders"
+          ]
+        }
+      }
+    ]
+  },
+  "execution": {
+    "executor": "LOCAL_CODEX",
+    "browser": "ego-browser",
+    "space_name": "리볼로스트볼 최종 검증",
+    "space_id": 24,
+    "page_labels": [
+      "p1"
+    ],
+    "run_id": "REBALL-RELEASE-20261124-R06-CODEX-01",
+    "owner": "LOCAL_CODEX-REBALL-R06-20261124-01",
+    "heartbeat_at": "2026-11-28T08:09:09.805Z",
+    "skill_observed": true,
+    "actual_model": "GPT-6 (Codex; exact variant not exposed)",
+    "actual_reasoning_level": "not exposed",
+    "local_connection_verified": true,
+    "writer_policy": "Only one local Codex controller may edit state or operate this task's browser pages. Other agents review only."
+  },
+  "observations": {
+    "test_db_observed_at": "2026-11-23T21:02:10+09:00",
+    "auth_users": 0,
+    "orders": 7,
+    "payments": 7,
+    "provider_payment_keys_present": 0,
+    "approval_timestamps_present": 0,
+    "cancellation_timestamps_present": 0,
+    "payment_refunds": 0,
+    "active_cron_jobs": 0,
+    "expired_but_reserved_count": 1,
+    "note": "관측값이며 변경 허가가 아니다. 매번 현재 상태를 다시 읽고 기존 테스트 데이터를 새 실행 소유로 취급하지 않는다."
+  },
+  "tasks": [
+    {
+      "id": "R00",
+      "title": "검증 코드 기준 확정",
+      "evidence_kind": "ci",
+      "status": "VERIFIED",
+      "requires": [],
+      "approval": null,
+      "acceptance": [
+        "full_qa",
+        "browser_e2e",
+        "accessibility",
+        "windows_portability",
+        "db_grants"
+      ],
+      "evidence": [
+        "receipts/R00_20261124_candidate.json"
+      ],
+      "blocked_reason": null
+    },
+    {
+      "id": "R01",
+      "title": "로컬 Codex와 기존 ego Space 연결 및 대상 실측",
+      "evidence_kind": "connection",
+      "status": "VERIFIED",
+      "requires": [
+        "R00"
+      ],
+      "approval": null,
+      "acceptance": [
+        "installed_skill_read",
+        "space_and_owner_recorded",
+        "test_origin_and_backend_verified",
+        "deployment_and_account_observed"
+      ],
+      "evidence": [
+        "receipts/R01_20261124.json"
+      ],
+      "blocked_reason": null
+    },
+    {
+      "id": "R02",
+      "title": "검증 코드의 분리된 TEST 배포",
+      "evidence_kind": "test",
+      "status": "VERIFIED",
+      "requires": [
+        "R00",
+        "R01"
+      ],
+      "approval": "test_deploy",
+      "acceptance": [
+        "explicit_test_deploy_approval",
+        "exact_source_ci",
+        "frontend_deployed_sha",
+        "edge_versions_aligned",
+        "test_configuration_verified",
+        "production_unchanged"
+      ],
+      "evidence": [
+        "receipts/R02_20261124_candidate_final.json"
+      ],
+      "blocked_reason": null
+    },
+    {
+      "id": "R03",
+      "title": "회원 및 관리자 실제 인증과 권한 확인",
+      "evidence_kind": "test",
+      "status": "VERIFIED",
+      "requires": [
+        "R02"
+      ],
+      "approval": "test_account_setup",
+      "acceptance": [
+        "synthetic_accounts_owned",
+        "signup_and_auth_verified",
+        "address_persistence",
+        "own_order_access",
+        "cross_account_denied",
+        "admin_role_login",
+        "admin_search_and_shipping"
+      ],
+      "evidence": [
+        "receipts/R03_20261124_candidate_recheck.json"
+      ],
+      "blocked_reason": null
+    },
+    {
+      "id": "R04",
+      "title": "실제 Toss TEST 승인과 주문 복귀",
+      "evidence_kind": "test",
+      "status": "VERIFIED",
+      "requires": [
+        "R02",
+        "R03"
+      ],
+      "approval": "test_transactions",
+      "acceptance": [
+        "provider_test_mode_observed",
+        "legitimate_provider_authorization",
+        "confirmation_matches_order_amount",
+        "approval_database_readback",
+        "return_refresh_lookup",
+        "uncertain_result_recovery"
+      ],
+      "evidence": [
+        "receipts/R04_20261125_final.json"
+      ],
+      "blocked_reason": null
+    },
+    {
+      "id": "R05",
+      "title": "TEST 취소 및 중복 처리·재고 복구",
+      "evidence_kind": "test",
+      "status": "VERIFIED",
+      "requires": [
+        "R04"
+      ],
+      "approval": "test_transactions",
+      "acceptance": [
+        "provider_cancel_confirmed",
+        "refund_order_database_match",
+        "stock_restored_once",
+        "confirm_webhook_replay",
+        "cancel_replay_no_duplicate"
+      ],
+      "evidence": [
+        "receipts/R05_20261125_final.json"
+      ],
+      "blocked_reason": null
+    },
+    {
+      "id": "R06",
+      "title": "예약 만료와 결제 대사 실행 검증",
+      "evidence_kind": "test",
+      "status": "VERIFIED",
+      "requires": [
+        "R02"
+      ],
+      "approval": "test_scheduler",
+      "acceptance": [
+        "scheduler_scope_authorized",
+        "owned_expiry_fixture",
+        "expired_stock_released_once",
+        "unexpired_reservation_preserved",
+        "reconciliation_readback",
+        "schedule_end_state_recorded"
+      ],
+      "evidence": [
+        "receipts/R06_20261128_deployed_final.json"
+      ],
+      "blocked_reason": null
+    },
+    {
+      "id": "R07",
+      "title": "운영 반영안과 복구·인계 준비",
+      "evidence_kind": "test",
+      "status": "BLOCKED",
+      "requires": [
+        "R03",
+        "R05",
+        "R06"
+      ],
+      "approval": null,
+      "acceptance": [
+        "test_evidence_reviewed",
+        "source_and_pr_reconciled",
+        "migration_edge_env_plan",
+        "backup_and_rollback_prepared",
+        "merchant_readiness_checked",
+        "owner_handover_prepared"
+      ],
+      "evidence": [
+        "receipts/R07_20261128_backup_investigation.json",
+        "receipts/R07_20261128_approved_backup_preflight.json"
+      ],
+      "blocked_reason": "사용자가 읽기 전용 운영 백업·암호화·격리 복원을 승인했으나 기존 ego Space 명령이 응답하지 않아 안전한 비밀번호 입력 화면을 열지 못함. 기존 Space 연결 확인 후 재개. 실제 백업·복원 미실행."
+    },
+    {
+      "id": "R08",
+      "title": "승인된 운영 반영 및 실제 최종 확인·인계",
+      "evidence_kind": "production",
+      "status": "BLOCKED",
+      "requires": [
+        "R07"
+      ],
+      "approval": "production",
+      "acceptance": [
+        "explicit_production_scope_and_spend_limit",
+        "coordinated_release_verified",
+        "approved_live_payment_cancel",
+        "production_scheduler_verified",
+        "rollback_recorded",
+        "operator_handover_confirmed"
+      ],
+      "evidence": [],
+      "blocked_reason": "운영 변경과 실결제는 승인되지 않았음. TEST 승인으로 운영 단계에 진입하지 않음."
+    }
+  ],
+  "scoped_approvals": [
+    {
+      "capability": "test_auth_site_url",
+      "approved_by": "USER",
+      "approved_at": "2026-11-24T09:33:29.221Z",
+      "source": "User selected TEST 주소로 변경 승인 in response to explicit TEST Auth Site URL question",
+      "project_ref": "aohziyemqxfhpbbqpicx",
+      "from": "http://localhost:3000",
+      "to": "https://reballlostball-git-repair-mr-dr01-a7fa2f-thechangcnds-projects.vercel.app"
+    },
+    {
+      "capability": "single_existing_test_reservation_expiry",
+      "approved_by": "USER",
+      "approved_at": "2026-11-25T05:32:36.815Z",
+      "source": "User explicitly approved the immediately preceding described automatic release of the single existing TEST reservation and continuation of the already approved new TEST order/payment.",
+      "project_ref": "aohziyemqxfhpbbqpicx",
+      "reservation_expired_at": "2026-11-11T06:28:10.388669Z",
+      "max_eligible_orders": 1,
+      "max_reservation_units": 1,
+      "scope": "Only the pre-existing single eligible TEST reservation described in receipts/R04_20261125_expiry_scope_wait.json; stop if any other reservation is eligible."
+    },
+    {
+      "capability": "single_existing_canceled_test_order_reconciliation",
+      "approved_by": "USER",
+      "approved_at": "2026-11-27T18:56:11.854Z",
+      "source": "User explicitly approved queuing the existing canceled TEST transaction after being told metadata can be updated and a reconciliation audit event retained.",
+      "project_ref": "aohziyemqxfhpbbqpicx",
+      "max_orders": 1,
+      "excludes": [
+        "new payment",
+        "new order",
+        "production",
+        "provider cancellation"
+      ]
+    },
+    {
+      "capability": "rotate_exposed_toss_test_secret",
+      "approved_by": "USER",
+      "approved_at": "2026-11-28T04:23:19.037Z",
+      "source": "User explicitly approved reissuing the exposed Toss TEST key, synchronizing TEST server configuration and reverifying without additional payment.",
+      "project_ref": "aohziyemqxfhpbbqpicx",
+      "scope": "Affected merchant individual TEST secret; synchronize TEST Edge; no new payment or production changes."
+    },
+    {
+      "capability": "revoke_exposed_toss_test_key_pair",
+      "approved_by": "USER",
+      "approved_at": "2026-11-28T05:38:03.050Z",
+      "source": "User explicitly approved immediate deletion of the old TEST secret and its paired security key after being advised other TEST integrations might be interrupted.",
+      "project_ref": "aohziyemqxfhpbbqpicx",
+      "excludes": [
+        "production",
+        "new payment"
+      ]
+    },
+    {
+      "capability": "readonly_production_encrypted_backup_isolated_restore",
+      "approved_by": "USER",
+      "approved_at": "2026-11-28T07:47:55.456Z",
+      "source": "User explicitly approved read-only production DB export, encrypted storage and isolated restoration without changing production or the existing TEST environment.",
+      "project_ref": "qbftalhhyfcndanrcwpy",
+      "scope": "Read-only production export into encrypted backup; separate isolated restore test.",
+      "excludes": [
+        "production writes",
+        "overwriting existing TEST",
+        "paid upgrade"
+      ]
+    }
+  ],
+  "r04_preflight": {
+    "observed_at": "2026-11-25T01:01:34.565Z",
+    "provider_test_mode": "VERIFIED_BY_MATCHING_CURRENT_MERCHANT_TEST_KEY_DIGESTS",
+    "evidence": "receipts/R04_20261125_test_mode_observations.json",
+    "evidence_sha256": "9ec4fe048294febca82a15c9aaa6486b3c4301c6ce06e2fec5f47aaf97ba023c",
+    "max_orders": 1,
+    "max_amount_krw": 23500,
+    "orders_created": 1,
+    "expired_existing_orders": 1,
+    "expired_existing_units": 1,
+    "existing_data_approval": "APPROVED",
+    "post_reboot_key_metadata": {
+      "observed_at": "2026-11-25T05:41:08.525Z",
+      "both_test_project_toss_keys_updated_at": "2026-11-01T12:29:26Z",
+      "same_as_prior_verified_metadata": true,
+      "limitation": "Key values and provider mode must still be checked at the actual payment window."
+    },
+    "order_intent": {
+      "recorded_at": "2026-11-25T05:46:56.700Z",
+      "state": "PAID_AND_RECOVERY_VERIFIED",
+      "max_orders": 1,
+      "max_amount_krw": 23500,
+      "synthetic_marker": "TEST ONLY R04 20261125",
+      "last_known_order_count": 8,
+      "last_known_payment_count": 7,
+      "check_existing_before_any_retry": true,
+      "approved_expired_reservations": 1,
+      "created_observed_at": "2026-11-25T05:59:56.800Z",
+      "order_evidence": "receipts/R04_20261125_order_created_observations.json",
+      "provider_test_window_observed_at": "2026-11-25T06:04:44.812Z",
+      "reservation_expires_at": "2026-11-25T06:36:11.168789Z"
+    }
+  },
+  "r05_preflight": {
+    "observed_at": "2026-11-25T06:37:36.819Z",
+    "scope": "One user-approved existing R04 synthetic TEST order, full provider cancellation up to KRW 23500",
+    "paid_order_count": 1,
+    "approved_amount_krw": 23500,
+    "prior_refunds": 0,
+    "prior_cancel_events": 0,
+    "order_reservation_status": "consumed",
+    "reservation_quantity": 1,
+    "variant_stock_before": 9,
+    "idempotency": "One cancellation request; inspect actual result before any replay; replay only exact same key and body.",
+    "cancellation_state": "VERIFIED_CANCELED_REFUND_AND_REPLAYS",
+    "webhook_intent": "Synthetic payment status webhook for the same canceled TEST payment, then exact replay only if first succeeds. Server independently fetches provider status. Never claim simulated notification was sent by provider."
+  },
+  "r06_preflight": {
+    "observed_at": "2026-11-25T06:45:50.238Z",
+    "test_active_cron_jobs": 0,
+    "expired_reserved_count": 0,
+    "active_reserved_count": 0,
+    "due_reconciliation_jobs": 0,
+    "approval": "APPROVED",
+    "proposal": "In TEST only, create up to two unpaid synthetic order/reservation fixtures; exercise expiry and preserve an unexpired fixture, check duplicate execution and reconciliation; temporarily create only the required TEST-targeted schedules and remove them after verification. Re-read eligibility and stop before acting on unrelated records. No provider payment, production operation or persistent schedule.",
+    "warning": "Source reconciliation cron migration contains a hard-coded production function URL. Do not run it unmodified against TEST.",
+    "approved_at": "2026-11-25T10:38:19.816Z",
+    "result": "EXPIRY_VERIFIED_RECONCILIATION_EMPTY_QUEUE",
+    "remaining_unexpired_fixture_expires_at": null,
+    "cleanup_intent": "Release only the expired owned R06 RECON order after TEST provider expired and DB unpaid verification.",
+    "cleanup_result": "OWNED_FIXTURE_EXPIRED_RELEASED_STOCK_10",
+    "reconciliation_proposal": "A further single TEST order/payment, maximum KRW 23500, may provide an owned provider-backed pending reconciliation job. Confirm actual TEST mode, preserve original completed orders, and require cardholder action in the existing ego Space. Exact controlled pending-state mechanism must be verified before charging; no additional order, payment, or refund authorized solely by this proposal.",
+    "additional_test_payment": "PROVIDER_EXPIRED_RESERVATION_RELEASED",
+    "recon_order_marker": "TEST ONLY R06 RECON",
+    "guard_state": "REMOVED_VERIFIED_AFTER_RELOAD",
+    "provider_status": "TOSS_TEST_EXPIRED_CONFIRMED",
+    "no_additional_payment_review": "NO_OWNED_ELIGIBLE_PROVIDER_JOB",
+    "isolated_reconciliation": "SOURCE_HANDLER_PASS_PROVIDER_AND_DB_SIMULATED",
+    "live_provider_isolation": "PASS_REAL_TEST_GET_MOCK_DB",
+    "test_database_rollback": "PASS_CLAIM_APPLY_ROLLED_BACK",
+    "deployed_reconciliation": "PASS_SEOUL_REGION_ACTUAL_PROVIDER_AND_DB",
+    "default_region": "FAILED_API_KEY_ACCESS_DENIED_TOKYO",
+    "test_key_security": "OLD_TEST_KEY_PAIR_REVOKED_NEW_KEY_SERVER_MATCH_AND_PROVIDER_GET_PASS",
+    "test_key_rotation_evidence": "receipts/R06_20261128_test_key_rotation_observations.json",
+    "test_key_revocation_evidence": "receipts/R06_20261128_test_key_revocation_observations.json"
+  },
+  "r07_preflight": {
+    "observed_at": "2026-11-28T06:55:27.960Z",
+    "scheduler_evidence": "receipts/R07_20261128_scheduler_observations.json",
+    "production_cron": "ACTIVE_PROD_URL_TOKYO_NO_REGION_PIN",
+    "test_cron": "INACTIVE_POINTS_PROD_DO_NOT_ENABLE",
+    "test_route": "SEOUL_AUTH_GUARDS_PASS_TEMP_JOBS_REMOVED",
+    "production_provider_access": "NOT_VERIFIED_EMPTY_QUEUE",
+    "release_plan": "R07_RELEASE_PREPARATION_KO.md",
+    "production_backup": "FREE_NO_MANAGED_BACKUP_EXTERNAL_UNKNOWN_RESTORE_NOT_VERIFIED",
+    "backup_investigation": "receipts/R07_20261128_backup_investigation.json",
+    "backup_approval": "APPROVED",
+    "backup_status": "APPROVED_PREFLIGHT_BLOCKED_EGO_NO_EXPORT",
+    "backup_preflight_evidence": "receipts/R07_20261128_approved_backup_preflight.json"
+  }
+}

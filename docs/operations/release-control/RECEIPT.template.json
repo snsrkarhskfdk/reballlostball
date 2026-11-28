@@ -1,0 +1,25 @@
+{
+  "schema_version": 1,
+  "task_id": "REPLACE_WITH_TASK_ID",
+  "run_id": "REPLACE_WITH_ACTUAL_RUN_ID",
+  "status": "BLOCKED",
+  "observed_at": "REPLACE_WITH_ACTUAL_ISO_TIMESTAMP",
+  "executor": "LOCAL_CODEX",
+  "code_sha": "REPLACE_WITH_REVIEWED_CODE_SHA",
+  "orchestration_sha": "REPLACE_WITH_GIT_REV_PARSE_HEAD",
+  "environment": {
+    "kind": "connection",
+    "origin": null,
+    "supabase_project_ref": null,
+    "deployment_id": null,
+    "deployed_sha": null
+  },
+  "actions": [],
+  "assertions": [],
+  "artifacts": [],
+  "blocker": {
+    "owner": "LOCAL_CODEX",
+    "required_action": "실제 관측값과 증거를 기록한다. 이 템플릿은 검증 결과가 아니다.",
+    "resume_check": "기록된 환경과 작업 상태를 다시 읽고 시작 조건을 확인한다."
+  }
+}
