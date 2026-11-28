@@ -183,7 +183,7 @@
     ],
     "run_id": "REBALL-RELEASE-20261124-R06-CODEX-01",
     "owner": "LOCAL_CODEX-REBALL-R06-20261124-01",
-    "heartbeat_at": "2026-11-27T18:56:11.854Z",
+    "heartbeat_at": "2026-11-28T04:23:19.037Z",
     "skill_observed": true,
     "actual_model": "GPT-6 (Codex; exact variant not exposed)",
     "actual_reasoning_level": "not exposed",
@@ -432,6 +432,14 @@
         "production",
         "provider cancellation"
       ]
+    },
+    {
+      "capability": "rotate_exposed_toss_test_secret",
+      "approved_by": "USER",
+      "approved_at": "2026-11-28T04:23:19.037Z",
+      "source": "User explicitly approved reissuing the exposed Toss TEST key, synchronizing TEST server configuration and reverifying without additional payment.",
+      "project_ref": "aohziyemqxfhpbbqpicx",
+      "scope": "Affected merchant individual TEST secret; synchronize TEST Edge; no new payment or production changes."
     }
   ],
   "r04_preflight": {
@@ -506,6 +514,6 @@
     "test_database_rollback": "PASS_CLAIM_APPLY_ROLLED_BACK",
     "deployed_reconciliation": "PASS_SEOUL_REGION_ACTUAL_PROVIDER_AND_DB",
     "default_region": "FAILED_API_KEY_ACCESS_DENIED_TOKYO",
-    "test_key_security": "TEST_SECRET_EXPOSED_IN_TOOL_OUTPUT_ROTATION_AND_TEST_CONFIG_UPDATE_REQUIRED"
+    "test_key_security": "ROTATION_APPROVED_WAIT_TOSS_LOGIN"
   }
 }

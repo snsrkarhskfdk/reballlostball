@@ -1,0 +1,13 @@
+{
+  "observed_at": "2026-11-28T04:23:19.037Z",
+  "space_id": 24,
+  "provider_page": "p2",
+  "test_secret_page": "p3",
+  "approval": "User approved affected TEST secret rotation, TEST Edge sync and no-payment verification.",
+  "provider": "Toss login required before rotation",
+  "test_supabase_secret_page": "Accessible; TOSS_SECRET_KEY row exists",
+  "rotation_performed": false,
+  "server_secret_changed": false,
+  "new_payment": false,
+  "resume": "User signs in to Toss in Space 24, then existing TEST merchant individual secret rotation and TEST-only synchronization."
+}
